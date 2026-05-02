@@ -8,19 +8,23 @@
 // ---- Supabase config ----
 var SB_URL = 'https://soxbgbpuzcpvkqvdufno.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveGJnYnB1emNwdmtxdmR1Zm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzE2MDksImV4cCI6MjA5MjQ0NzYwOX0.v9eOX4xPkCE_4aSr0gxWfKh3_2jkwlks6sDCw1thw5k';
+// H and JH are patched at runtime by auth.js when a session is active.
+// During initial page load (before auth.js runs) they use the anon key for reads.
 var H  = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 var JH = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+function getH()  { return (window.authHeaders ? window.authHeaders(false) : H);  }
+function getJH() { return (window.authHeaders ? window.authHeaders(true)  : JH); }
 
 // ---- DB helpers ----
 async function sbGet(t, q) {
-  var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, { headers: H });
+  var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, { headers: getH() });
   if (!r.ok) throw new Error('GET ' + t + ': ' + r.status + ' ' + (await r.text()));
   return r.json();
 }
 async function sbPatch(t, id, d) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?id=eq.' + id, {
     method: 'PATCH',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH),
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH()),
     body: JSON.stringify(d)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -28,7 +32,7 @@ async function sbPatch(t, id, d) {
 async function sbPatchWhere(t, q, d) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, {
     method: 'PATCH',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH),
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH()),
     body: JSON.stringify(d)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -36,7 +40,7 @@ async function sbPatchWhere(t, q, d) {
 async function sbDelete(t, id) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?id=eq.' + id, {
     method: 'DELETE',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH)
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH())
   });
   if (!r.ok) throw new Error(await r.text());
 }
@@ -44,14 +48,14 @@ async function sbDelete(t, id) {
 async function sbDeleteWhere(t, q) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, {
     method: 'DELETE',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH)
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH())
   });
   if (!r.ok) throw new Error(await r.text());
 }
 async function sbInsert(t, d) {
   var r = await fetch(SB_URL + '/rest/v1/' + t, {
     method: 'POST',
-    headers: Object.assign({ 'Prefer': 'return=representation' }, JH),
+    headers: Object.assign({ 'Prefer': 'return=representation' }, getJH()),
     body: JSON.stringify(d)
   });
   if (!r.ok) throw new Error(await r.text());
