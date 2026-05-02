@@ -155,9 +155,9 @@ function authApplyWriteProtection() {
     style.textContent = '';
   } else {
     style.textContent =
-      '.btn-primary { opacity: 0.35; pointer-events: none; cursor: not-allowed; }\n' +
-      '.del-btn     { opacity: 0.35; pointer-events: none; cursor: not-allowed; }\n' +
-      'input:not([type="search"]), select, textarea { pointer-events: none; background: var(--bg) !important; }';
+      '.btn-primary:not(.auth-submit-btn) { opacity: 0.35; pointer-events: none; cursor: not-allowed; }\n' +
+      '.del-btn { opacity: 0.35; pointer-events: none; cursor: not-allowed; }\n' +
+      '.main input:not(.auth-input), .main select, .main textarea { pointer-events: none; background: var(--bg) !important; }';
   }
 
   // Show/hide the read-only banner
@@ -178,25 +178,26 @@ function authShowLoginModal() {
     'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1000;' +
     'display:flex;align-items:center;justify-content:center';
   modal.innerHTML =
-    '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;' +
+    '<div class="auth-modal-box" style="background:var(--bg);border:1px solid var(--border);border-radius:12px;' +
     'padding:32px;width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">' +
       '<div style="font-size:16px;font-weight:600;margin-bottom:6px">ShadeSide Farms</div>' +
       '<div style="font-size:13px;color:var(--muted);margin-bottom:24px">Sign in to edit</div>' +
       '<div style="margin-bottom:14px">' +
         '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Username</label>' +
-        '<input id="auth-username-input" type="text" value="Rrezza" ' +
-        'style="width:100%;box-sizing:border-box;font-size:14px" readonly>' +
+        '<div style="font-size:14px;font-weight:500;padding:6px 0">Rrezza</div>' +
       '</div>' +
       '<div style="margin-bottom:20px">' +
         '<label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Password</label>' +
         '<input id="auth-pw-input" type="password" placeholder="Password" ' +
+        'class="auth-input" ' +
         'style="width:100%;box-sizing:border-box;font-size:14px" ' +
         'onkeydown="if(event.key===\'Enter\')authSubmitLogin()">' +
       '</div>' +
       '<div style="display:flex;gap:10px;align-items:center">' +
-        '<button class="btn btn-primary" onclick="authSubmitLogin()" ' +
-        'style="pointer-events:auto;opacity:1">Sign in</button>' +
-        '<button class="btn" onclick="authCloseModal()">Cancel</button>' +
+        '<button class="auth-submit-btn" onclick="authSubmitLogin()" ' +
+        'style="padding:7px 18px;background:var(--green);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">Sign in</button>' +
+        '<button class="auth-cancel-btn" onclick="authCloseModal()" ' +
+        'style="padding:7px 14px;background:none;border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer">Cancel</button>' +
         '<span id="auth-login-status" style="font-size:12px;color:var(--red)"></span>' +
       '</div>' +
     '</div>';
