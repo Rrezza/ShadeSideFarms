@@ -6,10 +6,8 @@
 // ============================================================
 
 // ---- Supabase config ----
-// Credentials are loaded from config.js (gitignored).
-// Copy config.example.js → config.js and fill in your values.
-var SB_URL = window.SHADESIDE_CONFIG ? window.SHADESIDE_CONFIG.supabaseUrl : '';
-var SB_KEY = window.SHADESIDE_CONFIG ? window.SHADESIDE_CONFIG.supabaseKey : '';
+var SB_URL = 'https://soxbgbpuzcpvkqvdufno.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveGJnYnB1emNwdmtxdmR1Zm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzE2MDksImV4cCI6MjA5MjQ0NzYwOX0.v9eOX4xPkCE_4aSr0gxWfKh3_2jkwlks6sDCw1thw5k';
 var H  = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 var JH = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
 
