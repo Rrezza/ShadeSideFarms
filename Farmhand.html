@@ -694,9 +694,9 @@
     </div>
 
     <div class="field">
-      <label>Location / Plot</label>
-      <select id="wLocation">
-        <option value="">Select location...</option>
+      <label>Plot</label>
+      <select id="wPlot">
+        <option value="">Select plot...</option>
       </select>
     </div>
 
@@ -752,9 +752,9 @@
     </div>
 
     <div class="field">
-      <label>Location / Plot</label>
-      <select id="aLocation">
-        <option value="">Select location...</option>
+      <label>Plot</label>
+      <select id="aPlot">
+        <option value="">Select plot...</option>
       </select>
     </div>
 
@@ -1017,6 +1017,7 @@ let appData = {
   locations: [],
   species: [],
   animalGroups: [],
+  fieldPlots: [],
   cropGroups: [],
   plotCrops: []
 };
@@ -1045,17 +1046,18 @@ async function init() {
 
   try {
     const ef = (p, label) => p.catch(e => { console.warn(label + ' failed:', e.message); return []; });
-    const [workers, ingredients, suppliers, locations, species, animalGroups, cropGroups, plotCrops] = await Promise.all([
+    const [workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops] = await Promise.all([
       db.get('workers',        '?active=eq.true&order=name'),
       db.get('ingredients',    '?active=eq.true&order=name'),
       db.get('suppliers',      '?active=eq.true&order=name'),
       db.get('locations',      '?active=eq.true&order=name'),
       db.get('species',        '?order=common_name'),
       ef(db.get('animal_groups', '?status=eq.active&select=id,name&order=name'), 'animal_groups'),
+      ef(db.get('field_plots', '?status=eq.active&select=id,plot_code,plot_name&order=plot_code'), 'field_plots'),
       ef(db.get('crop_groups', '?select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
       ef(db.get('plot_crops',  '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name'), 'plot_crops')
     ]);
-    appData = { workers, ingredients, suppliers, locations, species, animalGroups, cropGroups, plotCrops };
+    appData = { workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops };
     populateAllForms();
     document.getElementById('headerSub').textContent = 'Ready';
   } catch (e) {
@@ -1108,13 +1110,22 @@ function populateAllForms() {
       appData.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   }
 
-  // Locations — all
-  const allLocSelects = ['hLocation','wLocation','aLocation','eLocation'];
+  // Locations — harvest and eggs only (watering/amendment use plots)
+  const allLocSelects = ['hLocation','eLocation'];
   allLocSelects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = '<option value="">Select location...</option>' +
       appData.locations.map(l => `<option value="${l.id}">${l.name} (${l.location_type})</option>`).join('');
+  });
+
+  // Plots — watering and amendment
+  const plotLabel = p => p.plot_code ? `${p.plot_code} — ${p.plot_name || ''}`.trim() : (p.plot_name || 'Plot ' + p.id);
+  const plotOpts  = '<option value="">Select plot...</option>' +
+    (appData.fieldPlots || []).map(p => `<option value="${p.id}">${plotLabel(p)}</option>`).join('');
+  ['wPlot','aPlot'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = plotOpts;
   });
 
   // Feeding — animal groups
@@ -1552,10 +1563,7 @@ async function fGroupChange() {
       `<div style="font-size:11px;color:var(--muted);margin-top:6px">` +
       `${r1(dmiPerHead)} kg DM/head · ${r1(dmiPct*100)}% BW</div>`;
 
-    // Pre-fill inputs with targets
-    document.getElementById('fConcentrateKg').value = r1(concAf);
-    document.getElementById('fHayKg').value         = r1(hayAf);
-    document.getElementById('fFodderKg').value       = r1(fodAf);
+    // Intentionally not pre-filling inputs — farmhand must enter actual amounts fed.
 
   } catch (e) {
     area.innerHTML = `<div style="color:var(--danger);font-size:13px">Could not load targets: ${e.message}</div>`;
@@ -1592,28 +1600,29 @@ async function fConfirm() {
 // WATERING CONFIRM
 // ============================================================
 async function wConfirm() {
-  const locationId = parseInt(document.getElementById('wLocation').value);
-  const duration   = parseInt(document.getElementById('wDuration').value) || null;
-  const volume     = parseFloat(document.getElementById('wVolume').value) || null;
-  const date       = document.getElementById('wDate').value;
-  const notes      = document.getElementById('wNotes').value.trim() || null;
-  const workerId   = activeWorkerId;
+  const plotId   = parseInt(document.getElementById('wPlot').value);
+  const duration = parseInt(document.getElementById('wDuration').value) || null;
+  const volume   = parseFloat(document.getElementById('wVolume').value) || null;
+  const date     = document.getElementById('wDate').value;
+  const notes    = document.getElementById('wNotes').value.trim() || null;
+  const workerId = activeWorkerId;
 
-  if (!locationId) { alert('Select a location.'); return; }
-  if (!duration)   { alert('Enter duration in minutes.'); return; }
+  if (!plotId)   { alert('Select a plot.'); return; }
+  if (!duration) { alert('Enter duration in minutes.'); return; }
 
   const payload = {
     date,
-    location_id:             locationId,
+    field_plot_id:           plotId,
     duration_minutes:        duration,
-    estimated_volume_liters: volume,
+    estimated_volume_litres: volume,
     notes
   };
+  if (workerId) payload.worker_id = workerId;
 
-  await submitEntry('irrigation_events', payload, () => {
-    const loc = appData.locations.find(l => l.id === locationId);
-    showSuccess('💧', 'Irrigation Logged',
-      `${loc ? loc.name : 'Location'} — ${duration} min`);
+  await submitEntry('watering_events', payload, () => {
+    const p = (appData.fieldPlots || []).find(p => p.id === plotId);
+    const label = p ? (p.plot_code ? p.plot_code + (p.plot_name ? ' — ' + p.plot_name : '') : p.plot_name) : 'Plot';
+    showSuccess('💧', 'Irrigation Logged', `${label} — ${duration} min`);
   });
 }
 
@@ -1626,35 +1635,34 @@ function aTypeChange() {
 }
 
 async function aConfirm() {
-  const amendType  = document.getElementById('aType').value;
-  const otherDesc  = document.getElementById('aOtherDesc').value.trim();
-  const locationId = parseInt(document.getElementById('aLocation').value);
-  const qty        = parseFloat(numpadValues.aQty);
-  const date       = document.getElementById('aDate').value;
-  const notes      = document.getElementById('aNotes').value.trim() || null;
-  const workerId   = activeWorkerId;
+  const amendType = document.getElementById('aType').value;
+  const otherDesc = document.getElementById('aOtherDesc').value.trim();
+  const plotId    = parseInt(document.getElementById('aPlot').value);
+  const qty       = parseFloat(numpadValues.aQty);
+  const date      = document.getElementById('aDate').value;
+  const notes     = document.getElementById('aNotes').value.trim() || null;
+  const workerId  = activeWorkerId;
 
-  if (!amendType)  { alert('Select amendment type.'); return; }
-  if (!locationId) { alert('Select a location.'); return; }
+  if (!amendType)       { alert('Select amendment type.'); return; }
+  if (!plotId)          { alert('Select a plot.'); return; }
   if (!qty || qty <= 0) { alert('Enter a quantity.'); return; }
 
   const finalDesc = amendType === 'other' ? (otherDesc || 'Other') : amendType;
 
-  // Store in amendment_applications table (part of migration v2)
   const payload = {
     date,
-    location_id:    locationId,
+    field_plot_id:  plotId,
     amendment_type: amendType === 'other' ? 'other' : amendType,
     description:    finalDesc,
     kg_applied:     qty,
-    worker_id:      workerId,
     notes
   };
+  if (workerId) payload.worker_id = workerId;
 
   await submitEntry('amendment_applications', payload, () => {
-    const loc = appData.locations.find(l => l.id === locationId);
-    showSuccess('🌱', 'Amendment Logged',
-      `${qty} kg ${finalDesc}\n${loc ? loc.name : 'Location'}`);
+    const p = (appData.fieldPlots || []).find(p => p.id === plotId);
+    const label = p ? (p.plot_code ? p.plot_code + (p.plot_name ? ' — ' + p.plot_name : '') : p.plot_name) : 'Plot';
+    showSuccess('🌱', 'Amendment Logged', `${qty} kg ${finalDesc}\n${label}`);
   });
 }
 
