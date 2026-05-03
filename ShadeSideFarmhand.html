@@ -628,9 +628,10 @@
   <div class="flow">
     <div class="flow-header">
       <div class="flow-icon">🪣</div>
-      <div class="flow-title">Log Feeding</div>
+      <div class="flow-title">Feeding</div>
     </div>
 
+    <!-- GROUP SELECTOR — shared by both sections -->
     <div class="field">
       <label>Animal Group <span style="color:var(--warn)">*</span></label>
       <select id="fGroup" onchange="fGroupChange()">
@@ -638,8 +639,20 @@
       </select>
     </div>
 
-    <div id="fTargetArea" style="display:none; margin-bottom:16px">
-      <div class="info-card" id="fTargetCard"></div>
+    <!-- SECTION 1: TODAY'S TARGETS -->
+    <div style="margin:20px 0 8px;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.04em;text-transform:uppercase">
+      Today's Targets
+    </div>
+    <div id="fTargetArea">
+      <div style="color:var(--muted);font-size:13px;padding:10px 0">Select a group to see targets.</div>
+    </div>
+
+    <!-- DIVIDER -->
+    <div style="border-top:1px solid var(--border);margin:24px 0 20px"></div>
+
+    <!-- SECTION 2: LOG FEEDING -->
+    <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:16px">
+      Log Feeding
     </div>
 
     <div class="field">
@@ -1037,7 +1050,7 @@ async function init() {
       db.get('suppliers', '?active=eq.true&order=name'),
       db.get('locations', '?active=eq.true&order=name'),
       db.get('species', '?order=common_name'),
-      db.get('animal_groups', '?status=eq.active&select=id,name,species_id&order=name').catch(() => []),
+      db.get('animal_groups', '?status=eq.active&select=id,name,species_id&order=name'),
       db.get('crop_groups', '?select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name').catch(() => []),
       db.get('plot_crops', '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name').catch(() => [])
     ]);
@@ -1441,14 +1454,12 @@ async function obsConfirm() {
 // ============================================================
 async function fGroupChange() {
   const groupId = parseInt(document.getElementById('fGroup').value);
-  const card    = document.getElementById('fTargetCard');
   const area    = document.getElementById('fTargetArea');
 
-  if (!groupId) { area.style.display = 'none'; return; }
+  if (!groupId) { area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0">Select a group to see targets.</div>'; return; }
 
-  card.innerHTML = '<div style="color:var(--muted);font-size:13px">Loading targets…</div>';
-  area.style.display = '';
-
+  area.innerHTML = '<div style="color:var(--muted);font-size:13px">Loading targets…</div>';
+  
   try {
     // Fetch active ration plan for this group
     const gr = await db.get('group_recipes',
@@ -1456,7 +1467,7 @@ async function fGroupChange() {
       `&select=ration_plan_version_id,ration_plan_versions(dmi_pct_body_weight,concentrate_pct_dmi,hay_pct_dmi,green_fodder_pct_dmi)`);
 
     if (!gr.length || !gr[0].ration_plan_versions) {
-      card.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ration plan assigned to this group.</div>';
+      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ration plan assigned to this group.</div>';
       return;
     }
 
@@ -1468,7 +1479,7 @@ async function fGroupChange() {
     const n = members.length;
 
     if (!n) {
-      card.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No animals in this group.</div>';
+      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No animals in this group.</div>';
       return;
     }
 
@@ -1497,7 +1508,7 @@ async function fGroupChange() {
     const fodPct  = parseFloat(rpv.green_fodder_pct_dmi) / 100;
 
     if (!avgWt) {
-      card.innerHTML =
+      area.innerHTML =
         `<div style="font-size:13px;color:var(--muted);padding:8px 0">` +
         `${n} animals — no weight data yet. Enter quantities manually.</div>`;
       return;
@@ -1514,7 +1525,7 @@ async function fGroupChange() {
 
     const r1 = v => Math.round(v * 10) / 10;
 
-    card.innerHTML =
+    area.innerHTML =
       `<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--accent)">` +
       `Today's targets — ${n} animals (avg ${r1(avgWt)} kg)</div>` +
       `<div class="recipe-row"><span class="ing">Concentrate</span>` +
@@ -1532,7 +1543,7 @@ async function fGroupChange() {
     document.getElementById('fFodderKg').value       = r1(fodAf);
 
   } catch (e) {
-    card.innerHTML = `<div style="color:var(--danger);font-size:13px">Could not load targets: ${e.message}</div>`;
+    area.innerHTML = `<div style="color:var(--danger);font-size:13px">Could not load targets: ${e.message}</div>`;
   }
 }
 
