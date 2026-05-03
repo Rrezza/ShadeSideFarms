@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a2e1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ShadeSide Farms</title>
+<style>
+  :root {
+    --bg:        #0f1f0f;
+    --surface:   #1a2e1a;
+    --card:      #223322;
+    --border:    #2e4a2e;
+    --accent:    #5a9e3a;
+    --accent2:   #3a7e2a;
+    --text:      #d8ead8;
+    --muted:     #7a9a7a;
+    --warn:      #c8a020;
+    --danger:    #c84040;
+    --white:     #f0f5f0;
+    --radius:    14px;
+    --shadow:    0 4px 20px rgba(0,0,0,0.5);
+    --font:      'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: 0.3px;
+  }
+  .header-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+  .sync-badge {
+    background: var(--warn);
+    color: #1a1000;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 20px;
+    display: none;
+  }
+  .sync-badge.visible { display: block; }
+
+  /* ---- SCREENS ---- */
+  .screen { display: none; padding: 20px; max-width: 480px; margin: 0 auto; }
+  .screen.active { display: block; }
+
+  /* ---- HOME GRID ---- */
+  .home-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 8px;
+  }
+
+  .home-btn {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 16px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .home-btn:active { transform: scale(0.97); background: var(--surface); }
+
+  .home-btn-icon {
+    font-size: 36px;
+    line-height: 1;
+  }
+  .home-btn-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--white);
+    text-align: center;
+    line-height: 1.3;
+  }
+  .home-btn-sub {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* Color accents per flow */
+  .home-btn.purchase  { border-color: #2a5a8a; }
+  .home-btn.purchase .home-btn-icon { color: #5a9aca; }
+  .home-btn.harvest   { border-color: #3a7a2a; }
+  .home-btn.harvest .home-btn-icon  { color: #6aaa4a; }
+  .home-btn.feeding   { border-color: #7a5a2a; }
+  .home-btn.feeding .home-btn-icon  { color: #c8882a; }
+  .home-btn.watering  { border-color: #2a6a7a; }
+  .home-btn.watering .home-btn-icon { color: #4ab0ca; }
+  .home-btn.amendment { border-color: #6a4a2a; }
+  .home-btn.amendment .home-btn-icon{ color: #ba7a3a; }
+  .home-btn.eggs      { border-color: #7a6a2a; }
+  .home-btn.eggs .home-btn-icon     { color: #d4b040; }
+  .home-btn.crop-harvest { border-color: #2a6a4a; }
+  .home-btn.crop-harvest .home-btn-icon { color: #4aba8a; }
+  .home-btn.crop-obs  { border-color: #5a3a7a; }
+  .home-btn.crop-obs .home-btn-icon { color: #9a6aca; }
+
+  /* ---- FLOW WRAPPER ---- */
+  .flow { display: flex; flex-direction: column; gap: 16px; }
+
+  .flow-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .flow-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--white);
+  }
+  .flow-icon { font-size: 28px; }
+
+  .back-btn {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 16px;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .back-btn:active { opacity: 0.7; }
+
+  /* ---- FORM ELEMENTS ---- */
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  select, input[type="text"], input[type="number"], input[type="date"], textarea {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    color: var(--white);
+    font-size: 16px;
+    font-family: var(--font);
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+  }
+  select:focus, input:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+  select option { background: #223322; }
+  textarea { resize: none; min-height: 80px; }
+
+  /* ---- NUMPAD ---- */
+  .numpad-display {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--white);
+    text-align: right;
+    min-height: 62px;
+    letter-spacing: 1px;
+  }
+  .numpad-display .unit {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+  .numpad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .np-btn {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--white);
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.1s;
+  }
+  .np-btn:active { background: var(--border); }
+  .np-btn.clear { color: var(--warn); }
+  .np-btn.del   { color: var(--warn); }
+
+  /* ---- WORKER SELECTOR ---- */
+  .worker-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .worker-btn {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+  }
+  .worker-btn.selected {
+    border-color: var(--accent);
+    background: #1e3a1e;
+  }
+  .worker-btn:active { opacity: 0.8; }
+  .worker-name { font-size: 14px; font-weight: 600; color: var(--white); }
+  .worker-type { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ---- CONFIRM BUTTON ---- */
+  .confirm-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    padding: 18px;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--white);
+    text-align: center;
+    cursor: pointer;
+    width: 100%;
+    letter-spacing: 0.3px;
+    transition: background 0.15s, transform 0.1s;
+    margin-top: 4px;
+  }
+  .confirm-btn:active { transform: scale(0.98); background: var(--accent2); }
+  .confirm-btn:disabled { background: var(--border); color: var(--muted); cursor: default; }
+
+  /* ---- INFO CARD ---- */
+  .info-card {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .lbl { color: var(--muted); }
+  .info-row .val { color: var(--white); font-weight: 600; }
+
+  /* ---- SUCCESS SCREEN ---- */
+  .success-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+    text-align: center;
+  }
+  .success-icon { font-size: 72px; }
+  .success-title { font-size: 24px; font-weight: 700; color: var(--white); }
+  .success-sub   { font-size: 14px; color: var(--muted); line-height: 1.5; }
+  .success-btns  { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px; margin-top: 8px; }
+  .again-btn {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+  }
+  .again-btn:active { opacity: 0.7; }
+
+  /* ---- STEP INDICATOR ---- */
+  .step-indicator {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .step-dot {
+    height: 4px;
+    border-radius: 2px;
+    flex: 1;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+  .step-dot.done { background: var(--accent); }
+  .step-dot.active { background: var(--accent); opacity: 0.6; }
+
+  /* ---- PENDING QUEUE BANNER ---- */
+  .queue-bar {
+    background: #2a2200;
+    border: 1px solid #5a4400;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--warn);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  /* ---- DATE DEFAULT ---- */
+  .date-today-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: -2px;
+  }
+
+  /* ---- RECIPE PREVIEW ---- */
+  .recipe-preview {
+    background: #1a2e1a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .recipe-preview .rp-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .recipe-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 3px 0;
+    border-bottom: 1px solid #1e361e;
+  }
+  .recipe-row:last-child { border-bottom: none; }
+  .recipe-row .ing { color: var(--text); }
+  .recipe-row .qty { color: var(--accent); font-weight: 600; }
+  .recipe-row .cost { color: var(--muted); font-size: 12px; }
+
+  /* ---- SCROLLABLE AREA ---- */
+  .scroll-area { overflow-y: auto; }
+
+  /* ---- LOADING ---- */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 30px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .err-msg {
+    background: #2a1a1a;
+    border: 1px solid var(--danger);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: #e88080;
+    font-size: 13px;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="header-title">ShadeSide Farms</div>
+    <div class="header-sub" id="headerSub">Loading...</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="sync-badge" id="syncBadge"></div>
+    <button id="workerChip" onclick="showScreen('screenWorker')" style="display:none;background:var(--surface);border:1.5px solid var(--border);border-radius:20px;padding:5px 12px;color:var(--text);font-size:12px;cursor:pointer"></button>
+  </div>
+</div>
+
+<!-- ==================== WORKER SELECT ==================== -->
+<div class="screen active" id="screenWorker">
+  <div class="flow" style="padding-top:20px">
+    <div class="flow-header">
+      <div class="flow-icon">👤</div>
+      <div class="flow-title">Who are you?</div>
+    </div>
+    <div class="worker-grid" id="mainWorkerGrid"></div>
+  </div>
+</div>
+
+<!-- ==================== HOME ==================== -->
+<div class="screen" id="screenHome">
+  <div style="padding: 4px 0 16px;">
+    <div id="queueBar"></div>
+  </div>
+  <div class="home-grid">
+    <div class="home-btn feeding" onclick="startFlow('feeding')">
+      <div class="home-btn-icon">🪣</div>
+      <div class="home-btn-label">Log Feeding</div>
+      <div class="home-btn-sub">Feed animals</div>
+    </div>
+    <div class="home-btn watering" onclick="startFlow('watering')">
+      <div class="home-btn-icon">💧</div>
+      <div class="home-btn-label">Log Watering</div>
+      <div class="home-btn-sub">Irrigation event</div>
+    </div>
+    <div class="home-btn amendment" onclick="startFlow('amendment')">
+      <div class="home-btn-icon">🌱</div>
+      <div class="home-btn-label">Soil Amendment</div>
+      <div class="home-btn-sub">Gypsum, compost, frass</div>
+    </div>
+    <div class="home-btn purchase" onclick="startFlow('purchase')">
+      <div class="home-btn-icon">🛒</div>
+      <div class="home-btn-label">Log Purchase</div>
+      <div class="home-btn-sub">Feed, supplies from market</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PURCHASE FLOW ==================== -->
+<div class="screen" id="screenPurchase">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🛒</div>
+      <div class="flow-title">Log Purchase</div>
+    </div>
+    <div class="step-indicator" id="purchaseSteps"></div>
+
+    <!-- Step 1: Ingredient -->
+    <div id="pStep1">
+      <div class="field">
+        <label>Ingredient</label>
+        <select id="pIngredient" onchange="pIngredientChange()">
+          <option value="">Select ingredient...</option>
+        </select>
+      </div>
+      <br>
+      <div class="field">
+        <label>Supplier</label>
+        <select id="pSupplier">
+          <option value="">Select supplier...</option>
+        </select>
+      </div>
+      <br>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="pDate">
+        <div class="date-today-hint">Defaults to today</div>
+      </div>
+      <br>
+      <button class="confirm-btn" id="pStep1Next" onclick="pStep(2)">Next →</button>
+    </div>
+
+    <!-- Step 2: Quantity numpad -->
+    <div id="pStep2" style="display:none">
+      <div class="field">
+        <label>Quantity (kg)</label>
+        <div class="numpad-display" id="pQtyDisplay">0<span class="unit">kg</span></div>
+      </div>
+      <div class="numpad-grid">
+        <div class="np-btn" onclick="npTap('pQty','7')">7</div>
+        <div class="np-btn" onclick="npTap('pQty','8')">8</div>
+        <div class="np-btn" onclick="npTap('pQty','9')">9</div>
+        <div class="np-btn" onclick="npTap('pQty','4')">4</div>
+        <div class="np-btn" onclick="npTap('pQty','5')">5</div>
+        <div class="np-btn" onclick="npTap('pQty','6')">6</div>
+        <div class="np-btn" onclick="npTap('pQty','1')">1</div>
+        <div class="np-btn" onclick="npTap('pQty','2')">2</div>
+        <div class="np-btn" onclick="npTap('pQty','3')">3</div>
+        <div class="np-btn del" onclick="npDel('pQty')">⌫</div>
+        <div class="np-btn" onclick="npTap('pQty','0')">0</div>
+        <div class="np-btn" onclick="npTap('pQty','.')">.</div>
+      </div>
+      <br>
+      <button class="confirm-btn" id="pStep2Next" onclick="pStep(3)" disabled>Next →</button>
+    </div>
+
+    <!-- Step 3: Total cost numpad -->
+    <div id="pStep3" style="display:none">
+      <div class="field">
+        <label>Total Cost (PKR)</label>
+        <div class="numpad-display" id="pCostDisplay">0<span class="unit">PKR</span></div>
+      </div>
+      <div class="numpad-grid">
+        <div class="np-btn" onclick="npTap('pCost','7')">7</div>
+        <div class="np-btn" onclick="npTap('pCost','8')">8</div>
+        <div class="np-btn" onclick="npTap('pCost','9')">9</div>
+        <div class="np-btn" onclick="npTap('pCost','4')">4</div>
+        <div class="np-btn" onclick="npTap('pCost','5')">5</div>
+        <div class="np-btn" onclick="npTap('pCost','6')">6</div>
+        <div class="np-btn" onclick="npTap('pCost','1')">1</div>
+        <div class="np-btn" onclick="npTap('pCost','2')">2</div>
+        <div class="np-btn" onclick="npTap('pCost','3')">3</div>
+        <div class="np-btn del" onclick="npDel('pCost')">⌫</div>
+        <div class="np-btn" onclick="npTap('pCost','0')">0</div>
+        <div class="np-btn" onclick="npTap('pCost','.')">.</div>
+      </div>
+      <br>
+      <div class="field">
+        <label>Notes (optional)</label>
+        <textarea id="pNotes" placeholder="Any notes..."></textarea>
+      </div>
+      <br>
+      <button class="confirm-btn" onclick="pConfirm()">✓ Confirm Purchase</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== HARVEST FLOW ==================== -->
+<div class="screen" id="screenHarvest" style="display:none!important">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🌾</div>
+      <div class="flow-title">Log Harvest</div>
+    </div>
+
+    <div class="field">
+      <label>What was harvested?</label>
+      <select id="hIngredient">
+        <option value="">Select ingredient...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Location harvested</label>
+      <select id="hLocation">
+        <option value="">Select location...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Quantity (kg)</label>
+      <div class="numpad-display" id="hQtyDisplay">0<span class="unit">kg</span></div>
+      <div class="numpad-grid" style="margin-top:10px">
+        <div class="np-btn" onclick="npTap('hQty','7')">7</div>
+        <div class="np-btn" onclick="npTap('hQty','8')">8</div>
+        <div class="np-btn" onclick="npTap('hQty','9')">9</div>
+        <div class="np-btn" onclick="npTap('hQty','4')">4</div>
+        <div class="np-btn" onclick="npTap('hQty','5')">5</div>
+        <div class="np-btn" onclick="npTap('hQty','6')">6</div>
+        <div class="np-btn" onclick="npTap('hQty','1')">1</div>
+        <div class="np-btn" onclick="npTap('hQty','2')">2</div>
+        <div class="np-btn" onclick="npTap('hQty','3')">3</div>
+        <div class="np-btn del" onclick="npDel('hQty')">⌫</div>
+        <div class="np-btn" onclick="npTap('hQty','0')">0</div>
+        <div class="np-btn" onclick="npTap('hQty','.')">.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="hDate">
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="hNotes" placeholder="Any notes..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="hConfirm()">✓ Confirm Harvest</button>
+  </div>
+</div>
+
+<!-- ==================== FEEDING FLOW ==================== -->
+<div class="screen" id="screenFeeding">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🪣</div>
+      <div class="flow-title">Log Feeding</div>
+    </div>
+
+    <div class="field">
+      <label>Animal Group <span style="color:var(--warn)">*</span></label>
+      <select id="fGroup" onchange="fGroupChange()">
+        <option value="">Select group...</option>
+      </select>
+    </div>
+
+    <div id="fTargetArea" style="display:none; margin-bottom:16px">
+      <div class="info-card" id="fTargetCard"></div>
+    </div>
+
+    <div class="field">
+      <label>Concentrate (kg as-fed)</label>
+      <input type="number" id="fConcentrateKg" placeholder="0.0" step="0.1" min="0">
+    </div>
+
+    <div class="field">
+      <label>Hay (kg as-fed)</label>
+      <input type="number" id="fHayKg" placeholder="0.0" step="0.1" min="0">
+    </div>
+
+    <div class="field">
+      <label>Green Fodder (kg as-fed)</label>
+      <input type="number" id="fFodderKg" placeholder="0.0" step="0.1" min="0">
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="fDate">
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="fNotes" placeholder="Any notes..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="fConfirm()">✓ Confirm Feeding</button>
+  </div>
+</div>
+
+<!-- ==================== WATERING FLOW ==================== -->
+<div class="screen" id="screenWatering">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">💧</div>
+      <div class="flow-title">Log Irrigation</div>
+    </div>
+
+    <div class="field">
+      <label>Location / Plot</label>
+      <select id="wLocation">
+        <option value="">Select location...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Duration (minutes)</label>
+      <input type="number" id="wDuration" placeholder="e.g. 45" min="1">
+    </div>
+
+    <div class="field">
+      <label>Estimated volume (litres, optional)</label>
+      <input type="number" id="wVolume" placeholder="Leave blank if unknown" min="0">
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="wDate">
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="wNotes" placeholder="Any notes..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="wConfirm()">✓ Confirm Irrigation</button>
+  </div>
+</div>
+
+<!-- ==================== AMENDMENT FLOW ==================== -->
+<div class="screen" id="screenAmendment">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🌱</div>
+      <div class="flow-title">Soil Amendment</div>
+    </div>
+
+    <div class="field">
+      <label>Amendment type</label>
+      <select id="aType" onchange="aTypeChange()">
+        <option value="">Select type...</option>
+        <option value="gypsum">Gypsum</option>
+        <option value="compost">Compost</option>
+        <option value="bsf_frass">BSF Frass</option>
+        <option value="biogas_digestate">Biogas Digestate</option>
+        <option value="elemental_sulfur">Elemental Sulfur</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="field" id="aOtherField" style="display:none">
+      <label>Describe amendment</label>
+      <input type="text" id="aOtherDesc" placeholder="What was applied?">
+    </div>
+
+    <div class="field">
+      <label>Location / Plot</label>
+      <select id="aLocation">
+        <option value="">Select location...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Quantity (kg)</label>
+      <div class="numpad-display" id="aQtyDisplay">0<span class="unit">kg</span></div>
+      <div class="numpad-grid" style="margin-top:10px">
+        <div class="np-btn" onclick="npTap('aQty','7')">7</div>
+        <div class="np-btn" onclick="npTap('aQty','8')">8</div>
+        <div class="np-btn" onclick="npTap('aQty','9')">9</div>
+        <div class="np-btn" onclick="npTap('aQty','4')">4</div>
+        <div class="np-btn" onclick="npTap('aQty','5')">5</div>
+        <div class="np-btn" onclick="npTap('aQty','6')">6</div>
+        <div class="np-btn" onclick="npTap('aQty','1')">1</div>
+        <div class="np-btn" onclick="npTap('aQty','2')">2</div>
+        <div class="np-btn" onclick="npTap('aQty','3')">3</div>
+        <div class="np-btn del" onclick="npDel('aQty')">⌫</div>
+        <div class="np-btn" onclick="npTap('aQty','0')">0</div>
+        <div class="np-btn" onclick="npTap('aQty','.')">.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="aDate">
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="aNotes" placeholder="Any notes..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="aConfirm()">✓ Confirm Amendment</button>
+  </div>
+</div>
+
+<!-- ==================== EGGS FLOW ==================== -->
+<div class="screen" id="screenEggs">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🥚</div>
+      <div class="flow-title">Egg Count</div>
+    </div>
+
+    <div class="field">
+      <label>Location</label>
+      <select id="eLocation">
+        <option value="">Select location...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Species</label>
+      <select id="eSpecies">
+        <option value="">Select species...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Egg count</label>
+      <div class="numpad-display" id="eCountDisplay">0<span class="unit">eggs</span></div>
+      <div class="numpad-grid" style="margin-top:10px">
+        <div class="np-btn" onclick="npTap('eCount','7')">7</div>
+        <div class="np-btn" onclick="npTap('eCount','8')">8</div>
+        <div class="np-btn" onclick="npTap('eCount','9')">9</div>
+        <div class="np-btn" onclick="npTap('eCount','4')">4</div>
+        <div class="np-btn" onclick="npTap('eCount','5')">5</div>
+        <div class="np-btn" onclick="npTap('eCount','6')">6</div>
+        <div class="np-btn" onclick="npTap('eCount','1')">1</div>
+        <div class="np-btn" onclick="npTap('eCount','2')">2</div>
+        <div class="np-btn" onclick="npTap('eCount','3')">3</div>
+        <div class="np-btn del" onclick="npDel('eCount')">⌫</div>
+        <div class="np-btn" onclick="npTap('eCount','0')">0</div>
+        <div class="np-btn clear" onclick="npClear('eCount')">C</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="eDate">
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="eNotes" placeholder="Any notes..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="eConfirm()">✓ Confirm Egg Count</button>
+  </div>
+</div>
+
+<!-- ==================== CROP HARVEST FLOW ==================== -->
+<div class="screen" id="screenCropHarvest">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🌿</div>
+      <div class="flow-title">Log Crop Harvest</div>
+    </div>
+
+    <div class="field">
+      <label>Group / Stand</label>
+      <select id="chGroup">
+        <option value="">Select group...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Quantity (kg)</label>
+      <div class="numpad-display" id="chQtyDisplay">0<span class="unit">kg</span></div>
+      <div class="numpad-grid" style="margin-top:10px">
+        <div class="np-btn" onclick="npTap('chQty','7')">7</div>
+        <div class="np-btn" onclick="npTap('chQty','8')">8</div>
+        <div class="np-btn" onclick="npTap('chQty','9')">9</div>
+        <div class="np-btn" onclick="npTap('chQty','4')">4</div>
+        <div class="np-btn" onclick="npTap('chQty','5')">5</div>
+        <div class="np-btn" onclick="npTap('chQty','6')">6</div>
+        <div class="np-btn" onclick="npTap('chQty','1')">1</div>
+        <div class="np-btn" onclick="npTap('chQty','2')">2</div>
+        <div class="np-btn" onclick="npTap('chQty','3')">3</div>
+        <div class="np-btn del" onclick="npDel('chQty')">⌫</div>
+        <div class="np-btn" onclick="npTap('chQty','0')">0</div>
+        <div class="np-btn" onclick="npTap('chQty','.')">.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Destination</label>
+      <select id="chDest">
+        <option value="">— select —</option>
+        <option value="goat_fodder">Goat fodder</option>
+        <option value="compost">Compost</option>
+        <option value="bsf_feedstock">BSF feedstock</option>
+        <option value="sale">Sale</option>
+        <option value="soil_incorporation">Soil incorporation</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="chDate">
+    </div>
+
+    <div class="field">
+      <label>Quality notes (optional)</label>
+      <textarea id="chNotes" placeholder="Any notes..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="chConfirm()">✓ Confirm Harvest</button>
+  </div>
+</div>
+
+<!-- ==================== CROP OBSERVATION FLOW ==================== -->
+<div class="screen" id="screenCropObs">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🔍</div>
+      <div class="flow-title">Crop Observation</div>
+    </div>
+
+    <div class="field">
+      <label>Crop</label>
+      <select id="obsCrop">
+        <option value="">Select crop...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Health status</label>
+      <select id="obsHealth">
+        <option value="unknown">Unknown</option>
+        <option value="good">Good</option>
+        <option value="stressed">Stressed</option>
+        <option value="failing">Failing</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Pest / disease?</label>
+      <select id="obsFlag">
+        <option value="false">No</option>
+        <option value="true">Yes ⚠</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Note</label>
+      <textarea id="obsNote" placeholder="Growth stage, visible issues, anything unusual..."></textarea>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="obsDate">
+    </div>
+
+    <button class="confirm-btn" onclick="obsConfirm()">✓ Save Observation</button>
+  </div>
+</div>
+
+<!-- ==================== SUCCESS SCREEN ==================== -->
+<div class="screen" id="screenSuccess">
+  <div class="success-wrap">
+    <div class="success-icon" id="successIcon">✅</div>
+    <div class="success-title" id="successTitle">Logged!</div>
+    <div class="success-sub" id="successSub"></div>
+    <div class="success-btns">
+      <button class="confirm-btn" onclick="goHome()">← Back to Home</button>
+      <button class="again-btn" id="againBtn" onclick="doAgain()">Log another</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const SUPABASE_URL = 'https://soxbgbpuzcpvkqvdufno.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveGJnYnB1emNwdmtxdmR1Zm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzE2MDksImV4cCI6MjA5MjQ0NzYwOX0.v9eOX4xPkCE_4aSr0gxWfKh3_2jkwlks6sDCw1thw5k';
+// TODO: Replace SUPABASE_KEY with your actual anon key from
+// Supabase → Project Settings → API
+
+const db = {
+  async get(table, params = '') {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  async post(table, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let appData = {
+  workers: [],
+  ingredients: [],
+  suppliers: [],
+  locations: [],
+  species: [],
+  animalGroups: [],
+  cropGroups: [],
+  plotCrops: []
+};
+
+let activeWorkerId = null;  // set on worker selection screen, used by all flows
+
+let numpadValues = {
+  pQty: '', pCost: '',
+  hQty: '',
+  chQty: '',
+  aQty: '',
+  eCount: ''
+};
+
+let purchaseState  = { step: 1 };
+let currentFlow    = null;
+let pendingQueue   = [];
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  loadQueue();
+  setTodayDates();
+  updateQueueBadge();
+
+  try {
+    const [workers, ingredients, suppliers, locations, species, animalGroups, cropGroups, plotCrops] = await Promise.all([
+      db.get('workers', '?active=eq.true&order=name'),
+      db.get('ingredients', '?active=eq.true&order=name'),
+      db.get('suppliers', '?active=eq.true&order=name'),
+      db.get('locations', '?active=eq.true&order=name'),
+      db.get('species', '?order=common_name'),
+      db.get('animal_groups', '?status=eq.active&select=id,name,species_id&order=name').catch(() => []),
+      db.get('crop_groups', '?select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name').catch(() => []),
+      db.get('plot_crops', '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name').catch(() => [])
+    ]);
+    appData = { workers, ingredients, suppliers, locations, species, animalGroups, cropGroups, plotCrops };
+    populateAllForms();
+    document.getElementById('headerSub').textContent = 'Ready';
+  } catch (e) {
+    document.getElementById('headerSub').textContent = 'Offline mode';
+    populateAllForms(); // still populate from cache if available
+  }
+}
+
+function setTodayDates() {
+  const today = new Date().toISOString().split('T')[0];
+  ['pDate','hDate','fDate','wDate','aDate','eDate','chDate','obsDate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = today;
+  });
+}
+
+function populateAllForms() {
+  // Main worker selection grid
+  const mainGrid = document.getElementById('mainWorkerGrid');
+  if (mainGrid) {
+    mainGrid.innerHTML = appData.workers.map(w => `
+      <div class="worker-btn" data-wid="${w.id}" onclick="selectWorker(${w.id}, '${w.name}')">
+        <div class="worker-name">${w.name}</div>
+        <div class="worker-type">${w.worker_type || ''}</div>
+      </div>`).join('');
+  }
+
+  // Purchase ingredients (purchased only)
+  const pIng = document.getElementById('pIngredient');
+  if (pIng) {
+    pIng.innerHTML = '<option value="">Select ingredient...</option>' +
+      appData.ingredients
+        .filter(i => i.source_type === 'purchased' || i.source_type === 'dual')
+        .map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+  }
+
+  // Harvest ingredients (produced or dual)
+  const hIng = document.getElementById('hIngredient');
+  if (hIng) {
+    hIng.innerHTML = '<option value="">Select ingredient...</option>' +
+      appData.ingredients
+        .filter(i => i.source_type === 'produced' || i.source_type === 'dual')
+        .map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+  }
+
+  // Suppliers
+  const pSup = document.getElementById('pSupplier');
+  if (pSup) {
+    pSup.innerHTML = '<option value="">Select supplier...</option>' +
+      appData.suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
+
+  // Locations — all
+  const allLocSelects = ['hLocation','wLocation','aLocation','eLocation'];
+  allLocSelects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '<option value="">Select location...</option>' +
+      appData.locations.map(l => `<option value="${l.id}">${l.name} (${l.location_type})</option>`).join('');
+  });
+
+  // Feeding — animal groups
+  const fGroup = document.getElementById('fGroup');
+  if (fGroup) {
+    fGroup.innerHTML = '<option value="">Select group...</option>' +
+      (appData.animalGroups || []).map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+  }
+
+  // Species (laying only for eggs)
+  const eSpecies = document.getElementById('eSpecies');
+  if (eSpecies) {
+    const layingSpecies = ['Chicken','Duck','Goose','Turkey'];
+    eSpecies.innerHTML = '<option value="">Select species...</option>' +
+      appData.species
+        .filter(s => layingSpecies.includes(s.common_name))
+        .map(s => `<option value="${s.id}">${s.common_name}</option>`).join('');
+  }
+
+  // Crop groups — active groups that have at least one growing crop
+  const activeGroupIds = new Set(appData.plotCrops.map(c => c.crop_group_id));
+  const chGroup = document.getElementById('chGroup');
+  if (chGroup) {
+    chGroup.innerHTML = '<option value="">Select group...</option>' +
+      appData.cropGroups
+        .filter(g => activeGroupIds.has(g.id))
+        .map(g => {
+          const plot = g.field_plots;
+          const plotLabel = plot ? ` — ${plot.plot_code || plot.plot_name}` : '';
+          const standLabel = g.is_stand ? ' [stand]' : '';
+          return `<option value="${g.id}">${g.name}${standLabel}${plotLabel}</option>`;
+        }).join('');
+  }
+
+  // Individual growing crops for observations — show crop name + group context
+  const obsCrop = document.getElementById('obsCrop');
+  if (obsCrop) {
+    obsCrop.innerHTML = '<option value="">Select crop...</option>' +
+      appData.plotCrops.map(c => {
+        const group = appData.cropGroups.find(g => g.id === c.crop_group_id);
+        const ctx = group ? ` (${group.name})` : '';
+        return `<option value="${c.id}">${c.crop_name}${ctx}</option>`;
+      }).join('');
+  }
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function goHome() {
+  showScreen(activeWorkerId ? 'screenHome' : 'screenWorker');
+  currentFlow = null;
+}
+
+function startFlow(flow) {
+  if (!activeWorkerId) { showScreen('screenWorker'); return; }
+  currentFlow = flow;
+  resetFlow(flow);
+  showScreen('screen' + flow.charAt(0).toUpperCase() + flow.slice(1));
+}
+
+function doAgain() {
+  if (currentFlow) startFlow(currentFlow);
+}
+
+function resetFlow(flow) {
+  // Reset numpad values
+  Object.keys(numpadValues).forEach(k => numpadValues[k] = '');
+  updateNumpadDisplay('pQty');
+  updateNumpadDisplay('pCost');
+  updateNumpadDisplay('hQty');
+  updateNumpadDisplay('chQty');
+  updateNumpadDisplay('aQty');
+  updateNumpadDisplay('eCount');
+
+  if (flow === 'purchase') {
+    purchaseState = { step: 1 };
+    pStep(1);
+  }
+
+  setTodayDates();
+}
+
+// ============================================================
+// WORKER SELECTION
+// ============================================================
+function selectWorker(workerId, workerName) {
+  activeWorkerId = workerId;
+  // Highlight selected in main grid
+  document.querySelectorAll('#mainWorkerGrid .worker-btn').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.dataset.wid) === workerId);
+  });
+  // Update header chip
+  const chip = document.getElementById('workerChip');
+  if (chip) { chip.textContent = workerName + ' ✕'; chip.style.display = ''; }
+  // Go to home
+  showScreen('screenHome');
+}
+
+function getSelectedWorker() {
+  return activeWorkerId;
+}
+
+// ============================================================
+// NUMPAD
+// ============================================================
+function npTap(key, digit) {
+  let val = numpadValues[key];
+  if (digit === '.' && val.includes('.')) return;
+  if (val === '0' && digit !== '.') val = digit;
+  else val += digit;
+  numpadValues[key] = val;
+  updateNumpadDisplay(key);
+  checkNumpadNext(key);
+}
+
+function npDel(key) {
+  numpadValues[key] = numpadValues[key].slice(0, -1) || '0';
+  updateNumpadDisplay(key);
+  checkNumpadNext(key);
+}
+
+function npClear(key) {
+  numpadValues[key] = '';
+  updateNumpadDisplay(key);
+  checkNumpadNext(key);
+}
+
+const numpadDisplayMap = {
+  pQty:   { display: 'pQtyDisplay',   unit: 'kg' },
+  pCost:  { display: 'pCostDisplay',  unit: 'PKR' },
+  hQty:   { display: 'hQtyDisplay',   unit: 'kg' },
+  aQty:   { display: 'aQtyDisplay',   unit: 'kg' },
+  eCount: { display: 'eCountDisplay', unit: 'eggs' }
+};
+
+function updateNumpadDisplay(key) {
+  const cfg = numpadDisplayMap[key];
+  if (!cfg) return;
+  const el = document.getElementById(cfg.display);
+  if (!el) return;
+  const val = numpadValues[key] || '0';
+  el.innerHTML = `${val}<span class="unit">${cfg.unit}</span>`;
+}
+
+function checkNumpadNext(key) {
+  const val = parseFloat(numpadValues[key]);
+  if (key === 'pQty') {
+    const btn = document.getElementById('pStep2Next');
+    if (btn) btn.disabled = !(val > 0);
+  }
+}
+
+// ============================================================
+// PURCHASE FLOW STEPS
+// ============================================================
+function pStep(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('pStep'+i);
+    if (el) el.style.display = i === n ? '' : 'none';
+  });
+  purchaseState.step = n;
+  updatePurchaseSteps(n);
+}
+
+function updatePurchaseSteps(current) {
+  const dots = document.getElementById('purchaseSteps');
+  if (!dots) return;
+  dots.innerHTML = [1,2,3].map(i =>
+    `<div class="step-dot ${i < current ? 'done' : i === current ? 'active' : ''}"></div>`
+  ).join('');
+}
+
+function pIngredientChange() {
+  const val = document.getElementById('pIngredient').value;
+  document.getElementById('pStep1Next').disabled = !val;
+}
+
+// ============================================================
+// PURCHASE CONFIRM
+// ============================================================
+async function pConfirm() {
+  const ingredientId = parseInt(document.getElementById('pIngredient').value);
+  const supplierId   = parseInt(document.getElementById('pSupplier').value) || null;
+  const date         = document.getElementById('pDate').value;
+  const qty          = parseFloat(numpadValues.pQty);
+  const cost         = parseFloat(numpadValues.pCost) || null;
+  const notes        = document.getElementById('pNotes').value.trim() || null;
+
+  const payload = {
+    ingredient_id:    ingredientId,
+    acquisition_type: 'purchased',
+    date,
+    quantity_kg:      qty,
+    total_cost_pkr:   cost,
+    supplier_id:      supplierId,
+    recorded_by:      activeWorkerId,
+    notes
+  };
+
+  await submitEntry('ingredient_acquisitions', payload, () => {
+    const ing = appData.ingredients.find(i => i.id === ingredientId);
+    showSuccess('🛒', 'Purchase Logged',
+      `${qty} kg of ${ing ? ing.name : 'ingredient'}${cost ? '\n' + cost.toLocaleString() + ' PKR' : ''}`);
+  });
+}
+
+// ============================================================
+// HARVEST CONFIRM
+// ============================================================
+async function hConfirm() {
+  const ingredientId = parseInt(document.getElementById('hIngredient').value);
+  const locationId   = parseInt(document.getElementById('hLocation').value) || null;
+  const date         = document.getElementById('hDate').value;
+  const qty          = parseFloat(numpadValues.hQty);
+  const notes        = document.getElementById('hNotes').value.trim() || null;
+  const workerId     = activeWorkerId;
+
+  if (!ingredientId || !qty || qty <= 0) {
+    alert('Select an ingredient and enter a quantity.');
+    return;
+  }
+
+  const payload = {
+    ingredient_id:      ingredientId,
+    acquisition_type:   'harvested',
+    date,
+    quantity_kg:        qty,
+    location_harvested: locationId,
+    recorded_by:        workerId,
+    notes
+  };
+
+  await submitEntry('ingredient_acquisitions', payload, () => {
+    const ing = appData.ingredients.find(i => i.id === ingredientId);
+    showSuccess('🌾', 'Harvest Logged', `${qty} kg of ${ing ? ing.name : 'ingredient'}`);
+  });
+}
+
+// ============================================================
+// CROP HARVEST CONFIRM
+// ============================================================
+async function chConfirm() {
+  const groupId  = parseInt(document.getElementById('chGroup').value);
+  const qty      = parseFloat(numpadValues.chQty);
+  const dest     = document.getElementById('chDest').value || null;
+  const date     = document.getElementById('chDate').value;
+  const notes    = document.getElementById('chNotes').value.trim() || null;
+  const workerId = activeWorkerId;
+
+  if (!groupId) { alert('Select a group.'); return; }
+  if (!qty || qty <= 0) { alert('Enter a quantity.'); return; }
+
+  const group = appData.cropGroups.find(g => g.id === groupId);
+
+  const harvestPayload = { crop_group_id: groupId, date, quantity_kg: qty };
+  if (dest)     harvestPayload.destination   = dest;
+  if (workerId) harvestPayload.logged_by     = workerId;
+  if (notes)    harvestPayload.quality_notes = notes;
+
+  if (navigator.onLine && group && group.ingredient_id) {
+    // Online path: insert harvest, get ID back, then bridge to acquisitions
+    try {
+      const rows = await db.post('crop_harvest_events', harvestPayload);
+      const harvestId = Array.isArray(rows) ? rows[0].id : rows.id;
+      const aqPayload = {
+        ingredient_id:         group.ingredient_id,
+        acquisition_type:      'harvested',
+        date,
+        quantity_kg:           qty,
+        crop_harvest_event_id: harvestId
+      };
+      if (workerId) aqPayload.recorded_by = workerId;
+      await db.post('ingredient_acquisitions', aqPayload);
+      drainQueue();
+      showSuccess('🌿', 'Crop Harvest Logged', `${qty} kg — ${group ? group.name : ''}`);
+      return;
+    } catch (e) {
+      console.warn('Online bridge failed, falling back to queue:', e);
+    }
+  }
+
+  // Offline path (or no ingredient link): queue harvest independently
+  // Acquisition queued without crop_harvest_event_id FK — acceptable for offline
+  await submitEntry('crop_harvest_events', harvestPayload, () => {
+    if (group && group.ingredient_id) {
+      const aqPayload = {
+        ingredient_id:    group.ingredient_id,
+        acquisition_type: 'harvested',
+        date,
+        quantity_kg:      qty
+      };
+      if (workerId) aqPayload.recorded_by = workerId;
+      pendingQueue.push({ table: 'ingredient_acquisitions', payload: aqPayload, ts: Date.now() + 1 });
+      saveQueue();
+    }
+    showSuccess('🌿', 'Crop Harvest Logged', `${qty} kg${group ? ' — ' + group.name : ''}`);
+  });
+}
+
+// ============================================================
+// CROP OBSERVATION CONFIRM
+// ============================================================
+async function obsConfirm() {
+  const cropId   = parseInt(document.getElementById('obsCrop').value);
+  const health   = document.getElementById('obsHealth').value;
+  const flag     = document.getElementById('obsFlag').value === 'true';
+  const note     = document.getElementById('obsNote').value.trim() || null;
+  const date     = document.getElementById('obsDate').value;
+  const workerId = activeWorkerId;
+
+  if (!cropId) { alert('Select a crop.'); return; }
+
+  const payload = {
+    plot_crop_id:      cropId,
+    health_status:     health,
+    pest_disease_flag: flag,
+    observed_at:       date
+  };
+  if (note)     payload.note      = note;
+  if (workerId) payload.logged_by = workerId;
+
+  // Submit observation then patch the crop's summary fields
+  await submitEntry('crop_observations', payload, () => {
+    const crop = appData.plotCrops.find(c => c.id === cropId);
+    showSuccess('🔍', 'Observation Saved', crop ? crop.crop_name : 'Crop updated');
+  });
+}
+
+// ============================================================
+// FEEDING FLOW
+// ============================================================
+async function fGroupChange() {
+  const groupId = parseInt(document.getElementById('fGroup').value);
+  const card    = document.getElementById('fTargetCard');
+  const area    = document.getElementById('fTargetArea');
+
+  if (!groupId) { area.style.display = 'none'; return; }
+
+  card.innerHTML = '<div style="color:var(--muted);font-size:13px">Loading targets…</div>';
+  area.style.display = '';
+
+  try {
+    // Fetch active ration plan for this group
+    const gr = await db.get('group_recipes',
+      `?group_id=eq.${groupId}&active=eq.true` +
+      `&select=ration_plan_version_id,ration_plan_versions(dmi_pct_body_weight,concentrate_pct_dmi,hay_pct_dmi,green_fodder_pct_dmi)`);
+
+    if (!gr.length || !gr[0].ration_plan_versions) {
+      card.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ration plan assigned to this group.</div>';
+      return;
+    }
+
+    const rpv = gr[0].ration_plan_versions;
+
+    // Fetch group members with latest weights
+    const members = await db.get('group_members',
+      `?group_id=eq.${groupId}&select=animal_id`);
+    const n = members.length;
+
+    if (!n) {
+      card.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No animals in this group.</div>';
+      return;
+    }
+
+    // Fetch latest weight per animal (last 30 records, client-side average)
+    const ids = members.map(m => m.animal_id).join(',');
+    const weights = await db.get('animal_weights',
+      `?animal_id=in.(${ids})&select=animal_id,weight_kg&order=date.desc&limit=200`);
+
+    // One weight per animal — pick most recent
+    const seen = new Set();
+    const latestWeights = [];
+    for (const w of weights) {
+      if (!seen.has(w.animal_id)) {
+        seen.add(w.animal_id);
+        latestWeights.push(parseFloat(w.weight_kg));
+      }
+    }
+    const avgWt = latestWeights.length
+      ? latestWeights.reduce((s, v) => s + v, 0) / latestWeights.length
+      : null;
+
+    // Compute targets
+    const dmiPct  = parseFloat(rpv.dmi_pct_body_weight) / 100;
+    const concPct = parseFloat(rpv.concentrate_pct_dmi)  / 100;
+    const hayPct  = parseFloat(rpv.hay_pct_dmi)          / 100;
+    const fodPct  = parseFloat(rpv.green_fodder_pct_dmi) / 100;
+
+    if (!avgWt) {
+      card.innerHTML =
+        `<div style="font-size:13px;color:var(--muted);padding:8px 0">` +
+        `${n} animals — no weight data yet. Enter quantities manually.</div>`;
+      return;
+    }
+
+    const dmiPerHead = avgWt * dmiPct;
+    const concDm     = dmiPerHead * concPct;
+    const hayDm      = dmiPerHead * hayPct;
+    const fodDm      = dmiPerHead * fodPct;
+    // Convert DM to as-fed (assume 88% DM for conc, 85% hay, 20% green fodder)
+    const concAf = (concDm / 0.88) * n;
+    const hayAf  = (hayDm  / 0.85) * n;
+    const fodAf  = (fodDm  / 0.20) * n;
+
+    const r1 = v => Math.round(v * 10) / 10;
+
+    card.innerHTML =
+      `<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--accent)">` +
+      `Today's targets — ${n} animals (avg ${r1(avgWt)} kg)</div>` +
+      `<div class="recipe-row"><span class="ing">Concentrate</span>` +
+      `<span class="qty">${r1(concAf)} kg</span></div>` +
+      `<div class="recipe-row"><span class="ing">Hay</span>` +
+      `<span class="qty">${r1(hayAf)} kg</span></div>` +
+      `<div class="recipe-row"><span class="ing">Green Fodder</span>` +
+      `<span class="qty">${r1(fodAf)} kg</span></div>` +
+      `<div style="font-size:11px;color:var(--muted);margin-top:6px">` +
+      `${r1(dmiPerHead)} kg DM/head · ${r1(dmiPct*100)}% BW</div>`;
+
+    // Pre-fill inputs with targets
+    document.getElementById('fConcentrateKg').value = r1(concAf);
+    document.getElementById('fHayKg').value         = r1(hayAf);
+    document.getElementById('fFodderKg').value       = r1(fodAf);
+
+  } catch (e) {
+    card.innerHTML = `<div style="color:var(--danger);font-size:13px">Could not load targets: ${e.message}</div>`;
+  }
+}
+
+async function fConfirm() {
+  const groupId     = parseInt(document.getElementById('fGroup').value);
+  const concentrate = parseFloat(document.getElementById('fConcentrateKg').value) || null;
+  const hayKg       = parseFloat(document.getElementById('fHayKg').value) || null;
+  const fodderKg    = parseFloat(document.getElementById('fFodderKg').value) || null;
+  const date        = document.getElementById('fDate').value;
+  const notes       = document.getElementById('fNotes').value.trim() || null;
+  const workerId    = activeWorkerId;
+
+  if (!groupId) { alert('Select a group.'); return; }
+  if (!concentrate && !hayKg && !fodderKg) { alert('Enter at least one feed quantity.'); return; }
+
+  const now = new Date();
+  const recorded_at = new Date(date + 'T' + now.toTimeString().slice(0,8)).toISOString();
+  const payload = { recorded_at, group_id: groupId, recorded_by: workerId };
+  if (concentrate) payload.concentrate_kg  = concentrate;
+  if (hayKg)       payload.hay_kg          = hayKg;
+  if (fodderKg)    payload.green_fodder_kg = fodderKg;
+  if (notes)       payload.notes           = notes;
+
+  await submitEntry('feeding_events', payload, () => {
+    const grp = (appData.animalGroups || []).find(g => g.id === groupId);
+    showSuccess('🪣', 'Feeding Logged', grp ? grp.name : 'Group');
+  });
+}
+
+// ============================================================
+// WATERING CONFIRM
+// ============================================================
+async function wConfirm() {
+  const locationId = parseInt(document.getElementById('wLocation').value);
+  const duration   = parseInt(document.getElementById('wDuration').value) || null;
+  const volume     = parseFloat(document.getElementById('wVolume').value) || null;
+  const date       = document.getElementById('wDate').value;
+  const notes      = document.getElementById('wNotes').value.trim() || null;
+  const workerId   = activeWorkerId;
+
+  if (!locationId) { alert('Select a location.'); return; }
+  if (!duration)   { alert('Enter duration in minutes.'); return; }
+
+  const payload = {
+    date,
+    location_id:             locationId,
+    duration_minutes:        duration,
+    estimated_volume_liters: volume,
+    notes
+  };
+
+  await submitEntry('irrigation_events', payload, () => {
+    const loc = appData.locations.find(l => l.id === locationId);
+    showSuccess('💧', 'Irrigation Logged',
+      `${loc ? loc.name : 'Location'} — ${duration} min`);
+  });
+}
+
+// ============================================================
+// AMENDMENT FLOW
+// ============================================================
+function aTypeChange() {
+  const val = document.getElementById('aType').value;
+  document.getElementById('aOtherField').style.display = val === 'other' ? '' : 'none';
+}
+
+async function aConfirm() {
+  const amendType  = document.getElementById('aType').value;
+  const otherDesc  = document.getElementById('aOtherDesc').value.trim();
+  const locationId = parseInt(document.getElementById('aLocation').value);
+  const qty        = parseFloat(numpadValues.aQty);
+  const date       = document.getElementById('aDate').value;
+  const notes      = document.getElementById('aNotes').value.trim() || null;
+  const workerId   = activeWorkerId;
+
+  if (!amendType)  { alert('Select amendment type.'); return; }
+  if (!locationId) { alert('Select a location.'); return; }
+  if (!qty || qty <= 0) { alert('Enter a quantity.'); return; }
+
+  const finalDesc = amendType === 'other' ? (otherDesc || 'Other') : amendType;
+
+  // Store in amendment_applications table (part of migration v2)
+  const payload = {
+    date,
+    location_id:    locationId,
+    amendment_type: amendType === 'other' ? 'other' : amendType,
+    description:    finalDesc,
+    kg_applied:     qty,
+    worker_id:      workerId,
+    notes
+  };
+
+  await submitEntry('amendment_applications', payload, () => {
+    const loc = appData.locations.find(l => l.id === locationId);
+    showSuccess('🌱', 'Amendment Logged',
+      `${qty} kg ${finalDesc}\n${loc ? loc.name : 'Location'}`);
+  });
+}
+
+// ============================================================
+// EGGS CONFIRM
+// ============================================================
+async function eConfirm() {
+  const locationId = parseInt(document.getElementById('eLocation').value);
+  const speciesId  = parseInt(document.getElementById('eSpecies').value);
+  const count      = parseInt(numpadValues.eCount) || 0;
+  const date       = document.getElementById('eDate').value;
+  const notes      = document.getElementById('eNotes').value.trim() || null;
+  const workerId   = activeWorkerId;
+
+  if (!locationId) { alert('Select a location.'); return; }
+  if (!speciesId)  { alert('Select a species.'); return; }
+
+  const payload = {
+    date,
+    location_id: locationId,
+    species_id:  speciesId,
+    count,
+    recorded_by: workerId,
+    notes
+  };
+
+  await submitEntry('egg_production', payload, () => {
+    const sp = appData.species.find(s => s.id === speciesId);
+    showSuccess('🥚', 'Egg Count Logged',
+      `${count} eggs — ${sp ? sp.common_name : 'species'}`);
+  });
+}
+
+// ============================================================
+// SUBMIT — online or queue
+// ============================================================
+async function submitEntry(table, payload, onSuccess) {
+  if (navigator.onLine) {
+    try {
+      await db.post(table, payload);
+      drainQueue();
+      onSuccess();
+      return;
+    } catch (e) {
+      // Fall through to queue
+      console.warn('Submit failed, queuing:', e);
+    }
+  }
+
+  // Queue it
+  pendingQueue.push({ table, payload, ts: Date.now() });
+  saveQueue();
+  updateQueueBadge();
+  onSuccess(); // Still show success — it will sync later
+}
+
+async function drainQueue() {
+  if (!navigator.onLine || !pendingQueue.length) return;
+  const toSend = [...pendingQueue];
+  for (const item of toSend) {
+    try {
+      await db.post(item.table, item.payload);
+      pendingQueue = pendingQueue.filter(q => q.ts !== item.ts);
+    } catch (e) {
+      break; // stop if one fails
+    }
+  }
+  saveQueue();
+  updateQueueBadge();
+}
+
+function saveQueue()  { localStorage.setItem('sf_queue', JSON.stringify(pendingQueue)); }
+function loadQueue()  { try { pendingQueue = JSON.parse(localStorage.getItem('sf_queue') || '[]'); } catch { pendingQueue = []; } }
+
+function updateQueueBadge() {
+  const badge = document.getElementById('syncBadge');
+  const bar   = document.getElementById('queueBar');
+  if (pendingQueue.length) {
+    badge.textContent = `${pendingQueue.length} pending`;
+    badge.classList.add('visible');
+    if (bar) bar.innerHTML = `<div class="queue-bar">⏳ ${pendingQueue.length} entr${pendingQueue.length === 1 ? 'y' : 'ies'} waiting to sync</div>`;
+  } else {
+    badge.classList.remove('visible');
+    if (bar) bar.innerHTML = '';
+  }
+}
+
+// ============================================================
+// SUCCESS
+// ============================================================
+function showSuccess(icon, title, sub) {
+  document.getElementById('successIcon').textContent  = icon;
+  document.getElementById('successTitle').textContent = title;
+  document.getElementById('successSub').textContent   = sub;
+  showScreen('screenSuccess');
+}
+
+// ============================================================
+// ONLINE / OFFLINE
+// ============================================================
+window.addEventListener('online',  () => { document.getElementById('headerSub').textContent = 'Online'; drainQueue(); });
+window.addEventListener('offline', () => { document.getElementById('headerSub').textContent = 'Offline — entries will queue'; });
+
+// ============================================================
+// START
+// ============================================================
+init();
+</script>
+</body>
+</html>
