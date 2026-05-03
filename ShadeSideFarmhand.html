@@ -1484,9 +1484,9 @@ async function fGroupChange() {
 
     const rpv = versions[0];
 
-    // Fetch group members with latest weights
+    // Fetch group members including entry weight as fallback
     const members = await db.get('group_members',
-      `?group_id=eq.${groupId}&select=animal_id`);
+      `?group_id=eq.${groupId}&select=animal_id,animals(id,entry_weight_kg)`);
     const n = members.length;
 
     if (!n) {
@@ -1494,20 +1494,24 @@ async function fGroupChange() {
       return;
     }
 
-    // Fetch latest weight per animal (last 30 records, client-side average)
+    // Fetch latest weigh-in per animal
     const ids = members.map(m => m.animal_id).join(',');
     const weights = await db.get('animal_weights',
       `?animal_id=in.(${ids})&select=animal_id,weight_kg&order=date.desc&limit=200`);
 
-    // One weight per animal — pick most recent
-    const seen = new Set();
-    const latestWeights = [];
+    // Build map of latest weigh-in per animal
+    const latestWtMap = {};
     for (const w of weights) {
-      if (!seen.has(w.animal_id)) {
-        seen.add(w.animal_id);
-        latestWeights.push(parseFloat(w.weight_kg));
-      }
+      if (!latestWtMap[w.animal_id]) latestWtMap[w.animal_id] = parseFloat(w.weight_kg);
     }
+
+    // Use latest weigh-in, fall back to entry_weight_kg
+    const latestWeights = members.map(m => {
+      if (latestWtMap[m.animal_id]) return latestWtMap[m.animal_id];
+      const ew = m.animals && m.animals.entry_weight_kg;
+      return ew ? parseFloat(ew) : null;
+    }).filter(v => v !== null);
+
     const avgWt = latestWeights.length
       ? latestWeights.reduce((s, v) => s + v, 0) / latestWeights.length
       : null;
