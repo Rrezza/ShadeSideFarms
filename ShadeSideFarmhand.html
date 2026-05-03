@@ -1051,7 +1051,7 @@ async function init() {
       db.get('suppliers',      '?active=eq.true&order=name'),
       db.get('locations',      '?active=eq.true&order=name'),
       db.get('species',        '?order=common_name'),
-      ef(db.get('animal_groups', '?status=eq.active&select=id,name,species_id&order=name'), 'animal_groups'),
+      ef(db.get('animal_groups', '?status=eq.active&select=id,name&order=name'), 'animal_groups'),
       ef(db.get('crop_groups', '?select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
       ef(db.get('plot_crops',  '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name'), 'plot_crops')
     ]);
