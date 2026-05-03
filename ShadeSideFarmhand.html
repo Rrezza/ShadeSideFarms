@@ -1462,17 +1462,27 @@ async function fGroupChange() {
   area.innerHTML = '<div style="color:var(--muted);font-size:13px">Loading targets…</div>';
   
   try {
-    // Fetch active ration plan for this group
+    // Step 1: get active ration plan assigned to this group
     const gr = await db.get('group_recipes',
-      `?group_id=eq.${groupId}&active=eq.true` +
-      `&select=ration_plan_version_id,ration_plan_versions(dmi_pct_body_weight,concentrate_pct_dmi,hay_pct_dmi,green_fodder_pct_dmi)`);
+      `?group_id=eq.${groupId}&effective_to=is.null&select=ration_plan_id&limit=1`);
 
-    if (!gr.length || !gr[0].ration_plan_versions) {
+    if (!gr.length || !gr[0].ration_plan_id) {
       area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ration plan assigned to this group.</div>';
       return;
     }
 
-    const rpv = gr[0].ration_plan_versions;
+    // Step 2: get the active version for that plan
+    const versions = await db.get('ration_plan_versions',
+      `?ration_plan_id=eq.${gr[0].ration_plan_id}` +
+      `&select=dmi_pct_body_weight,concentrate_pct_dmi,hay_pct_dmi,green_fodder_pct_dmi` +
+      `&order=version_number.desc&limit=1`);
+
+    if (!versions.length) {
+      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">Ration plan has no versions yet.</div>';
+      return;
+    }
+
+    const rpv = versions[0];
 
     // Fetch group members with latest weights
     const members = await db.get('group_members',
