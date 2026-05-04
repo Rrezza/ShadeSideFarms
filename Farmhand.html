@@ -571,62 +571,6 @@
   </div>
 </div>
 
-<!-- ==================== HARVEST FLOW ==================== -->
-<div class="screen" id="screenHarvest" style="display:none!important">
-  <button class="back-btn" onclick="goHome()">← Home</button>
-  <div class="flow">
-    <div class="flow-header">
-      <div class="flow-icon">🌾</div>
-      <div class="flow-title">Log Harvest</div>
-    </div>
-
-    <div class="field">
-      <label>What was harvested?</label>
-      <select id="hIngredient">
-        <option value="">Select ingredient...</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Location harvested</label>
-      <select id="hLocation">
-        <option value="">Select location...</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Quantity (kg)</label>
-      <div class="numpad-display" id="hQtyDisplay">0<span class="unit">kg</span></div>
-      <div class="numpad-grid" style="margin-top:10px">
-        <div class="np-btn" onclick="npTap('hQty','7')">7</div>
-        <div class="np-btn" onclick="npTap('hQty','8')">8</div>
-        <div class="np-btn" onclick="npTap('hQty','9')">9</div>
-        <div class="np-btn" onclick="npTap('hQty','4')">4</div>
-        <div class="np-btn" onclick="npTap('hQty','5')">5</div>
-        <div class="np-btn" onclick="npTap('hQty','6')">6</div>
-        <div class="np-btn" onclick="npTap('hQty','1')">1</div>
-        <div class="np-btn" onclick="npTap('hQty','2')">2</div>
-        <div class="np-btn" onclick="npTap('hQty','3')">3</div>
-        <div class="np-btn del" onclick="npDel('hQty')">⌫</div>
-        <div class="np-btn" onclick="npTap('hQty','0')">0</div>
-        <div class="np-btn" onclick="npTap('hQty','.')">.</div>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Date</label>
-      <input type="date" id="hDate">
-    </div>
-
-    <div class="field">
-      <label>Notes (optional)</label>
-      <textarea id="hNotes" placeholder="Any notes..."></textarea>
-    </div>
-
-    <button class="confirm-btn" onclick="hConfirm()">✓ Confirm Harvest</button>
-  </div>
-</div>
-
 <!-- ==================== FEEDING FLOW ==================== -->
 <!-- ==================== FEEDING SCREEN 1: TARGETS ==================== -->
 <div class="screen" id="screenFeeding">
