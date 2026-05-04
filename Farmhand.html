@@ -628,15 +628,15 @@
 </div>
 
 <!-- ==================== FEEDING FLOW ==================== -->
+<!-- ==================== FEEDING SCREEN 1: TARGETS ==================== -->
 <div class="screen" id="screenFeeding">
   <button class="back-btn" onclick="goHome()">← Home</button>
   <div class="flow">
     <div class="flow-header">
       <div class="flow-icon">🪣</div>
-      <div class="flow-title">Feeding</div>
+      <div class="flow-title">Today's Targets</div>
     </div>
 
-    <!-- GROUP SELECTOR — shared by both sections -->
     <div class="field">
       <label>Animal Group <span style="color:var(--warn)">*</span></label>
       <select id="fGroup" onchange="fGroupChange()">
@@ -644,20 +644,21 @@
       </select>
     </div>
 
-    <!-- SECTION 1: TODAY'S TARGETS -->
-    <div style="margin:20px 0 8px;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.04em;text-transform:uppercase">
-      Today's Targets
-    </div>
-    <div id="fTargetArea">
+    <div id="fTargetArea" style="margin-top:16px">
       <div style="color:var(--muted);font-size:13px;padding:10px 0">Select a group to see targets.</div>
     </div>
 
-    <!-- DIVIDER -->
-    <div style="border-top:1px solid var(--border);margin:24px 0 20px"></div>
+    <button class="confirm-btn" id="fGoLogBtn" style="display:none;margin-top:28px" onclick="showScreen('screenFeedLog')">Log Feeding →</button>
+  </div>
+</div>
 
-    <!-- SECTION 2: LOG FEEDING -->
-    <div style="font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:16px">
-      Log Feeding
+<!-- ==================== FEEDING SCREEN 2: LOG ==================== -->
+<div class="screen" id="screenFeedLog">
+  <button class="back-btn" onclick="showScreen('screenFeeding')">← Targets</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🪣</div>
+      <div class="flow-title">Log Feeding</div>
     </div>
 
     <div class="field">
@@ -1273,6 +1274,11 @@ function doAgain() {
 
 function resetFlow(flow) {
   // Reset numpad values
+  // Clear feeding log inputs
+  ['fConcentrateKg','fHayKg','fFodderKg','fNotes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   Object.keys(numpadValues).forEach(k => numpadValues[k] = '');
   updateNumpadDisplay('pQty');
   updateNumpadDisplay('pCost');
@@ -1572,7 +1578,12 @@ async function fGroupChange() {
   const groupId = parseInt(document.getElementById('fGroup').value);
   const area    = document.getElementById('fTargetArea');
 
-  if (!groupId) { area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0">Select a group to see targets.</div>'; return; }
+  const goBtn = document.getElementById('fGoLogBtn');
+  if (!groupId) {
+    area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 0">Select a group to see targets.</div>';
+    if (goBtn) goBtn.style.display = 'none';
+    return;
+  }
 
   area.innerHTML = '<div style="color:var(--muted);font-size:13px">Loading targets…</div>';
   
@@ -1641,6 +1652,7 @@ async function fGroupChange() {
       area.innerHTML =
         `<div style="font-size:13px;color:var(--muted);padding:8px 0">` +
         `${n} animals — no weight data yet. Enter quantities manually.</div>`;
+      if (goBtn) goBtn.style.display = '';
       return;
     }
 
@@ -1674,6 +1686,8 @@ async function fGroupChange() {
           `<div style="font-size:12px;color:var(--muted);margin-top:4px">kg</div>` +
         `</div>` +
       `</div>`;
+
+    if (goBtn) goBtn.style.display = '';
 
     // Intentionally not pre-filling inputs — farmhand must enter actual amounts fed.
 
