@@ -355,6 +355,28 @@
     margin-bottom: 4px;
   }
 
+  /* ---- QUEUE MODAL ---- */
+  .queue-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 200; display: flex; align-items: flex-end;
+  }
+  .queue-modal {
+    background: #141e14; border: 1px solid var(--border);
+    border-radius: 16px 16px 0 0; width: 100%; max-height: 70vh;
+    overflow-y: auto; padding: 20px 18px 32px;
+  }
+  .queue-modal-title {
+    font-size: 15px; font-weight: 700; margin-bottom: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .queue-item {
+    background: #1e2e1e; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .queue-item-table { font-weight: 600; color: var(--accent); margin-bottom: 3px; }
+  .queue-item-meta  { color: var(--muted); font-size: 11px; }
+
   /* ---- DATE DEFAULT ---- */
   .date-today-hint {
     font-size: 11px;
@@ -454,7 +476,7 @@
   </div>
   <div class="home-grid">
     <div class="home-btn feeding" onclick="startFlow('feeding')">
-      <div class="home-btn-icon">🪣</div>
+      <div class="home-btn-icon">🐐</div>
       <div class="home-btn-label">Log Feeding</div>
       <div class="home-btn-sub">Feed animals</div>
     </div>
@@ -464,7 +486,7 @@
       <div class="home-btn-sub">Irrigation event</div>
     </div>
     <div class="home-btn amendment" onclick="startFlow('amendment')">
-      <div class="home-btn-icon">🌱</div>
+      <div class="home-btn-icon">🧂</div>
       <div class="home-btn-label">Soil Amendment</div>
       <div class="home-btn-sub">Gypsum, compost, frass</div>
     </div>
@@ -474,7 +496,7 @@
       <div class="home-btn-sub">Feed, supplies from market</div>
     </div>
     <div class="home-btn crop-harvest" onclick="startFlow('harvest')">
-      <div class="home-btn-icon">🌿</div>
+      <div class="home-btn-icon">🌾</div>
       <div class="home-btn-label">Log Harvest</div>
       <div class="home-btn-sub">Crop yield from plot</div>
     </div>
@@ -1062,7 +1084,7 @@ async function init() {
       db.get('species',        '?order=common_name'),
       ef(db.get('animal_groups', '?status=eq.active&select=id,name&order=name'), 'animal_groups'),
       ef(db.get('field_plots', '?status=eq.active&select=id,plot_code,plot_name&order=plot_code'), 'field_plots'),
-      ef(db.get('crop_groups', '?select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
+      ef(db.get('crop_groups', '?active=eq.true&select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
       ef(db.get('plot_crops',  '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name'), 'plot_crops')
     ]);
     appData = { workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops };
@@ -1765,6 +1787,56 @@ async function eConfirm() {
 }
 
 // ============================================================
+// QUEUE MODAL
+// ============================================================
+const TABLE_LABELS = {
+  feeding_events:         '🐐 Feeding',
+  watering_events:        '💧 Irrigation',
+  amendment_applications: '🧂 Amendment',
+  crop_harvest_events:    '🌾 Harvest',
+  ingredient_purchases:   '🛒 Purchase',
+  ingredient_acquisitions:'🛒 Purchase'
+};
+
+function showQueueModal() {
+  const existing = document.getElementById('queueModal');
+  if (existing) existing.remove();
+
+  const items = pendingQueue.map((item, i) => {
+    const label   = TABLE_LABELS[item.table] || item.table;
+    const ts      = item.ts ? new Date(item.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
+    const date    = item.payload.date || item.payload.recorded_at?.slice(0,10) || '—';
+    const details = Object.entries(item.payload)
+      .filter(([k]) => !['recorded_by','worker_id'].includes(k))
+      .map(([k,v]) => `${k}: ${v}`).join(' · ');
+    return `<div class="queue-item">
+      <div class="queue-item-table">${label}</div>
+      <div class="queue-item-meta">${date} · logged ${ts}</div>
+      <div class="queue-item-meta" style="margin-top:3px;opacity:0.7">${details}</div>
+    </div>`;
+  }).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'queueModal';
+  modal.className = 'queue-modal-overlay';
+  modal.innerHTML = `<div class="queue-modal">
+    <div class="queue-modal-title">
+      <span>Pending uploads (${pendingQueue.length})</span>
+      <button onclick="closeQueueModal()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    ${items || '<div style="color:var(--muted);font-size:13px">No pending items.</div>'}
+    <button onclick="closeQueueModal();drainQueue();" style="width:100%;margin-top:14px;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">↑ Retry sync now</button>
+  </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) closeQueueModal(); });
+  document.body.appendChild(modal);
+}
+
+function closeQueueModal() {
+  const m = document.getElementById('queueModal');
+  if (m) m.remove();
+}
+
+// ============================================================
 // SUBMIT — online or queue
 // ============================================================
 async function submitEntry(table, payload, onSuccess) {
@@ -1811,7 +1883,9 @@ function updateQueueBadge() {
   if (pendingQueue.length) {
     badge.textContent = `${pendingQueue.length} pending`;
     badge.classList.add('visible');
-    if (bar) bar.innerHTML = `<div class="queue-bar">⏳ ${pendingQueue.length} entr${pendingQueue.length === 1 ? 'y' : 'ies'} waiting to sync</div>`;
+    if (bar) bar.innerHTML = `<div class="queue-bar" onclick="showQueueModal()" style="cursor:pointer">` +
+      `⏳ ${pendingQueue.length} entr${pendingQueue.length === 1 ? 'y' : 'ies'} waiting to sync ` +
+      `<span style="margin-left:auto;font-size:11px;opacity:0.7">tap to view →</span></div>`;
   } else {
     badge.classList.remove('visible');
     if (bar) bar.innerHTML = '';
