@@ -473,6 +473,11 @@
       <div class="home-btn-label">Log Purchase</div>
       <div class="home-btn-sub">Feed, supplies from market</div>
     </div>
+    <div class="home-btn crop-harvest" onclick="startFlow('harvest')">
+      <div class="home-btn-icon">🌿</div>
+      <div class="home-btn-label">Log Harvest</div>
+      <div class="home-btn-sub">Crop yield from plot</div>
+    </div>
   </div>
 </div>
 
@@ -706,11 +711,6 @@
     </div>
 
     <div class="field">
-      <label>Estimated volume (litres, optional)</label>
-      <input type="number" id="wVolume" placeholder="Leave blank if unknown" min="0">
-    </div>
-
-    <div class="field">
       <label>Date</label>
       <input type="date" id="wDate">
     </div>
@@ -788,6 +788,68 @@
     </div>
 
     <button class="confirm-btn" onclick="aConfirm()">✓ Confirm Amendment</button>
+  </div>
+</div>
+
+<!-- ==================== HARVEST FLOW ==================== -->
+<div class="screen" id="screenHarvest">
+  <button class="back-btn" onclick="goHome()">← Home</button>
+  <div class="flow">
+    <div class="flow-header">
+      <div class="flow-icon">🌿</div>
+      <div class="flow-title">Log Harvest</div>
+    </div>
+
+    <div class="field">
+      <label>Crop Group <span style="color:var(--warn)">*</span></label>
+      <select id="hvGroup">
+        <option value="">Select crop...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Quantity (kg) <span style="color:var(--warn)">*</span></label>
+      <div class="numpad-display" id="hvQtyDisplay">0<span class="unit">kg</span></div>
+      <div class="numpad-grid" style="margin-top:10px">
+        <div class="np-btn" onclick="npTap('hvQty','7')">7</div>
+        <div class="np-btn" onclick="npTap('hvQty','8')">8</div>
+        <div class="np-btn" onclick="npTap('hvQty','9')">9</div>
+        <div class="np-btn" onclick="npTap('hvQty','4')">4</div>
+        <div class="np-btn" onclick="npTap('hvQty','5')">5</div>
+        <div class="np-btn" onclick="npTap('hvQty','6')">6</div>
+        <div class="np-btn" onclick="npTap('hvQty','1')">1</div>
+        <div class="np-btn" onclick="npTap('hvQty','2')">2</div>
+        <div class="np-btn" onclick="npTap('hvQty','3')">3</div>
+        <div class="np-btn del" onclick="npDel('hvQty')">⌫</div>
+        <div class="np-btn" onclick="npTap('hvQty','0')">0</div>
+        <div class="np-btn" onclick="npTap('hvQty','.')">.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Destination</label>
+      <select id="hvDest">
+        <option value="">— select —</option>
+        <option value="goat_fodder">Goat Fodder</option>
+        <option value="compost">Compost</option>
+        <option value="bsf_feedstock">BSF Feedstock</option>
+        <option value="sale">Sale</option>
+        <option value="soil_incorporation">Soil Incorporation</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="hvDate">
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="hvNotes" placeholder="Quality, condition, any observations..."></textarea>
+    </div>
+
+    <button class="confirm-btn" onclick="hvConfirm()">✓ Confirm Harvest</button>
   </div>
 </div>
 
@@ -1029,6 +1091,7 @@ let numpadValues = {
   hQty: '',
   chQty: '',
   aQty: '',
+  hvQty: '',
   eCount: ''
 };
 
@@ -1068,7 +1131,7 @@ async function init() {
 
 function setTodayDates() {
   const today = new Date().toISOString().split('T')[0];
-  ['pDate','hDate','fDate','wDate','aDate','eDate','chDate','obsDate'].forEach(id => {
+  ['pDate','hDate','fDate','wDate','aDate','hvDate','eDate','chDate','obsDate'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = today;
   });
@@ -1127,6 +1190,17 @@ function populateAllForms() {
     const el = document.getElementById(id);
     if (el) el.innerHTML = plotOpts;
   });
+
+  // Crop groups — harvest
+  const hvGroup = document.getElementById('hvGroup');
+  if (hvGroup) {
+    hvGroup.innerHTML = '<option value="">Select crop...</option>' +
+      (appData.cropGroups || []).map(g => {
+        const plot = g.field_plots ? (g.field_plots.plot_code || '') : '';
+        const label = plot ? `${g.name} (${plot})` : g.name;
+        return `<option value="${g.id}">${label}</option>`;
+      }).join('');
+  }
 
   // Feeding — animal groups
   const fGroup = document.getElementById('fGroup');
@@ -1205,6 +1279,7 @@ function resetFlow(flow) {
   updateNumpadDisplay('hQty');
   updateNumpadDisplay('chQty');
   updateNumpadDisplay('aQty');
+  updateNumpadDisplay('hvQty');
   updateNumpadDisplay('eCount');
 
   if (flow === 'purchase') {
@@ -1265,6 +1340,7 @@ const numpadDisplayMap = {
   pCost:  { display: 'pCostDisplay',  unit: 'PKR' },
   hQty:   { display: 'hQtyDisplay',   unit: 'kg' },
   aQty:   { display: 'aQtyDisplay',   unit: 'kg' },
+  hvQty:  { display: 'hvQtyDisplay',  unit: 'kg' },
   eCount: { display: 'eCountDisplay', unit: 'eggs' }
 };
 
@@ -1374,6 +1450,34 @@ async function hConfirm() {
 // ============================================================
 // CROP HARVEST CONFIRM
 // ============================================================
+// ============================================================
+// HARVEST FLOW
+// ============================================================
+async function hvConfirm() {
+  const groupId = parseInt(document.getElementById('hvGroup').value);
+  const qty     = parseFloat(numpadValues.hvQty);
+  const dest    = document.getElementById('hvDest').value || null;
+  const date    = document.getElementById('hvDate').value;
+  const notes   = document.getElementById('hvNotes').value.trim() || null;
+
+  if (!groupId)        { alert('Select a crop group.'); return; }
+  if (!qty || qty <= 0){ alert('Enter a quantity.'); return; }
+
+  const payload = { date, crop_group_id: groupId, quantity_kg: qty };
+  if (dest)   payload.destination = dest;
+  if (notes)  payload.notes       = notes;
+  if (activeWorkerId) payload.worker_id = activeWorkerId;
+
+  await submitEntry('crop_harvest_events', payload, () => {
+    const g = (appData.cropGroups || []).find(g => g.id === groupId);
+    showSuccess('🌿', 'Harvest Logged', `${qty} kg${g ? ' — ' + g.name : ''}`);
+    numpadValues.hvQty = '0';
+    const d = document.getElementById('hvQtyDisplay');
+    if (d) d.innerHTML = '0<span class="unit">kg</span>';
+  });
+}
+
+
 async function chConfirm() {
   const groupId  = parseInt(document.getElementById('chGroup').value);
   const qty      = parseFloat(numpadValues.chQty);
@@ -1552,16 +1656,24 @@ async function fGroupChange() {
     const r1 = v => Math.round(v * 10) / 10;
 
     area.innerHTML =
-      `<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--accent)">` +
-      `Today's targets — ${n} animals (avg ${r1(avgWt)} kg)</div>` +
-      `<div class="recipe-row"><span class="ing">Concentrate</span>` +
-      `<span class="qty">${r1(concAf)} kg</span></div>` +
-      `<div class="recipe-row"><span class="ing">Hay</span>` +
-      `<span class="qty">${r1(hayAf)} kg</span></div>` +
-      `<div class="recipe-row"><span class="ing">Green Fodder</span>` +
-      `<span class="qty">${r1(fodAf)} kg</span></div>` +
-      `<div style="font-size:11px;color:var(--muted);margin-top:6px">` +
-      `${r1(dmiPerHead)} kg DM/head · ${r1(dmiPct*100)}% BW</div>`;
+      `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">${n} animals · avg ${r1(avgWt)} kg · ${r1(dmiPct*100)}% BW</div>` +
+      `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">` +
+        `<div style="background:var(--card-bg,#1a2a1a);border:1px solid var(--border);border-radius:10px;padding:14px 10px;text-align:center">` +
+          `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Concentrate</div>` +
+          `<div style="font-size:32px;font-weight:700;color:var(--accent);line-height:1">${r1(concAf)}</div>` +
+          `<div style="font-size:12px;color:var(--muted);margin-top:4px">kg</div>` +
+        `</div>` +
+        `<div style="background:var(--card-bg,#1a2a1a);border:1px solid var(--border);border-radius:10px;padding:14px 10px;text-align:center">` +
+          `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Hay</div>` +
+          `<div style="font-size:32px;font-weight:700;color:var(--accent);line-height:1">${r1(hayAf)}</div>` +
+          `<div style="font-size:12px;color:var(--muted);margin-top:4px">kg</div>` +
+        `</div>` +
+        `<div style="background:var(--card-bg,#1a2a1a);border:1px solid var(--border);border-radius:10px;padding:14px 10px;text-align:center">` +
+          `<div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Fodder</div>` +
+          `<div style="font-size:32px;font-weight:700;color:var(--accent);line-height:1">${r1(fodAf)}</div>` +
+          `<div style="font-size:12px;color:var(--muted);margin-top:4px">kg</div>` +
+        `</div>` +
+      `</div>`;
 
     // Intentionally not pre-filling inputs — farmhand must enter actual amounts fed.
 
@@ -1602,7 +1714,6 @@ async function fConfirm() {
 async function wConfirm() {
   const plotId   = parseInt(document.getElementById('wPlot').value);
   const duration = parseInt(document.getElementById('wDuration').value) || null;
-  const volume   = parseFloat(document.getElementById('wVolume').value) || null;
   const date     = document.getElementById('wDate').value;
   const notes    = document.getElementById('wNotes').value.trim() || null;
   const workerId = activeWorkerId;
@@ -1614,7 +1725,6 @@ async function wConfirm() {
     date,
     field_plot_id:           plotId,
     duration_minutes:        duration,
-    estimated_volume_litres: volume,
     notes
   };
   if (workerId) payload.worker_id = workerId;
