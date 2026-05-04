@@ -1084,7 +1084,7 @@ async function init() {
       db.get('species',        '?order=common_name'),
       ef(db.get('animal_groups', '?status=eq.active&select=id,name&order=name'), 'animal_groups'),
       ef(db.get('field_plots', '?status=eq.active&select=id,plot_code,plot_name&order=plot_code'), 'field_plots'),
-      ef(db.get('crop_groups', '?active=eq.true&select=id,name,is_stand,field_plot_id,ingredient_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
+      ef(db.get('crop_groups', '?select=id,name,field_plot_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
       ef(db.get('plot_crops',  '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name'), 'plot_crops')
     ]);
     appData = { workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops };
@@ -1161,8 +1161,22 @@ function populateAllForms() {
   // Crop groups — harvest
   const hvGroup = document.getElementById('hvGroup');
   if (hvGroup) {
+    // Only show groups with at least one currently growing crop
+    const growingGroupIds = new Set(
+      (appData.plotCrops || [])
+        .filter(c => c.status === 'growing')
+        .map(c => c.crop_group_id)
+    );
+    // Also include groups with no termination_date set (no plot_crops entry yet)
+    const activeGroups = (appData.cropGroups || []).filter(g =>
+      growingGroupIds.has(g.id) || growingGroupIds.size === 0
+    );
+    // If we have plot_crops data, strictly filter; otherwise show all
+    const toShow = growingGroupIds.size > 0
+      ? (appData.cropGroups || []).filter(g => growingGroupIds.has(g.id))
+      : (appData.cropGroups || []);
     hvGroup.innerHTML = '<option value="">Select crop...</option>' +
-      (appData.cropGroups || []).map(g => {
+      toShow.map(g => {
         const plot = g.field_plots ? (g.field_plots.plot_code || '') : '';
         const label = plot ? `${g.name} (${plot})` : g.name;
         return `<option value="${g.id}">${label}</option>`;
