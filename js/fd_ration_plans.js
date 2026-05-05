@@ -25,7 +25,7 @@ async function loadRationPlansPage() {
       sbGet('recipes', 'active=eq.true&select=id,name&order=name'),
       sbGet('ingredients',
         'active=eq.true&select=id,name,category,dry_matter_pct,crude_protein_pct_dm,' +
-        'metabolizable_energy_mj_kg,crude_fat_pct_dm&order=name'),
+        'metabolizable_energy_mj_kg&order=name'),
       sbGet('ingredient_acquisitions',
         'acquisition_type=eq.purchased&cost_per_kg=not.is.null' +
         '&select=ingredient_id,cost_per_kg,date&order=date.desc&limit=500')
@@ -151,9 +151,8 @@ async function rpOpenForm(planId) {
   wrap.innerHTML =
     '<div style="padding:16px 22px;border-bottom:1px solid var(--border)">' +
     '<h3 style="margin:0 0 14px;font-size:15px">' + (planId ? 'Edit ration plan \u2014 creates new version' : 'New ration plan') + '</h3>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">' +
 
-      // LEFT — inputs
+      // INPUTS
       '<div>' +
         '<div class="hf-grid">' +
           '<div class="hf-field" style="grid-column:span 2"><label>Plan name</label>' +
@@ -187,15 +186,10 @@ async function rpOpenForm(planId) {
           '<div class="hf-field" style="grid-column:span 2"><label>Notes (optional)</label>' +
             '<input type="text" id="rp-notes" value="' + (version ? (version.notes || '') : '') + '"></div>' +
         '</div>' +
-        '<div style="display:flex;gap:10px;margin-top:12px">' +
-          '<button class="btn btn-primary btn-sm" onclick="rpSubmitForm()">Save</button>' +
-          '<button class="btn btn-sm" onclick="rpCloseForm()">Cancel</button>' +
-          '<span id="rp-status" style="font-size:13px;color:var(--muted);align-self:center"></span>' +
-        '</div>' +
       '</div>' +
 
-      // RIGHT — modeller
-      '<div>' +
+      // MODELLER
+      '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
           '<span style="font-size:13px;font-weight:500">Modeller</span>' +
           '<label style="font-size:12px;color:var(--muted)">Test weight</label>' +
@@ -203,6 +197,13 @@ async function rpOpenForm(planId) {
           '<span style="font-size:12px;color:var(--muted)">kg</span>' +
         '</div>' +
         '<div id="rp-modeller-panel"><div style="font-size:12px;color:var(--faint)">Fill in the form to see projections.</div></div>' +
+      '</div>' +
+
+      // SAVE
+      '<div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">' +
+        '<button class="btn btn-primary btn-sm" onclick="rpSubmitForm()">Save</button>' +
+        '<button class="btn btn-sm" onclick="rpCloseForm()">Cancel</button>' +
+        '<span id="rp-status" style="font-size:13px;color:var(--muted);align-self:center"></span>' +
       '</div>' +
 
     '</div></div>';
@@ -260,13 +261,13 @@ async function rpRunModeller() {
       if (vers.length) {
         var ri = await sbGet('recipe_ingredients',
           'recipe_version_id=eq.' + vers[0].id +
-          '&select=inclusion_rate,ingredients(id,name,dry_matter_pct,crude_protein_pct_dm,metabolizable_energy_mj_kg,crude_fat_pct_dm)');
+          '&select=inclusion_rate,ingredients(id,name,dry_matter_pct,crude_protein_pct_dm,metabolizable_energy_mj_kg)');
         var ingIds = ri.map(function(r) { return r.ingredients && r.ingredients.id; }).filter(Boolean);
         var priceRows = ingIds.length ? await sbGet('ingredient_acquisitions',
           'ingredient_id=in.(' + ingIds.join(',') + ')&acquisition_type=eq.purchased' +
           '&cost_per_kg=not.is.null&select=ingredient_id,cost_per_kg&order=date.desc&limit=500') : [];
         var lp = {}; priceRows.forEach(function(p) { if (!lp[p.ingredient_id]) lp[p.ingredient_id] = p; });
-        var bDm = 0, bCp = 0, bMe = 0, bFat = 0, bCost = 0;
+        var bDm = 0, bCp = 0, bMe = 0, bCost = 0;
         var okDm = true, okCp = true, okMe = true, okCost = true;
         ri.forEach(function(row) {
           var ing = row.ingredients; var inc = parseFloat(row.inclusion_rate);
@@ -274,7 +275,6 @@ async function rpRunModeller() {
           if (ing.dry_matter_pct != null)          bDm   += inc * parseFloat(ing.dry_matter_pct) / 100; else { okDm   = false; concMissing.push(ing.name + ' (DM%)'); }
           if (ing.crude_protein_pct_dm != null)    bCp   += inc * parseFloat(ing.crude_protein_pct_dm);  else { okCp   = false; concMissing.push(ing.name + ' (CP%)'); }
           if (ing.metabolizable_energy_mj_kg != null) bMe += inc * parseFloat(ing.metabolizable_energy_mj_kg); else { okMe = false; concMissing.push(ing.name + ' (ME)'); }
-          if (ing.crude_fat_pct_dm != null)         bFat  += inc * parseFloat(ing.crude_fat_pct_dm);
           var pr = lp[ing.id];
           if (pr) bCost += inc * parseFloat(pr.cost_per_kg); else { okCost = false; concMissing.push(ing.name + ' (price)'); }
         });
@@ -283,7 +283,6 @@ async function rpRunModeller() {
           dmFrac:       okDm   ? bDm  : null,
           cpPct:        okCp   ? bCp  : null,
           meMj:         okMe   ? bMe  : null,
-          fatPct:       bFat   > 0    ? bFat : null,
           costPerKgAf:  (okCost && okDm && bDm > 0) ? bCost / bDm : null
         };
       }
@@ -309,19 +308,14 @@ async function rpRunModeller() {
 
   // Blended nutrition (DMI-weighted)
   var cpParts = [], meParts = [];
-  if (concData && concData.cpPct  != null) cpParts.push({  w: concPct / 100, v: concData.cpPct });
-  var fatParts = [];
-  if (concData && concData.fatPct != null) fatParts.push({ w: concPct / 100, v: concData.fatPct });
+  if (concData && concData.cpPct != null) cpParts.push({ w: concPct / 100, v: concData.cpPct });
   if (hayIng && hayIng.crude_protein_pct_dm != null)       cpParts.push({ w: hayPct / 100, v: parseFloat(hayIng.crude_protein_pct_dm) });
   if (fodIng && fodIng.crude_protein_pct_dm != null)       cpParts.push({ w: fodPct / 100, v: parseFloat(fodIng.crude_protein_pct_dm) });
   if (concData && concData.meMj != null)                   meParts.push({ w: concPct / 100, v: concData.meMj });
   if (hayIng && hayIng.metabolizable_energy_mj_kg != null) meParts.push({ w: hayPct / 100, v: parseFloat(hayIng.metabolizable_energy_mj_kg) });
   if (fodIng && fodIng.metabolizable_energy_mj_kg != null) meParts.push({ w: fodPct / 100, v: parseFloat(fodIng.metabolizable_energy_mj_kg) });
-  if (hayIng && hayIng.crude_fat_pct_dm != null)            fatParts.push({ w: hayPct / 100,  v: parseFloat(hayIng.crude_fat_pct_dm) });
-  if (fodIng && fodIng.crude_fat_pct_dm != null)            fatParts.push({ w: fodPct / 100,  v: parseFloat(fodIng.crude_fat_pct_dm) });
-  var blendedCp  = cpParts.length  ? cpParts.reduce(function(s, p)  { return s + p.w * p.v; }, 0) : null;
-  var blendedMe  = meParts.length  ? meParts.reduce(function(s, p)  { return s + p.w * p.v; }, 0) : null;
-  var blendedFat = fatParts.length ? fatParts.reduce(function(s, p) { return s + p.w * p.v; }, 0) : null;
+  var blendedCp = cpParts.length ? cpParts.reduce(function(s, p) { return s + p.w * p.v; }, 0) : null;
+  var blendedMe = meParts.length ? meParts.reduce(function(s, p) { return s + p.w * p.v; }, 0) : null;
 
   // Cost
   var costParts = [];
@@ -367,7 +361,7 @@ async function rpRunModeller() {
     return r1(v) + (unit ? '\u202f' + unit : '');
   };
 
-  var cpAdeq = '', meAdeq = '', fatAdeq = '';
+  var cpAdeq = '', meAdeq = '';
   if (blendedCp != null) {
     if (blendedCp >= 14)      cpAdeq = ' <span style="color:var(--green);font-size:11px">\u2713</span>';
     else if (blendedCp >= 12) cpAdeq = ' <span style="color:#C8A800;font-size:11px">\u26a0</span>';
@@ -378,24 +372,18 @@ async function rpRunModeller() {
     else if (blendedMe >= 8.5) meAdeq = ' <span style="color:#C8A800;font-size:11px">\u26a0</span>';
     else                        meAdeq = ' <span style="color:var(--red);font-size:11px">\u2717</span>';
   }
-  if (blendedFat != null) {
-    if (blendedFat >= 3.0)      fatAdeq = ' <span style="color:var(--green);font-size:11px">\u2713</span>';
-    else if (blendedFat >= 2.0) fatAdeq = ' <span style="color:#C8A800;font-size:11px">\u26a0</span>';
-    else                         fatAdeq = ' <span style="color:var(--red);font-size:11px">\u2717</span>';
-  }
 
   panel.innerHTML = warnHtml +
     '<div style="font-size:12px;font-weight:500;margin-bottom:6px">Daily targets \u2014 ' + testWt + '\u202fkg animal</div>' +
     '<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr>' +
       '<th>Feed type</th><th class="right">DM (kg)</th><th class="right">As-fed (kg)</th>' +
-      '<th class="right">CP%</th><th class="right">ME (MJ/kg)</th><th class="right">Fat%</th><th class="right">Cost (PKR)</th>' +
+      '<th class="right">CP%</th><th class="right">ME (MJ/kg)</th><th class="right">Cost (PKR)</th>' +
     '</tr></thead><tbody>' +
     '<tr><td>Concentrate</td>' +
       '<td class="mono right">' + fv(concDmKg) + '</td>' +
       '<td class="mono right">' + fv(concAf)   + '</td>' +
-      '<td class="mono right">' + fv(concData ? concData.cpPct  : null) + '</td>' +
-      '<td class="mono right">' + fv(concData ? concData.meMj   : null) + '</td>' +
-      '<td class="mono right">' + fv(concData ? concData.fatPct : null) + '</td>' +
+      '<td class="mono right">' + fv(concData ? concData.cpPct : null) + '</td>' +
+      '<td class="mono right">' + fv(concData ? concData.meMj  : null) + '</td>' +
       '<td class="mono right">' + fv(concData && concData.costPerKgAf ? concAf * concData.costPerKgAf : null) + '</td>' +
     '</tr>' +
     '<tr><td>' + (hayIng ? hayIng.name : 'Hay') + '</td>' +
@@ -403,7 +391,6 @@ async function rpRunModeller() {
       '<td class="mono right">' + fv(hayAf)   + '</td>' +
       '<td class="mono right">' + fv(hayIng ? hayIng.crude_protein_pct_dm : null) + '</td>' +
       '<td class="mono right">' + fv(hayIng ? hayIng.metabolizable_energy_mj_kg : null) + '</td>' +
-      '<td class="mono right">' + fv(hayIng ? hayIng.crude_fat_pct_dm : null) + '</td>' +
       '<td class="mono right">' + fv(hayAf && hayPrice ? hayAf * parseFloat(hayPrice.cost_per_kg) : null) + '</td>' +
     '</tr>' +
     '<tr><td>' + (fodIng ? fodIng.name : 'Green fodder') + '</td>' +
@@ -411,22 +398,19 @@ async function rpRunModeller() {
       '<td class="mono right">' + fv(fodAf)   + '</td>' +
       '<td class="mono right">' + fv(fodIng ? fodIng.crude_protein_pct_dm : null) + '</td>' +
       '<td class="mono right">' + fv(fodIng ? fodIng.metabolizable_energy_mj_kg : null) + '</td>' +
-      '<td class="mono right">' + fv(fodIng ? fodIng.crude_fat_pct_dm : null) + '</td>' +
       '<td class="mono right">' + fv(fodAf && fodPrice ? fodAf * parseFloat(fodPrice.cost_per_kg) : null) + '</td>' +
     '</tr>' +
     '<tr style="font-weight:600;background:var(--bg)"><td>Total</td>' +
       '<td class="mono right">' + fv(totalDmi) + '</td>' +
       '<td class="mono right"><span style="color:var(--faint)">\u2014</span></td>' +
-      '<td class="mono right">' + fv(blendedCp)  + cpAdeq  + '</td>' +
-      '<td class="mono right">' + fv(blendedMe)  + meAdeq  + '</td>' +
-      '<td class="mono right">' + fv(blendedFat) + fatAdeq + '</td>' +
+      '<td class="mono right">' + fv(blendedCp) + cpAdeq + '</td>' +
+      '<td class="mono right">' + fv(blendedMe) + meAdeq + '</td>' +
       '<td class="mono right">' + fv(totalCost) + '</td>' +
     '</tr></tbody></table></div>' +
     (blendedCp != null || blendedMe != null
       ? '<div style="font-size:11px;color:var(--faint);margin-top:6px">' +
           'CP: \u226514% adequate \u00b7 12\u201314% marginal \u00b7 &lt;12% deficient. ' +
-          'ME: \u22659.0 adequate \u00b7 8.5\u20139.0 borderline \u00b7 &lt;8.5 low. ' +
-          'Fat: \u22653% adequate \u00b7 2\u20133% marginal \u00b7 &lt;2% low.' +
+          'ME: \u22659.0 adequate \u00b7 8.5\u20139.0 borderline \u00b7 &lt;8.5 low.' +
         '</div>' : '') +
     '<div style="font-size:10px;color:var(--faint);margin-top:8px;border-top:1px solid var(--border);padding-top:6px">' +
       'Conc. DM: ' + (concData && concData.dmFrac ? r1(concData.dmFrac * 100) + '% (blended)' : '88% default') +
