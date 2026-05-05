@@ -40,11 +40,16 @@ async function loadRationPlansPage() {
     var activePlans   = plans.filter(function(p) { return p.active; });
     var inactivePlans = plans.filter(function(p) { return !p.active; });
     var html =
-      '<div class="section">' +
-        '<div class="section-hdr"><h2>Active ration plans</h2>' +
+      // Form section — inputs + modeller open here
+      '<div class="section" id="rp-form-section">' +
+        '<div class="section-hdr"><h2>New / edit ration plan</h2>' +
           '<button class="btn btn-primary btn-sm" onclick="rpOpenForm(null)">+ New plan</button>' +
         '</div>' +
-        '<div id="rp-form-wrap" style="display:none"></div>' +
+        '<div id="rp-form-wrap"><div style="padding:12px 22px;font-size:13px;color:var(--muted)">Click + New plan or Edit on a plan below to begin.</div></div>' +
+      '</div>' +
+      // Active plans list
+      '<div class="section">' +
+        '<div class="section-hdr"><h2>Saved ration plans</h2></div>' +
         '<div id="rp-active-list"><div class="loading">Loading plans...</div></div>' +
       '</div>';
     if (inactivePlans.length) {
@@ -82,7 +87,7 @@ async function rpRenderPlanList(plans, containerId, inactive) {
   var latestVer = {};
   versions.forEach(function(v) { if (!latestVer[v.ration_plan_id]) latestVer[v.ration_plan_id] = v; });
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Name</th><th>Species</th>' +
+    '<th>Name</th>' +
     '<th class="right">DMI%</th><th class="right">Conc.</th><th class="right">Hay</th><th class="right">Fodder</th>' +
     '<th>Hay source</th><th>Fodder source</th><th>Concentrate recipe</th><th>Ver.</th><th></th>' +
     '</tr></thead><tbody>';
@@ -118,7 +123,6 @@ async function rpOpenForm(planId) {
   var wrap = document.getElementById('rp-form-wrap');
   if (!wrap) return;
   wrap.innerHTML = '<div class="loading" style="padding:16px 22px">Loading...</div>';
-  wrap.style.display = 'block';
   var plan = null; var version = null;
   if (planId) {
     var rows = await sbGet('ration_plans', 'id=eq.' + planId + '&select=id,name,notes&limit=1');
@@ -143,8 +147,7 @@ async function rpOpenForm(planId) {
   wrap.innerHTML =
     '<div style="padding:16px 22px;border-bottom:1px solid var(--border)">' +
     '<h3 style="margin:0 0 14px;font-size:15px">' + (planId ? 'Edit ration plan \u2014 creates new version' : 'New ration plan') + '</h3>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">' +
-
+    
       // LEFT — inputs
       '<div>' +
         '<div class="hf-grid">' +
@@ -195,7 +198,7 @@ async function rpOpenForm(planId) {
         '<div id="rp-modeller-panel"><div style="font-size:12px;color:var(--faint)">Fill in the form to see projections.</div></div>' +
       '</div>' +
 
-    '</div></div>';
+    '</div>';
   wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   rpUpdateSplitSum();
   rpRunModeller();
@@ -203,7 +206,7 @@ async function rpOpenForm(planId) {
 
 function rpCloseForm() {
   var wrap = document.getElementById('rp-form-wrap');
-  if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
+  if (wrap) { wrap.innerHTML = '<div style="padding:12px 22px;font-size:13px;color:var(--muted)">Click + New plan or Edit on a plan below to begin.</div>'; }
   rpEditPlanId = null;
 }
 
