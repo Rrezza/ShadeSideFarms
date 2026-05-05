@@ -307,15 +307,15 @@
     <div class="sidebar-logo">
       <div class="farm-name">ShadeSide Farms</div>
       <div class="farm-sub">Operations Dashboard</div>
-      <div id="auth-btn-container" style="margin-top:14px"></div>
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Feed</div>
-      <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
-      <button class="nav-item"        data-page="feed"         onclick="showPage('feed',this)"><span class="nav-dot"></span>Concentrate Information</button>
-      <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
       <button class="nav-item active" data-page="purchases"    onclick="showPage('purchases',this)"><span class="nav-dot"></span>Purchase Log</button>
       <button class="nav-item"        data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
+      <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
+      <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
+      <button class="nav-item"        data-page="feed"         onclick="showPage('feed',this)"><span class="nav-dot"></span>Concentrate Information</button>
+      <button class="nav-item"        data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
       <div class="nav-section">Animals</div>
       <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
       <button class="nav-item" data-page="angroups"       onclick="showPage('angroups',this)"><span class="nav-dot"></span>Groups</button>
@@ -324,9 +324,7 @@
       <button class="nav-item" data-page="anfeed"         onclick="showPage('anfeed',this)"><span class="nav-dot"></span>Feeding</button>
       <button class="nav-item" data-page="health"         onclick="showPage('health',this)"><span class="nav-dot"></span>Health</button>
       <button class="nav-item" data-page="breeding"       onclick="showPage('breeding',this)"><span class="nav-dot"></span>Breeding</button>
-      <div class="nav-section">Finance</div>
       <button class="nav-item" data-page="costsales"      onclick="showPage('costsales',this)"><span class="nav-dot"></span>Cost &amp; Sales</button>
-      <button class="nav-item" data-page="farmexpenses"   onclick="showPage('farmexpenses',this)"><span class="nav-dot"></span>Farm Expenses</button>
       <div class="nav-section">Land</div>
       <button class="nav-item" data-page="land-plots"  onclick="navLandTab('plots',this)"><span class="nav-dot"></span>Plots</button>
       <button class="nav-item" data-page="land-fert"   onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizer Inventory</button>
@@ -348,7 +346,6 @@
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
   </nav>
   <main class="main">
-    <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
 
     <!-- ======================== FEED MODULE ======================== -->
 
@@ -468,6 +465,69 @@
       </div>
 
       <div id="abbrev-rationsetup"></div>
+    </div>
+
+    <!-- Cost Projections -->
+    <div class="page" id="page-projections">
+      <div class="page-hdr">
+        <div><h1>Cost projections</h1></div>
+        <button class="refresh-btn" onclick="calcFeedCost()">↻ Recalculate</button>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Pen selection</h2><span class="section-meta" id="proj-pen-meta"></span></div>
+        <div style="padding:16px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:13px;color:var(--muted)">View projections for</label>
+            <select id="proj-pen-select" onchange="onProjPenChange()" style="min-width:200px">
+              <option value="">— select pen —</option>
+              <option value="all">All pens (whole farm)</option>
+            </select>
+          </div>
+          <div id="proj-pen-summary" style="font-size:13px;color:var(--muted)"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Daily quantities</h2><span class="section-meta" id="fc-proj-meta"></span></div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Component</th><th class="right">DM / animal</th><th class="right">Fresh / animal</th><th class="right">Fresh / pen</th><th class="right">Cost / animal</th><th class="right">Cost / pen</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:500">Concentrate</td><td class="mono right" id="rs-conc-dm">—</td><td class="mono right" id="rs-conc-fresh">—</td><td class="mono right" id="rs-conc-pen">—</td><td class="mono right" id="rs-conc-cost-a">—</td><td class="mono right" id="rs-conc-cost-p">—</td></tr>
+            <tr><td style="font-weight:500" id="rs-hay-name">Hay</td><td class="mono right" id="rs-hay-dm">—</td><td class="mono right" id="rs-hay-fresh">—</td><td class="mono right" id="rs-hay-pen">—</td><td class="mono right" id="rs-hay-cost-a">—</td><td class="mono right" id="rs-hay-cost-p">—</td></tr>
+            <tr><td style="font-weight:500" id="rs-fodder-name">Green fodder</td><td class="mono right" id="rs-fodder-dm">—</td><td class="mono right" id="rs-fodder-fresh">—</td><td class="mono right" id="rs-fodder-pen">—</td><td class="mono right" id="rs-fodder-cost-a">—</td><td class="mono right" id="rs-fodder-cost-p">—</td></tr>
+            <tr style="font-weight:600;background:var(--bg)"><td>Total</td><td class="mono right" id="rs-total-dm">—</td><td class="mono right" id="rs-total-fresh">—</td><td class="mono right" id="rs-total-pen">—</td><td class="mono right" id="rs-total-cost-a">—</td><td class="mono right" id="rs-total-cost-p">—</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Weekly quantities</h2></div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Component</th><th class="right">Fresh / goat / week</th><th class="right">Fresh / pen / week</th><th class="right">Cost / goat / week</th><th class="right">Cost / pen / week</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:500">Concentrate</td><td class="mono right" id="rs-conc-wk-g">—</td><td class="mono right" id="rs-conc-wk-p">—</td><td class="mono right" id="rs-conc-wk-ca">—</td><td class="mono right" id="rs-conc-wk-cp">—</td></tr>
+            <tr><td style="font-weight:500" id="rs-hay-wk-name">Hay</td><td class="mono right" id="rs-hay-wk-g">—</td><td class="mono right" id="rs-hay-wk-p">—</td><td class="mono right" id="rs-hay-wk-ca">—</td><td class="mono right" id="rs-hay-wk-cp">—</td></tr>
+            <tr><td style="font-weight:500" id="rs-fodder-wk-name">Green fodder</td><td class="mono right" id="rs-fodder-wk-g">—</td><td class="mono right" id="rs-fodder-wk-p">—</td><td class="mono right" id="rs-fodder-wk-ca">—</td><td class="mono right" id="rs-fodder-wk-cp">—</td></tr>
+            <tr style="font-weight:600;background:var(--bg)"><td>Total</td><td class="mono right" id="rs-total-wk-g">—</td><td class="mono right" id="rs-total-wk-p">—</td><td class="mono right" id="rs-total-wk-ca">—</td><td class="mono right" id="rs-total-wk-cp">—</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Remaining cycle total</h2></div>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>Component</th><th class="right">Fresh / goat</th><th class="right">Fresh / pen</th><th class="right">Cost / goat</th><th class="right">Cost / pen</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight:500">Concentrate</td><td class="mono right" id="rs-conc-cyc-g">—</td><td class="mono right" id="rs-conc-cyc-p">—</td><td class="mono right" id="rs-conc-cyc-ca">—</td><td class="mono right" id="rs-conc-cyc-cp">—</td></tr>
+            <tr><td style="font-weight:500" id="rs-hay-cyc-name">Hay</td><td class="mono right" id="rs-hay-cyc-g">—</td><td class="mono right" id="rs-hay-cyc-p">—</td><td class="mono right" id="rs-hay-cyc-ca">—</td><td class="mono right" id="rs-hay-cyc-cp">—</td></tr>
+            <tr><td style="font-weight:500" id="rs-fodder-cyc-name">Green fodder</td><td class="mono right" id="rs-fodder-cyc-g">—</td><td class="mono right" id="rs-fodder-cyc-p">—</td><td class="mono right" id="rs-fodder-cyc-ca">—</td><td class="mono right" id="rs-fodder-cyc-cp">—</td></tr>
+            <tr style="font-weight:600;background:var(--bg)"><td>Total</td><td class="mono right" id="rs-total-cyc-g">—</td><td class="mono right" id="rs-total-cyc-p">—</td><td class="mono right" id="rs-total-cyc-ca">—</td><td class="mono right" id="rs-total-cyc-cp">—</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Fattening cycle summary</h2></div>
+        <div id="fc-cycle-table"><div class="empty">Select a pen and complete ration inputs to see cycle summary.</div></div>
+        <div style="padding:10px 22px 16px;font-size:11px;color:var(--faint)">Feed costs only. Animal purchase price and operating costs excluded. Per-kg-of-output and per-kg-of-feed both shown for comparison.</div>
+      </div>
+      <div id="abbrev-projections"></div>
     </div>
 
     <!-- Ration Plans page -->
@@ -600,16 +660,6 @@
       <!-- Table -->
       <div id="al-table-wrap"><div class="loading">Loading...</div></div>
       <div id="abbrev-animalslist"></div>
-    </div>
-
-    <!-- Farm Expenses page -->
-    <div class="page" id="page-farmexpenses">
-      <div class="page-hdr">
-        <div><h1>Farm Expenses</h1></div>
-        <button class="refresh-btn" onclick="loadFarmExpensesPage()">&#x21BB; Refresh</button>
-      </div>
-      <div id="farmexpenses-content"><div class="loading">Loading...</div></div>
-      <div id="abbrev-farmexpenses"></div>
     </div>
 
     <!-- Group assign / move modal -->
@@ -1771,6 +1821,8 @@
         <option value="litre">litre</option>
         <option value="tonne">tonne</option>
       </select>
+      <label>kg per bag <span style="font-size:11px;color:var(--muted)">(required if unit = bag)</span></label>
+      <input type="number" id="fert-kg-per-bag" min="0.1" step="0.1" placeholder="e.g. 50">
       <label>Supplier</label>
       <input type="text" id="fert-supplier" placeholder="Optional">
       <label>Notes</label>
@@ -1873,7 +1925,5 @@
 <script src="js/fd_shared.js?v=21"></script>
 <script src="js/setup_shared.js?v=21"></script>
 <script src="js/health.js?v=21"></script>
-<script src="js/auth.js?v=22"></script>
-<script>document.addEventListener("DOMContentLoaded", function() { authInit(); });</script>
 </body>
 </html>

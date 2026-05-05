@@ -38,7 +38,7 @@ function renderFertTable() {
   var TYPES = ['granular','liquid','organic','mineral','other'];
   var UNITS = ['kg','bag','litre','tonne'];
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Name</th><th>Type</th><th>Unit</th><th>Supplier</th><th>Active</th><th>Notes</th><th></th>' +
+    '<th>Name</th><th>Type</th><th>Unit</th><th>kg / bag</th><th>Supplier</th><th>Active</th><th>Notes</th><th></th>' +
     '</tr></thead><tbody>';
   fertData.forEach(function(f) {
     var typeOpts = TYPES.map(function(t) { return '<option value="' + t + '"' + (f.type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('');
@@ -47,6 +47,7 @@ function renderFertTable() {
       '<td><input type="text" value="' + (f.name || '').replace(/"/g, '&quot;') + '" style="width:100%" onchange="patchFert(' + f.id + ',\'name\',this.value)"></td>' +
       '<td><select onchange="patchFert(' + f.id + ',\'type\',this.value||null)"><option value="">—</option>' + typeOpts + '</select></td>' +
       '<td><select onchange="patchFert(' + f.id + ',\'unit\',this.value)">' + unitOpts + '</select></td>' +
+      '<td><input type="number" value="' + (f.kg_per_bag != null ? f.kg_per_bag : '') + '" min="0.1" step="0.1" placeholder="—" style="width:70px" title="kg per bag — required when unit is bag" onchange="patchFert(' + f.id + ',\'kg_per_bag\',this.value?parseFloat(this.value):null)"></td>' +
       '<td><input type="text" value="' + (f.supplier || '').replace(/"/g, '&quot;') + '" style="width:100%" placeholder="—" onchange="patchFert(' + f.id + ',\'supplier\',this.value||null)"></td>' +
       '<td style="text-align:center"><input type="checkbox" ' + (f.active ? 'checked' : '') + ' onchange="patchFert(' + f.id + ',\'active\',this.checked)"></td>' +
       '<td><input type="text" value="' + (f.notes || '').replace(/"/g, '&quot;') + '" style="width:100%;min-width:140px" placeholder="—" onchange="patchFert(' + f.id + ',\'notes\',this.value||null)"></td>' +
@@ -103,7 +104,7 @@ async function patchFert(id, field, value) {
 function openFertModal() {
   editingFertId = null;
   document.getElementById('fert-modal-title').textContent = 'Add fertilizer';
-  ['fert-name','fert-supplier','fert-notes'].forEach(function(id) { document.getElementById(id).value = ''; });
+  ['fert-name','fert-supplier','fert-notes','fert-kg-per-bag'].forEach(function(id) { document.getElementById(id).value = ''; });
   document.getElementById('fert-type').value = 'granular';
   document.getElementById('fert-unit').value = 'kg';
   document.getElementById('fert-modal-status').textContent = '';
@@ -124,6 +125,8 @@ async function submitFert() {
       notes:    document.getElementById('fert-notes').value.trim() || null,
       active: true
     };
+    var kpb = document.getElementById('fert-kg-per-bag').value;
+    if (kpb) d.kg_per_bag = parseFloat(kpb);
     await sbInsert('fertilizers', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
     setTimeout(function() { closeFertModal(); loadFertilizersPage(); }, 800);
