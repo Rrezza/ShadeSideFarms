@@ -1075,6 +1075,7 @@ async function init() {
   setTodayDates();
   updateQueueBadge();
   applyLang(); // apply saved language immediately on startup
+  if (pendingQueue.length) drainQueue(); // attempt to drain any items left from previous session
 
   try {
     const ef = (p, label) => p.catch(e => { console.warn(label + ' failed:', e.message); return []; });
@@ -1571,7 +1572,8 @@ async function fGroupChange() {
       `?group_id=eq.${groupId}&effective_to=is.null&select=ration_plan_id&limit=1`);
 
     if (!gr.length || !gr[0].ration_plan_id) {
-      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ration plan assigned to this group.</div>';
+      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No ration plan assigned — enter quantities manually.</div>';
+      if (goBtn) goBtn.style.display = '';
       return;
     }
 
@@ -1582,7 +1584,8 @@ async function fGroupChange() {
       `&order=version_number.desc&limit=1`);
 
     if (!versions.length) {
-      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">Ration plan has no versions yet.</div>';
+      area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">Ration plan has no versions yet — enter quantities manually.</div>';
+      if (goBtn) goBtn.style.display = '';
       return;
     }
 
@@ -1595,6 +1598,7 @@ async function fGroupChange() {
 
     if (!n) {
       area.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No animals in this group.</div>';
+      if (goBtn) goBtn.style.display = '';
       return;
     }
 
@@ -1694,9 +1698,10 @@ async function fConfirm() {
   if (fodderKg)    payload.green_fodder_kg = fodderKg;
   if (notes)       payload.notes           = notes;
 
-  await submitEntry('feeding_events', payload, () => {
+  await submitEntry('feeding_events', payload, (queued) => {
     const grp = (appData.animalGroups || []).find(g => g.id === groupId);
-    showSuccess('🪣', 'Feeding Logged', grp ? grp.name : 'Group');
+    const sub = (grp ? grp.name : 'Group') + (queued ? '\n⚠️ Saved offline — will sync when connected' : '');
+    showSuccess('🪣', 'Feeding Logged', sub);
   });
 }
 
@@ -1821,10 +1826,14 @@ function showQueueModal() {
     const details = Object.entries(item.payload)
       .filter(([k]) => !['recorded_by','worker_id'].includes(k))
       .map(([k,v]) => `${k}: ${v}`).join(' · ');
+    const errBadge = item.lastError
+      ? `<div style="margin-top:5px;padding:5px 8px;background:#2a1a1a;border:1px solid #6a2a2a;border-radius:6px;font-size:11px;color:#e88080;word-break:break-all">⚠️ ${item.lastError}</div>`
+      : '';
     return `<div class="queue-item" id="qitem-${item.ts}">
       <div class="queue-item-table">${label}</div>
       <div class="queue-item-meta">${date} · logged ${ts}</div>
       <div class="queue-item-meta" style="margin-top:3px;opacity:0.7">${details}</div>
+      ${errBadge}
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="retryQueueItem(${item.ts})" style="flex:1;padding:7px 0;background:var(--accent2);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">${t('retry')}</button>
         <button onclick="cancelQueueItem(${item.ts})" style="flex:1;padding:7px 0;background:#3a1a1a;border:1px solid #6a2a2a;border-radius:7px;color:#e88080;font-size:12px;font-weight:600;cursor:pointer">${t('cancel')}</button>
@@ -1860,8 +1869,11 @@ async function retryQueueItem(ts) {
     closeQueueModal();
     if (pendingQueue.length > 0) showQueueModal();
   } catch (e) {
+    item.lastError = e.message || 'Unknown error';
+    saveQueue();
     if (el) { el.style.opacity = '1'; }
-    alert('Retry failed — still offline or server error.');
+    closeQueueModal();
+    showQueueModal(); // re-open with updated error badge
   }
 }
 
@@ -1887,19 +1899,25 @@ async function submitEntry(table, payload, onSuccess) {
     try {
       await db.post(table, payload);
       drainQueue();
-      onSuccess();
+      onSuccess(false); // false = submitted directly, not queued
       return;
     } catch (e) {
-      // Fall through to queue
-      console.warn('Submit failed, queuing:', e);
+      console.warn('Submit failed, queuing. Error:', e.message);
+      // Store error on the queued item so the modal can show it
+      const item = { table, payload, ts: Date.now(), lastError: e.message };
+      pendingQueue.push(item);
+      saveQueue();
+      updateQueueBadge();
+      onSuccess(true); // true = queued, not submitted
+      return;
     }
   }
 
-  // Queue it
+  // Offline — queue it
   pendingQueue.push({ table, payload, ts: Date.now() });
   saveQueue();
   updateQueueBadge();
-  onSuccess(); // Still show success — it will sync later
+  onSuccess(true);
 }
 
 async function drainQueue() {
@@ -1910,7 +1928,10 @@ async function drainQueue() {
       await db.post(item.table, item.payload);
       pendingQueue = pendingQueue.filter(q => q.ts !== item.ts);
     } catch (e) {
-      break; // stop if one fails
+      // Tag this item with the last error so the queue modal can show it
+      item.lastError = e.message || 'Unknown error';
+      console.warn('Queue drain failed for', item.table, ':', e.message);
+      // Don't break — continue trying remaining items in case this one is the broken one
     }
   }
   saveQueue();
@@ -1950,6 +1971,9 @@ function showSuccess(icon, title, sub) {
 // ============================================================
 window.addEventListener('online',  () => { document.getElementById('headerSub').textContent = t('online');  drainQueue(); });
 window.addEventListener('offline', () => { document.getElementById('headerSub').textContent = t('offline'); });
+// Retry pending queue whenever the tab regains focus (e.g. phone unlocked, tab switched back)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) drainQueue(); });
+window.addEventListener('focus', () => drainQueue());
 
 // ============================================================
 // LANGUAGE / i18n
