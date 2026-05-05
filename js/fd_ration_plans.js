@@ -5,7 +5,6 @@
 // ============================================================
 
 var rpEditPlanId     = null;
-var rpAllSpecies     = [];
 var rpAllRecipes     = [];
 var rpAllRoughage    = [];
 var rpRoughagePrices = {};
@@ -20,8 +19,7 @@ async function loadRationPlansPage() {
   try {
     var results = await Promise.all([
       sbGet('ration_plans',
-        'select=id,name,species_id,active,notes,species(common_name)&order=species_id,name'),
-      sbGet('species', 'select=id,common_name&order=common_name'),
+        'select=id,name,active,notes&order=name'),
       sbGet('recipes', 'active=eq.true&select=id,name&order=name'),
       sbGet('ingredients',
         'active=eq.true&select=id,name,category,dry_matter_pct,crude_protein_pct_dm,' +
@@ -31,10 +29,9 @@ async function loadRationPlansPage() {
         '&select=ingredient_id,cost_per_kg,date&order=date.desc&limit=500')
     ]);
     var plans    = results[0];
-    rpAllSpecies = results[1];
-    rpAllRecipes = results[2];
-    var allIngs  = results[3];
-    var prices   = results[4];
+    rpAllRecipes = results[1];
+    var allIngs  = results[2];
+    var prices   = results[3];
     rpAllRoughage    = allIngs.filter(function(i) { return i.category === 'roughage'; });
     rpRoughagePrices = {};
     prices.forEach(function(p) {
@@ -93,7 +90,6 @@ async function rpRenderPlanList(plans, containerId, inactive) {
     var v = latestVer[p.id];
     html += '<tr>' +
       '<td style="font-weight:500">' + p.name + '</td>' +
-      '<td class="muted-cell">' + (p.species ? p.species.common_name : '\u2014') + '</td>' +
       '<td class="mono right">' + (v ? r1(parseFloat(v.dmi_pct_body_weight)) + '%' : '\u2014') + '</td>' +
       '<td class="mono right">' + (v ? r1(parseFloat(v.concentrate_pct_dmi)) + '%' : '\u2014') + '</td>' +
       '<td class="mono right">' + (v ? r1(parseFloat(v.hay_pct_dmi)) + '%' : '\u2014') + '</td>' +
@@ -125,7 +121,7 @@ async function rpOpenForm(planId) {
   wrap.style.display = 'block';
   var plan = null; var version = null;
   if (planId) {
-    var rows = await sbGet('ration_plans', 'id=eq.' + planId + '&select=id,name,species_id,notes&limit=1');
+    var rows = await sbGet('ration_plans', 'id=eq.' + planId + '&select=id,name,notes&limit=1');
     plan = rows.length ? rows[0] : null;
     var vers = await sbGet('ration_plan_versions',
       'ration_plan_id=eq.' + planId +
@@ -134,10 +130,6 @@ async function rpOpenForm(planId) {
       '&order=version_number.desc&limit=1');
     version = vers.length ? vers[0] : null;
   }
-  var speciesOpts = '<option value="">\u2014 select \u2014</option>' +
-    rpAllSpecies.map(function(s) {
-      return '<option value="' + s.id + '"' + (plan && plan.species_id === s.id ? ' selected' : '') + '>' + s.common_name + '</option>';
-    }).join('');
   var recipeOpts = '<option value="">\u2014 none \u2014</option>' +
     rpAllRecipes.map(function(r) {
       return '<option value="' + r.id + '"' + (version && version.concentrate_recipe_id === r.id ? ' selected' : '') + '>' + r.name + '</option>';
@@ -151,14 +143,13 @@ async function rpOpenForm(planId) {
   wrap.innerHTML =
     '<div style="padding:16px 22px;border-bottom:1px solid var(--border)">' +
     '<h3 style="margin:0 0 14px;font-size:15px">' + (planId ? 'Edit ration plan \u2014 creates new version' : 'New ration plan') + '</h3>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">' +
 
-      // INPUTS
+      // LEFT — inputs
       '<div>' +
         '<div class="hf-grid">' +
           '<div class="hf-field" style="grid-column:span 2"><label>Plan name</label>' +
             '<input type="text" id="rp-name" value="' + (plan ? plan.name : '') + '" placeholder="e.g. Beetal Early Cycle"></div>' +
-          '<div class="hf-field"><label>Species</label>' +
-            '<select id="rp-species" onchange="rpRunModeller()">' + speciesOpts + '</select></div>' +
           '<div class="hf-field"><label>Concentrate recipe</label>' +
             '<select id="rp-recipe" onchange="rpRunModeller()">' + recipeOpts + '</select></div>' +
           '<div class="hf-field"><label>Hay source</label>' +
@@ -186,10 +177,15 @@ async function rpOpenForm(planId) {
           '<div class="hf-field" style="grid-column:span 2"><label>Notes (optional)</label>' +
             '<input type="text" id="rp-notes" value="' + (version ? (version.notes || '') : '') + '"></div>' +
         '</div>' +
+        '<div style="display:flex;gap:10px;margin-top:12px">' +
+          '<button class="btn btn-primary btn-sm" onclick="rpSubmitForm()">Save</button>' +
+          '<button class="btn btn-sm" onclick="rpCloseForm()">Cancel</button>' +
+          '<span id="rp-status" style="font-size:13px;color:var(--muted);align-self:center"></span>' +
+        '</div>' +
       '</div>' +
 
-      // MODELLER
-      '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">' +
+      // RIGHT — modeller
+      '<div>' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">' +
           '<span style="font-size:13px;font-weight:500">Modeller</span>' +
           '<label style="font-size:12px;color:var(--muted)">Test weight</label>' +
@@ -197,13 +193,6 @@ async function rpOpenForm(planId) {
           '<span style="font-size:12px;color:var(--muted)">kg</span>' +
         '</div>' +
         '<div id="rp-modeller-panel"><div style="font-size:12px;color:var(--faint)">Fill in the form to see projections.</div></div>' +
-      '</div>' +
-
-      // SAVE
-      '<div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">' +
-        '<button class="btn btn-primary btn-sm" onclick="rpSubmitForm()">Save</button>' +
-        '<button class="btn btn-sm" onclick="rpCloseForm()">Cancel</button>' +
-        '<span id="rp-status" style="font-size:13px;color:var(--muted);align-self:center"></span>' +
       '</div>' +
 
     '</div></div>';
@@ -428,7 +417,6 @@ async function rpSubmitForm() {
   st.textContent = 'Saving...'; st.style.color = 'var(--muted)';
   try {
     var name      = document.getElementById('rp-name').value.trim();
-    var speciesId = document.getElementById('rp-species').value;
     var dmi       = parseFloat(document.getElementById('rp-dmi').value);
     var concPct   = parseFloat(document.getElementById('rp-conc-pct').value);
     var hayPct    = parseFloat(document.getElementById('rp-hay-pct').value);
@@ -440,13 +428,12 @@ async function rpSubmitForm() {
     var reason    = reasonEl ? reasonEl.value.trim() : '';
     var notes     = document.getElementById('rp-notes').value.trim();
     if (!name)      throw new Error('Name required.');
-    if (!speciesId) throw new Error('Species required.');
     if (isNaN(dmi) || dmi <= 0) throw new Error('DMI% required.');
     if (isNaN(concPct) || isNaN(hayPct) || isNaN(fodPct)) throw new Error('All three split percentages required.');
     if (Math.abs(concPct + hayPct + fodPct - 100) >= 0.1) throw new Error('Split percentages must sum to 100%.');
     var planId = rpEditPlanId;
     if (!planId) {
-      var planRow = await sbInsert('ration_plans', [{ name: name, species_id: parseInt(speciesId), active: true, notes: notes || null }]);
+      var planRow = await sbInsert('ration_plans', [{ name: name, active: true, notes: notes || null }]);
       planId = planRow[0].id;
     } else {
       await sbPatch('ration_plans', planId, { name: name, notes: notes || null });

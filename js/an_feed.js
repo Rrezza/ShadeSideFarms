@@ -75,7 +75,7 @@ async function renderAnFeedGroup(groupId) {
         'group_id=eq.' + groupId + '&effective_to=not.is.null' +
         '&select=id,ration_plan_id,effective_from,effective_to,' +
         'ration_plans(name)&order=effective_to.desc&limit=10'),
-      sbGet('ration_plans', 'active=eq.true&select=id,name,species_id&order=name'),
+      sbGet('ration_plans', 'active=eq.true&select=id,name&order=name'),
       sbGet('feeding_events',
         'group_id=eq.' + groupId +
         '&select=id,recorded_at,concentrate_kg,hay_kg,green_fodder_kg,bsf_larvae_kg,' +
