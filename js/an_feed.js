@@ -255,18 +255,21 @@ function afRenderTargetsSection(version, stats, hayDmPct, fodDmPct) {
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:10px">' +
       '<div class="metric-card">' +
         '<div class="m-label">Concentrate</div>' +
-        '<div class="m-value" style="font-size:22px">' + (concAfPerHead != null ? r1(concAfPerHead * n) + ' kg' : '\u2014') + '</div>' +
-        '<div class="m-sub">' + (concAfPerHead != null ? r1(concAfPerHead) + ' kg per head' : '') + '</div>' +
+        '<div class="m-value" style="font-size:18px">' + (concAfPerHead != null ? r1(concAfPerHead) + ' kg' : '\u2014') + '</div>' +
+        '<div class="m-sub">per head as-fed</div>' +
+        '<div class="m-sub">' + (concAfPerHead != null ? r1(concAfPerHead * n) + ' kg group total' : '') + '</div>' +
       '</div>' +
       '<div class="metric-card">' +
         '<div class="m-label">Hay</div>' +
-        '<div class="m-value" style="font-size:22px">' + (hayAfPerHead != null ? r1(hayAfPerHead * n) + ' kg' : '\u2014') + '</div>' +
-        '<div class="m-sub">' + (hayAfPerHead != null ? r1(hayAfPerHead) + ' kg per head' : '') + '</div>' +
+        '<div class="m-value" style="font-size:18px">' + (hayAfPerHead != null ? r1(hayAfPerHead) + ' kg' : '\u2014') + '</div>' +
+        '<div class="m-sub">per head as-fed</div>' +
+        '<div class="m-sub">' + (hayAfPerHead != null ? r1(hayAfPerHead * n) + ' kg group total' : '') + '</div>' +
       '</div>' +
       '<div class="metric-card">' +
         '<div class="m-label">Green fodder</div>' +
-        '<div class="m-value" style="font-size:22px">' + (fodAfPerHead != null ? r1(fodAfPerHead * n) + ' kg' : '\u2014') + '</div>' +
-        '<div class="m-sub">' + (fodAfPerHead != null ? r1(fodAfPerHead) + ' kg per head' : '') + '</div>' +
+        '<div class="m-value" style="font-size:18px">' + (fodAfPerHead != null ? r1(fodAfPerHead) + ' kg' : '\u2014') + '</div>' +
+        '<div class="m-sub">per head as-fed</div>' +
+        '<div class="m-sub">' + (fodAfPerHead != null ? r1(fodAfPerHead * n) + ' kg group total' : '') + '</div>' +
       '</div>' +
     '</div>' +
     footNote +
@@ -676,13 +679,10 @@ async function afSaveInlineEdit(eventId, groupId) {
 // ============================================================
 async function afOpenRationModal(groupId) {
   try {
-    var plans = await sbGet('ration_plans', 'active=eq.true&select=id,name,dmi_pct_body_weight,' +
-      'concentrate_pct_dmi,hay_pct_dmi,green_fodder_pct_dmi&order=name');
+    var plans = await sbGet('ration_plans', 'active=eq.true&select=id,name&order=name');
     var opts = '<option value="">\u2014 select \u2014</option>' +
       plans.map(function(p) {
-        return '<option value="' + p.id + '">' + p.name +
-          ' (' + p.dmi_pct_body_weight + '% DMI, ' +
-          p.concentrate_pct_dmi + '/' + p.hay_pct_dmi + '/' + p.green_fodder_pct_dmi + ')</option>';
+        return '<option value="' + p.id + '">' + p.name + '</option>';
       }).join('');
 
     var modal = document.createElement('div');
