@@ -1451,7 +1451,7 @@ async function hvConfirm() {
   const payload = { date, crop_group_id: groupId, quantity_kg: qty };
   if (dest)   payload.destination = dest;
   if (notes)  payload.notes       = notes;
-  if (activeWorkerId) payload.worker_id = activeWorkerId;
+  if (activeWorkerId) payload.recorded_by = activeWorkerId;
 
   await submitEntry('crop_harvest_events', payload, () => {
     const g = (appData.cropGroups || []).find(g => g.id === groupId);
@@ -1478,7 +1478,7 @@ async function chConfirm() {
 
   const harvestPayload = { crop_group_id: groupId, date, quantity_kg: qty };
   if (dest)     harvestPayload.destination   = dest;
-  if (workerId) harvestPayload.logged_by     = workerId;
+  if (workerId) harvestPayload.recorded_by  = workerId;
   if (notes)    harvestPayload.quality_notes = notes;
 
   if (navigator.onLine && group && group.ingredient_id) {
@@ -1541,9 +1541,7 @@ async function obsConfirm() {
     observed_at:       date
   };
   if (note)     payload.note      = note;
-  if (workerId) payload.logged_by = workerId;
-
-  // Submit observation then patch the crop's summary fields
+  if (workerId) payload.recorded_by = workerId;
   await submitEntry('crop_observations', payload, () => {
     const crop = appData.plotCrops.find(c => c.id === cropId);
     showSuccess('🔍', 'Observation Saved', crop ? crop.crop_name : 'Crop updated');
@@ -1724,9 +1722,7 @@ async function wConfirm() {
     duration_minutes:        duration,
     notes
   };
-  if (workerId) payload.worker_id = workerId;
-
-  await submitEntry('watering_events', payload, () => {
+  if (workerId) payload.recorded_by = workerId;
     const p = (appData.fieldPlots || []).find(p => p.id === plotId);
     const label = p ? (p.plot_code ? p.plot_code + (p.plot_name ? ' — ' + p.plot_name : '') : p.plot_name) : 'Plot';
     showSuccess('💧', 'Irrigation Logged', `${label} — ${duration} min`);
@@ -1764,9 +1760,7 @@ async function aConfirm() {
     kg_applied:     qty,
     notes
   };
-  if (workerId) payload.worker_id = workerId;
-
-  await submitEntry('amendment_applications', payload, () => {
+  if (workerId) payload.recorded_by = workerId;
     const p = (appData.fieldPlots || []).find(p => p.id === plotId);
     const label = p ? (p.plot_code ? p.plot_code + (p.plot_name ? ' — ' + p.plot_name : '') : p.plot_name) : 'Plot';
     showSuccess('🌱', 'Amendment Logged', `${qty} kg ${finalDesc}\n${label}`);
@@ -1824,7 +1818,7 @@ function showQueueModal() {
     const ts      = item.ts ? new Date(item.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '—';
     const date    = item.payload.date || item.payload.recorded_at?.slice(0,10) || '—';
     const details = Object.entries(item.payload)
-      .filter(([k]) => !['recorded_by','worker_id'].includes(k))
+      .filter(([k]) => !['recorded_by'].includes(k))
       .map(([k,v]) => `${k}: ${v}`).join(' · ');
     const errBadge = item.lastError
       ? `<div style="margin-top:5px;padding:5px 8px;background:#2a1a1a;border:1px solid #6a2a2a;border-radius:6px;font-size:11px;color:#e88080;word-break:break-all">⚠️ ${item.lastError}</div>`

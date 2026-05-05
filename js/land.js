@@ -116,7 +116,7 @@ async function loadLandPage() {
         'select=id,plot_code,plot_name,plot_type,area_acres,area_unit,use_case,description,' +
         'status,irrigation_method,date_retired,notes,location_id,locations(id,name)' +
         '&order=plot_code'),
-      sbGet('fertilizers',          'select=id,name,type,unit,kg_per_bag,supplier,ec_impact,notes,active&order=name'),
+      sbGet('fertilizers',          'select=id,name,type,unit,supplier,ec_impact,notes,active&order=name'),
       sbGet('fertilizer_purchases', 'select=id,fertilizer_id,date,qty,cost_per_unit,supplier,notes&order=date.desc&limit=500'),
       sbGet('gypsum_applications',
         'select=id,date,kg_applied,method,water_source,notes,field_plot_id,fertilizer_id,workers(name)&order=date.desc'),
@@ -133,14 +133,14 @@ async function loadLandPage() {
         '&order=sow_date.desc'),
       // New tables — safe fallback to [] on error
       safeFetch('crop_harvest_events',
-        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
+        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,recorded_by,' +
         'workers(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by,' +
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,recorded_by,' +
         'workers(name)&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
-        'water_source,logged_by,notes,workers(name)&order=date.desc'),
+        'water_source,recorded_by,notes,workers(name)&order=date.desc'),
       safeFetch('water_tests',
         'select=id,date,source,test_type,is_baseline,lab_name,ec_us_cm,ph,sar,rsc_meq_l,' +
         'bicarbonate_meq_l,sodium_meq_l,calcium_meq_l,magnesium_meq_l,notes&order=date.desc'),
@@ -467,11 +467,11 @@ function renderLandFert() {
   }
   var stockByFert = {};
   landFerts.forEach(function(f) {
-    stockByFert[f.id] = { purchasedUnits: 0, appliedKg: 0, latestPrice: null, latestPriceDate: null };
+    stockByFert[f.id] = { purchased: 0, applied: 0, latestPrice: null, latestPriceDate: null };
   });
   landFertPurchases.forEach(function(pp) {
     if (!stockByFert[pp.fertilizer_id]) return;
-    stockByFert[pp.fertilizer_id].purchasedUnits += parseFloat(pp.qty) || 0;
+    stockByFert[pp.fertilizer_id].purchased += parseFloat(pp.qty) || 0;
     if (pp.cost_per_unit != null) {
       var s = stockByFert[pp.fertilizer_id];
       if (!s.latestPriceDate || pp.date > s.latestPriceDate) {
@@ -480,73 +480,32 @@ function renderLandFert() {
       }
     }
   });
-  // Applications always record kg_applied — accumulate separately
   landGypsum.forEach(function(g) {
     if (g.fertilizer_id && stockByFert[g.fertilizer_id])
-      stockByFert[g.fertilizer_id].appliedKg += parseFloat(g.kg_applied) || 0;
+      stockByFert[g.fertilizer_id].applied += parseFloat(g.kg_applied) || 0;
   });
   landAmendments.forEach(function(a) {
     if (a.fertilizer_id && stockByFert[a.fertilizer_id])
-      stockByFert[a.fertilizer_id].appliedKg += parseFloat(a.kg_applied) || 0;
+      stockByFert[a.fertilizer_id].applied += parseFloat(a.kg_applied) || 0;
   });
-
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Fertilizer</th><th>Type</th><th>Bag size</th><th>EC / Salt impact</th>' +
+    '<th>Fertilizer</th><th>Type</th><th>Unit</th><th>EC / Salt impact</th>' +
     '<th class="right">Purchased</th><th class="right">Applied</th>' +
     '<th class="right">Stock</th><th class="right">Latest price</th>' +
     '</tr></thead><tbody>';
-
   landFerts.forEach(function(f) {
-    var st      = stockByFert[f.id];
-    var isBag   = f.unit === 'bag';
-    var kpb     = isBag && f.kg_per_bag ? parseFloat(f.kg_per_bag) : null;
-
-    // Convert to a common kg basis for arithmetic
-    var purchasedKg = isBag && kpb ? st.purchasedUnits * kpb : st.purchasedUnits;
-    var appliedKg   = st.appliedKg;
-    var stockKg     = purchasedKg - appliedKg;
-
-    // Format cells
-    var purchasedStr, appliedStr, stockStr, cls, bagSizeStr, priceStr;
-
-    if (isBag && kpb) {
-      var purchasedBags = st.purchasedUnits;
-      var stockBags     = stockKg / kpb;
-      purchasedStr = r1(purchasedBags) + ' bags (' + r1(purchasedKg) + ' kg)';
-      appliedStr   = r1(appliedKg) + ' kg (' + r1(appliedKg / kpb) + ' bags)';
-      cls          = stockBags <= 0 ? 'inv-stock-zero' : (stockBags < 5 ? 'inv-stock-low' : 'inv-stock-pos');
-      stockStr     = r1(stockBags) + ' bags<br><span style="font-size:11px;color:var(--muted)">' + r1(stockKg) + ' kg</span>';
-      bagSizeStr   = kpb + ' kg / bag';
-      priceStr     = st.latestPrice != null ? pkr(st.latestPrice) + ' / bag' : '—';
-    } else if (isBag) {
-      // bag unit but kg_per_bag not set — show bags only with a warning
-      purchasedStr = r1(st.purchasedUnits) + ' bags';
-      appliedStr   = r1(appliedKg) + ' kg';
-      var stockRaw = st.purchasedUnits;
-      cls          = stockRaw <= 0 ? 'inv-stock-zero' : 'inv-stock-pos';
-      stockStr     = r1(stockRaw) + ' bags <span style="color:var(--warn);font-size:11px" title="Set kg/bag to enable kg conversion">⚠</span>';
-      bagSizeStr   = '<span style="color:var(--warn);font-size:11px">Set kg/bag</span>';
-      priceStr     = st.latestPrice != null ? pkr(st.latestPrice) + ' / bag' : '—';
-    } else {
-      // Standard kg / litre / tonne unit — unchanged behaviour
-      var stock = st.purchasedUnits - appliedKg;
-      purchasedStr = r1(st.purchasedUnits) + ' ' + f.unit;
-      appliedStr   = r1(appliedKg)         + ' ' + f.unit;
-      cls          = stock <= 0 ? 'inv-stock-zero' : (stock < 50 ? 'inv-stock-low' : 'inv-stock-pos');
-      stockStr     = r1(stock) + ' ' + f.unit;
-      bagSizeStr   = '—';
-      priceStr     = st.latestPrice != null ? pkr(st.latestPrice) + ' / ' + f.unit : '—';
-    }
-
+    var st    = stockByFert[f.id];
+    var stock = st.purchased - st.applied;
+    var cls   = stock <= 0 ? 'inv-stock-zero' : (stock < 50 ? 'inv-stock-low' : 'inv-stock-pos');
     html += '<tr style="' + (!f.active ? 'opacity:0.5' : '') + '">' +
       '<td style="font-weight:500">' + f.name + '</td>' +
       '<td class="muted-cell">' + (f.type || '—') + '</td>' +
-      '<td class="muted-cell" style="font-size:12px">' + bagSizeStr + '</td>' +
+      '<td class="muted-cell">' + f.unit + '</td>' +
       '<td class="muted-cell" style="font-size:11px;max-width:160px">' + (f.ec_impact || '—') + '</td>' +
-      '<td class="mono right">' + purchasedStr + '</td>' +
-      '<td class="mono right">' + appliedStr   + '</td>' +
-      '<td class="mono right ' + cls + '">' + stockStr + '</td>' +
-      '<td class="mono right">' + priceStr + '</td>' +
+      '<td class="mono right">' + r1(st.purchased) + ' ' + f.unit + '</td>' +
+      '<td class="mono right">' + r1(st.applied)   + ' ' + f.unit + '</td>' +
+      '<td class="mono right ' + cls + '">' + r1(stock) + ' ' + f.unit + '</td>' +
+      '<td class="mono right">' + (st.latestPrice != null ? pkr(st.latestPrice) + ' / ' + f.unit : '—') + '</td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
@@ -573,7 +532,7 @@ function renderLandFertChart() {
     var pts = byFert[f.id];
     if (!pts || !pts.length) return;
     datasets.push({
-      label: f.name + ' (PKR / ' + (f.unit === 'bag' ? 'bag' : f.unit) + ')',
+      label: f.name + ' (PKR / ' + f.unit + ')',
       data: pts,
       borderColor: CHART_COLORS[idx % CHART_COLORS.length],
       backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
@@ -698,7 +657,7 @@ async function submitLandApp() {
     if (method) d.method       = method;
     if (wsrc)   d.water_source = wsrc;
     if (fertId) d.fertilizer_id = parseInt(fertId);
-    if (worker) d.worker_id    = parseInt(worker);
+    if (worker) d.recorded_by  = parseInt(worker);
     if (notes)  d.notes        = notes;
     if (type === 'gypsum') {
       await sbInsert('gypsum_applications', d);
@@ -1452,7 +1411,7 @@ async function submitHarvestEvent(groupId) {
     var d = { crop_group_id: groupId, date: date, cut_number: prevCuts + 1 };
     if (kg)   d.quantity_kg   = parseFloat(kg);
     if (dest) d.destination   = dest;
-    if (wId)  d.logged_by     = parseInt(wId);
+    if (wId)  d.recorded_by   = parseInt(wId);
     if (qual) d.quality_notes = qual;
     var rows = await sbInsert('crop_harvest_events', [d]);
     // Bridge: if group has ingredient_id, create matching acquisition
@@ -1487,7 +1446,7 @@ async function submitObservation(cropId) {
     var d = { plot_crop_id: cropId, pest_disease_flag: flag };
     if (health) d.health_status = health;
     if (note)   d.note          = note;
-    if (wId)    d.logged_by     = parseInt(wId);
+    if (wId)    d.recorded_by  = parseInt(wId);
     await sbInsert('crop_observations', [d]);
     await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
@@ -1649,7 +1608,7 @@ async function submitWatering() {
       if (!vol) d.estimated_volume_litres = Math.round(parseFloat(dur) * TUBEWELL_LPH);
     }
     if (vol)   d.estimated_volume_litres = parseFloat(vol);
-    if (wId)   d.logged_by = parseInt(wId);
+    if (wId)   d.recorded_by = parseInt(wId);
     if (notes) d.notes = notes;
     await sbInsert('watering_events', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
