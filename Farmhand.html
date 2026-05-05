@@ -1175,8 +1175,8 @@ function populateAllForms() {
       : []; // no growing crops → show nothing rather than everything
     hvGroup.innerHTML = '<option value="">Select crop...</option>' +
       toShow.map(g => {
-        const plot = g.field_plots ? (g.field_plots.plot_code || '') : '';
-        const label = plot ? `${g.name} (${plot})` : g.name;
+        const plot = g.field_plots ? (g.field_plots.plot_name || g.field_plots.plot_code || '') : '';
+        const label = plot ? `${g.name} — ${plot}` : g.name;
         return `<option value="${g.id}">${label}</option>`;
       }).join('');
   }
