@@ -129,18 +129,18 @@ async function loadLandPage() {
         '&order=date.desc'),
       sbGet('plot_crops',
         'select=id,field_plot_id,crop_id,crop_name,role,status,health_status,germination_outcome,' +
-        'pest_disease_flag,sow_date,expected_termination_date,termination_date,notes,active,harvest_type,crop_group_id' +
+        'pest_disease_flag,sow_date,expected_termination_date,termination_date,notes,harvest_type,crop_group_id' +
         '&order=sow_date.desc'),
       // New tables — safe fallback to [] on error
       safeFetch('crop_harvest_events',
-        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,recorded_by,' +
+        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
         'workers(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,recorded_by,' +
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by,' +
         'workers(name)&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
-        'water_source,recorded_by,notes,workers(name)&order=date.desc'),
+        'water_source,logged_by,notes,workers(name)&order=date.desc'),
       safeFetch('water_tests',
         'select=id,date,source,test_type,is_baseline,lab_name,ec_us_cm,ph,sar,rsc_meq_l,' +
         'bicarbonate_meq_l,sodium_meq_l,calcium_meq_l,magnesium_meq_l,notes&order=date.desc'),
@@ -657,7 +657,7 @@ async function submitLandApp() {
     if (method) d.method       = method;
     if (wsrc)   d.water_source = wsrc;
     if (fertId) d.fertilizer_id = parseInt(fertId);
-    if (worker) d.recorded_by  = parseInt(worker);
+    if (worker) d.worker_id    = parseInt(worker);
     if (notes)  d.notes        = notes;
     if (type === 'gypsum') {
       await sbInsert('gypsum_applications', d);
@@ -1411,7 +1411,7 @@ async function submitHarvestEvent(groupId) {
     var d = { crop_group_id: groupId, date: date, cut_number: prevCuts + 1 };
     if (kg)   d.quantity_kg   = parseFloat(kg);
     if (dest) d.destination   = dest;
-    if (wId)  d.recorded_by   = parseInt(wId);
+    if (wId)  d.logged_by     = parseInt(wId);
     if (qual) d.quality_notes = qual;
     var rows = await sbInsert('crop_harvest_events', [d]);
     // Bridge: if group has ingredient_id, create matching acquisition
@@ -1446,7 +1446,7 @@ async function submitObservation(cropId) {
     var d = { plot_crop_id: cropId, pest_disease_flag: flag };
     if (health) d.health_status = health;
     if (note)   d.note          = note;
-    if (wId)    d.recorded_by  = parseInt(wId);
+    if (wId)    d.logged_by     = parseInt(wId);
     await sbInsert('crop_observations', [d]);
     await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
@@ -1608,7 +1608,7 @@ async function submitWatering() {
       if (!vol) d.estimated_volume_litres = Math.round(parseFloat(dur) * TUBEWELL_LPH);
     }
     if (vol)   d.estimated_volume_litres = parseFloat(vol);
-    if (wId)   d.recorded_by = parseInt(wId);
+    if (wId)   d.logged_by = parseInt(wId);
     if (notes) d.notes = notes;
     await sbInsert('watering_events', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
