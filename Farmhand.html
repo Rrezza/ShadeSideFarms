@@ -1421,7 +1421,7 @@ async function hConfirm() {
     acquisition_type:   'harvested',
     date,
     quantity_kg:        qty,
-    location_harvested: locationId,
+    harvest_location_id: locationId,
     recorded_by:        workerId,
     notes
   };
@@ -1538,7 +1538,7 @@ async function obsConfirm() {
     plot_crop_id:      cropId,
     health_status:     health,
     pest_disease_flag: flag,
-    observed_at:       date
+    observed_at:       date ? new Date(date).toISOString() : new Date().toISOString()
   };
   if (note)     payload.note      = note;
   if (workerId) payload.recorded_by = workerId;
@@ -1719,7 +1719,7 @@ async function wConfirm() {
   const payload = {
     date,
     field_plot_id:           plotId,
-    duration_minutes:        duration,
+    duration_hours:          duration / 60,  // DB stores hours; form collects minutes
     notes
   };
   if (workerId) payload.recorded_by = workerId;
