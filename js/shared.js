@@ -8,23 +8,19 @@
 // ---- Supabase config ----
 var SB_URL = 'https://soxbgbpuzcpvkqvdufno.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveGJnYnB1emNwdmtxdmR1Zm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzE2MDksImV4cCI6MjA5MjQ0NzYwOX0.v9eOX4xPkCE_4aSr0gxWfKh3_2jkwlks6sDCw1thw5k';
-// H and JH are patched at runtime by auth.js when a session is active.
-// During initial page load (before auth.js runs) they use the anon key for reads.
 var H  = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 var JH = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
-function getH()  { return (window.authHeaders ? window.authHeaders(false) : H);  }
-function getJH() { return (window.authHeaders ? window.authHeaders(true)  : JH); }
 
 // ---- DB helpers ----
 async function sbGet(t, q) {
-  var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, { headers: getH() });
+  var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, { headers: H });
   if (!r.ok) throw new Error('GET ' + t + ': ' + r.status + ' ' + (await r.text()));
   return r.json();
 }
 async function sbPatch(t, id, d) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?id=eq.' + id, {
     method: 'PATCH',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH()),
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH),
     body: JSON.stringify(d)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -32,7 +28,7 @@ async function sbPatch(t, id, d) {
 async function sbPatchWhere(t, q, d) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, {
     method: 'PATCH',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH()),
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH),
     body: JSON.stringify(d)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -40,7 +36,7 @@ async function sbPatchWhere(t, q, d) {
 async function sbDelete(t, id) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?id=eq.' + id, {
     method: 'DELETE',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH())
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH)
   });
   if (!r.ok) throw new Error(await r.text());
 }
@@ -48,14 +44,14 @@ async function sbDelete(t, id) {
 async function sbDeleteWhere(t, q) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, {
     method: 'DELETE',
-    headers: Object.assign({ 'Prefer': 'return=minimal' }, getJH())
+    headers: Object.assign({ 'Prefer': 'return=minimal' }, JH)
   });
   if (!r.ok) throw new Error(await r.text());
 }
 async function sbInsert(t, d) {
   var r = await fetch(SB_URL + '/rest/v1/' + t, {
     method: 'POST',
-    headers: Object.assign({ 'Prefer': 'return=representation' }, getJH()),
+    headers: Object.assign({ 'Prefer': 'return=representation' }, JH),
     body: JSON.stringify(d)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -165,11 +161,13 @@ var PAGE_MAP = {
   rationplans:    { module: 'fd_ration_plans', init: 'loadRationPlansPage' },
   health:         { module: 'health',  init: 'loadHealthPage' },
   breeding:       { module: 'health',  init: 'loadBreedingPage' },
-  costsales:      { module: 'health',           init: 'loadCostSalesPage' },
-  farmexpenses:   { module: 'finance_expenses', init: 'loadFarmExpensesPage' },
+  costsales:      { module: 'health',  init: 'loadCostSalesPage' },
+  // Overview (landing page)
+  overview:       { module: 'overview', init: 'loadOverviewPage' },
   // Land module
   land:           { module: 'land',    init: 'loadLandPage' },
   // Setup module
+  setupplots:     { module: 'setup_plots',       init: 'loadSetupPlotsPage' },
   workers:        { module: 'setup_workers',     init: 'loadWorkersPage' },
   locations:      { module: 'setup_locations',   init: 'loadLocationsPage' },
   ingredients:    { module: 'setup_ingredients', init: 'loadIngredients' },
@@ -311,8 +309,8 @@ async function loadAll() {
   var statusEl = document.getElementById('sb-status');
   if (statusEl) statusEl.textContent = 'Loading...';
   try {
-    await loadModule('fd_purchases');
-    if (typeof window.loadPurchases === 'function') await window.loadPurchases();
+    await loadModule('overview');
+    if (typeof window.loadOverviewPage === 'function') await window.loadOverviewPage();
     if (statusEl) {
       statusEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' });
     }
@@ -322,4 +320,42 @@ async function loadAll() {
   }
 }
 
+
+// ============================================================
+// SIDEBAR — Section collapse / expand
+// ============================================================
+var SIDEBAR_STATE_KEY = 'sf_sidebar_collapsed';
+
+function toggleNavSection(sectionKey) {
+  var wrap = document.querySelector('.nav-section-wrap[data-section="' + sectionKey + '"]');
+  if (!wrap) return;
+  wrap.classList.toggle('collapsed');
+  // Persist state
+  try {
+    var st = JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY) || '{}');
+    st[sectionKey] = wrap.classList.contains('collapsed');
+    localStorage.setItem(SIDEBAR_STATE_KEY, JSON.stringify(st));
+  } catch (_) {}
+}
+
+function restoreSidebarState() {
+  try {
+    var st = JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY) || '{}');
+    Object.keys(st).forEach(function(k) {
+      if (st[k]) {
+        var w = document.querySelector('.nav-section-wrap[data-section="' + k + '"]');
+        if (w) w.classList.add('collapsed');
+      }
+    });
+  } catch (_) {}
+  // Auto-expand the section containing the active nav item
+  var activeBtn = document.querySelector('.nav-item.active');
+  if (activeBtn) {
+    var wrap = activeBtn.closest('.nav-section-wrap');
+    if (wrap) wrap.classList.remove('collapsed');
+  }
+}
+
+
 loadAll();
+restoreSidebarState();
