@@ -1593,22 +1593,18 @@
       <div id="abbrev-ingredients"></div>
     </div>
 
-    <!-- Fertilizers (NEW, mirrors Ingredients pattern) -->
+    <!-- Fertilizers — registry only. Purchases and inventory live in Land → Fertilizers -->
     <div class="page" id="page-fertilizers">
       <div class="page-hdr"><h1>Fertilizers</h1>
         <div class="page-hdr-right">
           <button class="btn btn-primary" onclick="openFertModal()">+ Add fertilizer</button>
-          <button class="btn" onclick="openFertPurchaseModal()">+ Log purchase</button>
           <button class="refresh-btn" onclick="loadFertilizersPage()">↻ Refresh</button>
         </div>
       </div>
+      <div style="padding:10px 22px 0;font-size:12px;color:var(--muted)">Registry only — purchases and stock are managed in <strong>Land → Fertilizers</strong>.</div>
       <div class="section">
         <div class="section-hdr"><h2>Fertilizer registry</h2><span class="section-meta" id="fert-count"></span></div>
         <div id="fert-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Purchase log</h2><span class="section-meta" id="fert-purch-count"></span></div>
-        <div id="fert-purch-table"><div class="loading">Loading…</div></div>
       </div>
       <div id="abbrev-fertilizers"></div>
     </div>
