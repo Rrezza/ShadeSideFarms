@@ -1801,33 +1801,68 @@
 
 <!-- Fertilizer modal (Setup → Fertilizers) -->
 <div class="modal-overlay" id="fert-modal" style="display:none">
-  <div class="modal-box">
+  <div class="modal-box modal-large">
     <h3 id="fert-modal-title">Add fertilizer</h3>
-    <div class="modal-fields">
-      <label>Name</label>
-      <input type="text" id="fert-name" placeholder="e.g. Gypsum, Urea">
-      <label>Type</label>
-      <select id="fert-type">
-        <option value="granular">Granular</option>
-        <option value="liquid">Liquid</option>
-        <option value="organic">Organic</option>
-        <option value="mineral">Mineral</option>
-        <option value="other">Other</option>
-      </select>
-      <label>Unit</label>
-      <select id="fert-unit">
-        <option value="kg">kg</option>
-        <option value="bag">bag</option>
-        <option value="litre">litre</option>
-        <option value="tonne">tonne</option>
-      </select>
-      <label>kg per bag <span style="font-size:11px;color:var(--muted)">(required if unit = bag)</span></label>
-      <input type="number" id="fert-kg-per-bag" min="0.1" step="0.1" placeholder="e.g. 50">
-      <label>Supplier</label>
-      <input type="text" id="fert-supplier" placeholder="Optional">
-      <label>Notes</label>
-      <input type="text" id="fert-notes" placeholder="Optional">
+
+    <!-- Basic information -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Basic information</div>
+    <div class="hf-grid" style="margin-bottom:10px">
+      <div class="hf-field"><label>Name <span style="color:var(--red)">*</span></label>
+        <input type="text" id="fert-name" placeholder="e.g. Gypsum, Urea 46%, Humic Acid"></div>
+      <div class="hf-field"><label>Type</label>
+        <select id="fert-type" onchange="updateFertModalLabels()">
+          <option value="granular">Granular</option>
+          <option value="liquid">Liquid</option>
+          <option value="organic">Organic</option>
+          <option value="mineral">Mineral</option>
+          <option value="other">Other</option>
+        </select></div>
+      <div class="hf-field"><label>Chemical form</label>
+        <input type="text" id="fert-chemical-form" placeholder="e.g. Gypsum 90% CaSO₄·2H₂O"></div>
     </div>
+    <div class="hf-grid" style="margin-bottom:10px">
+      <div class="hf-field"><label id="fert-qty-label">kg per bag</label>
+        <input type="number" id="fert-qty-per-unit" min="0" step="0.1" placeholder="e.g. 50"></div>
+      <div class="hf-field"><label id="fert-reorder-label">Reorder point (kg)</label>
+        <input type="number" id="fert-reorder" min="0" step="1" placeholder="e.g. 100"></div>
+      <div class="hf-field"><label>Supplier</label>
+        <input type="text" id="fert-supplier" placeholder="Optional"></div>
+    </div>
+    <div style="margin-bottom:18px">
+      <label style="display:block;font-size:12px;margin-bottom:4px">Notes</label>
+      <input type="text" id="fert-notes" placeholder="Optional" style="width:100%">
+    </div>
+
+    <!-- Macronutrients -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Macronutrients — enter elemental % as on the bag label</div>
+    <div class="hf-grid" style="margin-bottom:18px">
+      <div class="hf-field"><label>N %</label>
+        <input type="number" id="fert-n" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>P₂O₅ %</label>
+        <input type="number" id="fert-p2o5" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>K₂O %</label>
+        <input type="number" id="fert-k2o" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Ca %</label>
+        <input type="number" id="fert-ca" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Mg %</label>
+        <input type="number" id="fert-mg" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>S %</label>
+        <input type="number" id="fert-s" min="0" max="100" step="0.1" placeholder="—"></div>
+    </div>
+
+    <!-- Micronutrients -->
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Micronutrients (ppm)</div>
+    <div class="hf-grid" style="margin-bottom:18px">
+      <div class="hf-field"><label>Fe ppm</label>
+        <input type="number" id="fert-fe" min="0" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Zn ppm</label>
+        <input type="number" id="fert-zn" min="0" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>B ppm</label>
+        <input type="number" id="fert-b" min="0" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Mn ppm</label>
+        <input type="number" id="fert-mn" min="0" step="0.1" placeholder="—"></div>
+    </div>
+
     <div class="modal-btns">
       <button class="btn" onclick="closeFertModal()">Cancel</button>
       <button class="btn btn-primary" onclick="submitFert()">Save</button>
@@ -1842,15 +1877,18 @@
     <h3>Log fertilizer purchase</h3>
     <div class="modal-fields">
       <label>Fertilizer</label>
-      <select id="fp-fert"><option value="">Select fertilizer</option></select>
+      <select id="fp-fert" onchange="updatePurchaseModalLabels()"><option value="">Select fertilizer</option></select>
       <label>Date</label>
       <input type="date" id="fp-date">
-      <label>Quantity</label>
-      <input type="number" id="fp-qty" min="0" step="0.5" placeholder="e.g. 50">
-      <label>Cost per unit (PKR)</label>
-      <input type="number" id="fp-cost" min="0" step="0.01">
-      <label>Supplier (optional)</label>
-      <input type="text" id="fp-supplier">
+      <label id="fp-qty-label">Quantity (bags)</label>
+      <input type="number" id="fp-qty" min="0" step="1" placeholder="e.g. 3" oninput="updatePurchaseDerived()">
+      <label id="fp-cost-label">Cost per bag (PKR)</label>
+      <input type="number" id="fp-cost" min="0" step="1" placeholder="e.g. 3200" oninput="updatePurchaseDerived()">
+      <div id="fp-derived" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:13px;color:var(--muted)">
+        <span id="fp-derived-text"></span>
+      </div>
+      <label>Supplier</label>
+      <input type="text" id="fp-supplier" placeholder="Where did you get it?">
       <label>Notes (optional)</label>
       <input type="text" id="fp-notes">
     </div>
@@ -1858,6 +1896,35 @@
       <button class="btn" onclick="closeFertPurchaseModal()">Cancel</button>
       <button class="btn btn-primary" onclick="submitFertPurchase()">Save</button>
       <span id="fp-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Fertilizer Nutrients modal — edit from registry row -->
+<div class="modal-overlay" id="fert-nutrients-modal" style="display:none">
+  <div class="modal-box modal-large">
+    <h3 id="fert-nutrients-title">Nutrient profile</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Enter values as on the bag label. For phosphorus enter P₂O₅ %; for potassium enter K₂O %. For Ca, Mg, S enter elemental %. Micronutrients in ppm. Leave blank if not present or unknown.</p>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Macronutrients (%)</div>
+    <div class="hf-grid" style="margin-bottom:18px">
+      <div class="hf-field"><label>N %</label><input type="number" id="fn-n" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>P₂O₅ %</label><input type="number" id="fn-p2o5" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>K₂O %</label><input type="number" id="fn-k2o" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Ca %</label><input type="number" id="fn-ca" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Mg %</label><input type="number" id="fn-mg" min="0" max="100" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>S %</label><input type="number" id="fn-s" min="0" max="100" step="0.1" placeholder="—"></div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Micronutrients (ppm)</div>
+    <div class="hf-grid" style="margin-bottom:18px">
+      <div class="hf-field"><label>Fe ppm</label><input type="number" id="fn-fe" min="0" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Zn ppm</label><input type="number" id="fn-zn" min="0" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>B ppm</label><input type="number" id="fn-b" min="0" step="0.1" placeholder="—"></div>
+      <div class="hf-field"><label>Mn ppm</label><input type="number" id="fn-mn" min="0" step="0.1" placeholder="—"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeFertNutrientsModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFertNutrients()">Save</button>
+      <span id="fn-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
     </div>
   </div>
 </div>
