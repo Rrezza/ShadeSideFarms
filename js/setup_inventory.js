@@ -36,9 +36,7 @@ async function loadInventoryPage() {
         'active=eq.true&select=id,name,type,quantity_per_purchase_unit,reorder_point&order=name'),
       sbGet('fertilizer_purchases',
         'select=fertilizer_id,qty'),
-      sbGet('gypsum_applications',
-        'select=fertilizer_id,kg_applied'),
-      sbGet('amendment_applications',
+      sbGet('fertilizer_applications',
         'select=fertilizer_id,kg_applied')
     ]);
 
@@ -83,11 +81,7 @@ async function loadInventoryPage() {
     });
 
     // Applications are always recorded in kg / L (no conversion needed)
-    r[5].forEach(function(g) {
-      if (g.fertilizer_id && invFertStock[g.fertilizer_id] && g.kg_applied != null)
-        invFertStock[g.fertilizer_id].applied += parseFloat(g.kg_applied);
-    });
-    r[6].forEach(function(a) {
+    r[5].forEach(function(a) {
       if (a.fertilizer_id && invFertStock[a.fertilizer_id] && a.kg_applied != null)
         invFertStock[a.fertilizer_id].applied += parseFloat(a.kg_applied);
     });

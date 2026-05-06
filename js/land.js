@@ -18,8 +18,7 @@ var landIngredients   = [];
 var landPlots         = [];
 var landFerts         = [];
 var landFertPurchases = [];
-var landGypsum        = [];
-var landAmendments    = [];
+var landFertApps      = [];
 var landTests         = [];
 var landCrops         = [];
 var landHarvests      = [];
@@ -116,12 +115,10 @@ async function loadLandPage() {
         'select=id,plot_code,plot_name,plot_type,area_acres,area_unit,use_case,description,' +
         'status,irrigation_method,date_retired,notes,location_id,locations(id,name)' +
         '&order=plot_code'),
-      sbGet('fertilizers',          'select=id,name,type,unit,supplier,ec_impact,notes,active&order=name'),
+      sbGet('fertilizers',          'select=id,name,type,unit,quantity_per_purchase_unit,reorder_point,supplier,ec_impact,notes,active&order=name'),
       sbGet('fertilizer_purchases', 'select=id,fertilizer_id,date,qty,cost_per_unit,supplier,notes&order=date.desc&limit=500'),
-      sbGet('gypsum_applications',
-        'select=id,date,kg_applied,method,water_source,notes,field_plot_id,fertilizer_id,workers(name)&order=date.desc'),
-      sbGet('amendment_applications',
-        'select=id,date,amendment_type,kg_applied,method,water_source,source,notes,field_plot_id,fertilizer_id,workers(name)&order=date.desc'),
+      safeFetch('fertilizer_applications',
+        'select=id,date,kg_applied,application_method,water_source,notes,field_plot_id,fertilizer_id,worker_id,workers(name)&order=date.desc'),
       sbGet('soil_tests',
         'select=id,date,sample_date,report_date,test_type,is_baseline,sample_depth,lab_name,' +
         'ec_ms_cm,ph,organic_matter_pct,sar,rsc,esp,available_phosphorus_mg_kg,' +
@@ -156,19 +153,18 @@ async function loadLandPage() {
     landPlots         = r[0];
     landFerts         = r[1];
     landFertPurchases = r[2];
-    landGypsum        = r[3];
-    landAmendments    = r[4];
-    landTests         = r[5];
-    landCrops         = r[6];
-    landHarvests      = r[7];
-    landObservations  = r[8];
-    landWatering      = r[9];
-    landWaterTests    = r[10];
-    landCropRegistry  = r[11];
-    landLocations     = r[12];
-    landCropGroups    = r[13];
-    landIngredients   = r[14];
-    landWorkers       = r[15];
+    landFertApps      = r[3];
+    landTests         = r[4];
+    landCrops         = r[5];
+    landHarvests      = r[6];
+    landObservations  = r[7];
+    landWatering      = r[8];
+    landWaterTests    = r[9];
+    landCropRegistry  = r[10];
+    landLocations     = r[11];
+    landCropGroups    = r[12];
+    landIngredients   = r[13];
+    landWorkers       = r[14];
     landLoaded        = true;
 
     if (loadingEl) loadingEl.innerHTML = '';
@@ -241,13 +237,23 @@ function populateLandDropdowns() {
     var el = document.getElementById(id); if (el) el.innerHTML = plotFilter;
   });
 
-  // Fertilizer dropdown for application log
-  var fertOpts = '<option value="">— none —</option>' +
+  // Fertilizer dropdowns — application form picker + filter
+  var fertPickOpts = '<option value="">Select fertilizer *</option>' +
     landFerts.filter(function(f) { return f.active; }).map(function(f) {
-      return '<option value="' + f.id + '">' + f.name + ' (' + f.unit + ')</option>';
+      var su  = f.type === 'liquid' ? 'L' : 'kg';
+      var pu  = f.type === 'liquid' ? 'container' : 'bag';
+      var qpu = f.quantity_per_purchase_unit ? ' · ' + f.quantity_per_purchase_unit + ' ' + su + '/' + pu : '';
+      return '<option value="' + f.id + '">' + f.name + qpu + '</option>';
     }).join('');
   var fertEl = document.getElementById('la-fert');
-  if (fertEl) fertEl.innerHTML = fertOpts;
+  if (fertEl) fertEl.innerHTML = fertPickOpts;
+
+  var fertFilterOpts = '<option value="">All fertilizers</option>' +
+    landFerts.filter(function(f) { return f.active; }).map(function(f) {
+      return '<option value="' + f.id + '">' + f.name + '</option>';
+    }).join('');
+  var fertFilterEl = document.getElementById('land-app-fert-filter');
+  if (fertFilterEl) fertFilterEl.innerHTML = fertFilterOpts;
 
   // Crops registry dropdown for crop tracking
   var cropOpts = '<option value="">Select crop</option>' +
@@ -457,59 +463,115 @@ async function submitLandPlot() {
 // TAB 2: FERTILIZER INVENTORY
 // ============================================================
 function renderLandFert() {
-  document.getElementById('land-fert-meta').textContent =
-    landFerts.length + ' fertilizer' + (landFerts.length !== 1 ? 's' : '') +
-    ' · manage in Setup → Fertilizers';
-  var tbl = document.getElementById('land-fert-table');
-  if (!landFerts.length) {
-    tbl.innerHTML = '<div class="empty">No fertilizers in registry. Add via Setup → Fertilizers.</div>';
-    return;
-  }
+  // ── Stock summary ─────────────────────────────────────────
   var stockByFert = {};
   landFerts.forEach(function(f) {
-    stockByFert[f.id] = { purchased: 0, applied: 0, latestPrice: null, latestPriceDate: null };
+    stockByFert[f.id] = { purchasedKg: 0, appliedKg: 0, latestCostPerKg: null, latestCostDate: null };
   });
+
   landFertPurchases.forEach(function(pp) {
-    if (!stockByFert[pp.fertilizer_id]) return;
-    stockByFert[pp.fertilizer_id].purchased += parseFloat(pp.qty) || 0;
-    if (pp.cost_per_unit != null) {
-      var s = stockByFert[pp.fertilizer_id];
-      if (!s.latestPriceDate || pp.date > s.latestPriceDate) {
-        s.latestPrice = parseFloat(pp.cost_per_unit);
-        s.latestPriceDate = pp.date;
+    var st = stockByFert[pp.fertilizer_id];
+    if (!st || pp.qty == null) return;
+    var fert = landFerts.find(function(f) { return f.id === pp.fertilizer_id; });
+    var qpu  = fert && fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
+    if (qpu) {
+      st.purchasedKg += parseFloat(pp.qty) * qpu;
+      if (pp.cost_per_unit != null) {
+        var cpk = parseFloat(pp.cost_per_unit) / qpu;
+        if (!st.latestCostDate || pp.date > st.latestCostDate) {
+          st.latestCostPerKg = cpk;
+          st.latestCostDate  = pp.date;
+        }
       }
     }
   });
-  landGypsum.forEach(function(g) {
-    if (g.fertilizer_id && stockByFert[g.fertilizer_id])
-      stockByFert[g.fertilizer_id].applied += parseFloat(g.kg_applied) || 0;
+
+  landFertApps.forEach(function(a) {
+    var st = a.fertilizer_id ? stockByFert[a.fertilizer_id] : null;
+    if (st && a.kg_applied != null) st.appliedKg += parseFloat(a.kg_applied);
   });
-  landAmendments.forEach(function(a) {
-    if (a.fertilizer_id && stockByFert[a.fertilizer_id])
-      stockByFert[a.fertilizer_id].applied += parseFloat(a.kg_applied) || 0;
-  });
-  var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Fertilizer</th><th>Type</th><th>Unit</th><th>EC / Salt impact</th>' +
-    '<th class="right">Purchased</th><th class="right">Applied</th>' +
-    '<th class="right">Stock</th><th class="right">Latest price</th>' +
-    '</tr></thead><tbody>';
-  landFerts.forEach(function(f) {
-    var st    = stockByFert[f.id];
-    var stock = st.purchased - st.applied;
-    var cls   = stock <= 0 ? 'inv-stock-zero' : (stock < 50 ? 'inv-stock-low' : 'inv-stock-pos');
-    html += '<tr style="' + (!f.active ? 'opacity:0.5' : '') + '">' +
-      '<td style="font-weight:500">' + f.name + '</td>' +
-      '<td class="muted-cell">' + (f.type || '—') + '</td>' +
-      '<td class="muted-cell">' + f.unit + '</td>' +
-      '<td class="muted-cell" style="font-size:11px;max-width:160px">' + (f.ec_impact || '—') + '</td>' +
-      '<td class="mono right">' + r1(st.purchased) + ' ' + f.unit + '</td>' +
-      '<td class="mono right">' + r1(st.applied)   + ' ' + f.unit + '</td>' +
-      '<td class="mono right ' + cls + '">' + r1(stock) + ' ' + f.unit + '</td>' +
-      '<td class="mono right">' + (st.latestPrice != null ? pkr(st.latestPrice) + ' / ' + f.unit : '—') + '</td>' +
-      '</tr>';
-  });
-  html += '</tbody></table></div>';
-  tbl.innerHTML = html;
+
+  document.getElementById('land-fert-meta').textContent =
+    landFerts.filter(function(f) { return f.active; }).length + ' active fertilizers';
+
+  var tbl = document.getElementById('land-fert-table');
+  if (!landFerts.length) {
+    tbl.innerHTML = '<div class="empty">No fertilizers in registry. Add via Setup → Fertilizers.</div>';
+  } else {
+    var html = '<div style="overflow-x:auto"><table><thead><tr>' +
+      '<th>Fertilizer</th><th>Type</th><th>Unit</th>' +
+      '<th class="right">Purchased</th><th class="right">Applied</th>' +
+      '<th class="right">Stock</th><th class="right">Cost / kg</th><th>Status</th>' +
+      '</tr></thead><tbody>';
+    landFerts.filter(function(f) { return f.active; }).forEach(function(f) {
+      var st    = stockByFert[f.id];
+      var su    = f.type === 'liquid' ? 'L' : 'kg';
+      var stock = st.purchasedKg - st.appliedKg;
+      var noConv = !f.quantity_per_purchase_unit;
+      var cls   = stock <= 0 ? 'inv-stock-zero'
+        : (f.reorder_point != null && stock < parseFloat(f.reorder_point) ? 'inv-stock-low' : 'inv-stock-pos');
+      var statusHtml = noConv
+        ? '<span class="badge badge-amber" title="Set kg/bag in Setup → Fertilizers">⚠ No conversion</span>'
+        : stock <= 0
+          ? '<span class="badge badge-red">Out of stock</span>'
+          : (f.reorder_point != null && stock < parseFloat(f.reorder_point)
+              ? '<span class="badge badge-amber">Low</span>'
+              : '<span class="badge badge-green">OK</span>');
+      html += '<tr>' +
+        '<td style="font-weight:500">' + f.name + '</td>' +
+        '<td class="muted-cell">' + (f.type || '—') + '</td>' +
+        '<td class="muted-cell">' + su + '</td>' +
+        '<td class="mono right">' + r1(st.purchasedKg) + ' ' + su + '</td>' +
+        '<td class="mono right">' + r1(st.appliedKg)   + ' ' + su + '</td>' +
+        '<td class="mono right ' + cls + '">' + r1(stock) + ' ' + su + '</td>' +
+        '<td class="mono right">' + (st.latestCostPerKg != null ? pkr(st.latestCostPerKg) + ' / ' + su : '—') + '</td>' +
+        '<td>' + statusHtml + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    tbl.innerHTML = html;
+  }
+
+  // ── Purchase log ──────────────────────────────────────────
+  var ptbl = document.getElementById('land-purch-table');
+  document.getElementById('land-purch-count').textContent =
+    landFertPurchases.length + ' purchase' + (landFertPurchases.length !== 1 ? 's' : '');
+
+  if (!landFertPurchases.length) {
+    ptbl.innerHTML = '<div class="empty">No purchases logged yet.</div>';
+  } else {
+    var phtml = '<div style="overflow-x:auto"><table><thead><tr>' +
+      '<th>Date</th><th>Fertilizer</th>' +
+      '<th class="right">Qty</th><th class="right">Total</th>' +
+      '<th class="right">Cost / unit</th><th class="right">Cost / kg</th>' +
+      '<th class="right">Total cost</th><th>Supplier</th><th>Notes</th><th></th>' +
+      '</tr></thead><tbody>';
+    landFertPurchases.forEach(function(p) {
+      var fert = landFerts.find(function(f) { return f.id === p.fertilizer_id; });
+      var su   = fert && fert.type === 'liquid' ? 'L' : 'kg';
+      var pu   = fert && fert.type === 'liquid' ? 'container' : 'bag';
+      var qpu  = fert && fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
+      var qty  = p.qty != null ? parseFloat(p.qty) : null;
+      var cpu  = p.cost_per_unit != null ? parseFloat(p.cost_per_unit) : null;
+      var totalSU   = (qty != null && qpu != null) ? qty * qpu : null;
+      var cpkg      = (cpu != null && qpu && qpu > 0) ? cpu / qpu : null;
+      var totalCost = (qty != null && cpu != null) ? qty * cpu : null;
+      phtml += '<tr>' +
+        '<td class="mono">' + fmtDate(p.date) + '</td>' +
+        '<td style="font-weight:500">' + (fert ? fert.name : '—') + '</td>' +
+        '<td class="mono right">' + (qty != null ? r1(qty) + ' ' + pu + (qty !== 1 ? 's' : '') : '—') + '</td>' +
+        '<td class="mono right">' + (totalSU != null ? r1(totalSU) + ' ' + su : '—') + '</td>' +
+        '<td class="mono right">' + (cpu != null ? pkr(cpu) + ' / ' + pu : '—') + '</td>' +
+        '<td class="mono right">' + (cpkg != null ? pkr(cpkg) + ' / ' + su : '—') + '</td>' +
+        '<td class="mono right">' + (totalCost != null ? pkr(totalCost) : '—') + '</td>' +
+        '<td class="muted-cell">' + (p.supplier || '—') + '</td>' +
+        '<td class="muted-cell" style="font-size:12px">' + (p.notes || '') + '</td>' +
+        '<td><button class="btn btn-sm del-btn" onclick="deleteLandFertPurchase(' + p.id + ')">Delete</button></td>' +
+        '</tr>';
+    });
+    phtml += '</tbody></table></div>';
+    ptbl.innerHTML = phtml;
+  }
 }
 
 function renderLandFertChart() {
@@ -521,19 +583,23 @@ function renderLandFertChart() {
   var byFert = {};
   landFertPurchases.forEach(function(pp) {
     if (pp.cost_per_unit == null) return;
-    if (!byFert[pp.fertilizer_id]) byFert[pp.fertilizer_id] = [];
-    byFert[pp.fertilizer_id].push({ x: pp.date, y: parseFloat(pp.cost_per_unit) });
+    var fert = landFerts.find(function(f) { return f.id === pp.fertilizer_id; });
+    var qpu  = fert && fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
+    if (!qpu || qpu <= 0) return;
+    var cpkg = parseFloat(pp.cost_per_unit) / qpu;
+    var su   = fert && fert.type === 'liquid' ? 'L' : 'kg';
+    if (!byFert[pp.fertilizer_id]) byFert[pp.fertilizer_id] = { pts: [], su: su, name: fert ? fert.name : String(pp.fertilizer_id) };
+    byFert[pp.fertilizer_id].pts.push({ x: pp.date, y: cpkg });
   });
   Object.keys(byFert).forEach(function(id) {
-    byFert[id].sort(function(a, b) { return a.x.localeCompare(b.x); });
+    byFert[id].pts.sort(function(a, b) { return a.x.localeCompare(b.x); });
   });
   var datasets = []; var idx = 0;
-  landFerts.forEach(function(f) {
-    var pts = byFert[f.id];
-    if (!pts || !pts.length) return;
+  Object.keys(byFert).forEach(function(id) {
+    var entry = byFert[id];
     datasets.push({
-      label: f.name + ' (PKR / ' + f.unit + ')',
-      data: pts,
+      label: entry.name + ' (PKR / ' + entry.su + ')',
+      data: entry.pts,
       borderColor: CHART_COLORS[idx % CHART_COLORS.length],
       backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
       tension: 0.2, pointRadius: 3, borderWidth: 2
@@ -567,7 +633,13 @@ function renderLandFertChart() {
 function toggleLandAppForm() {
   var f = document.getElementById('land-app-form');
   f.style.display = f.style.display === 'block' ? 'none' : 'block';
-  if (f.style.display === 'block') checkFoliarWarning();
+  if (f.style.display === 'block') {
+    document.getElementById('la-date').value = todayISO();
+    document.getElementById('la-bags').value = '';
+    document.getElementById('la-kg').value   = '';
+    document.getElementById('la-derived-wrap').style.display = 'none';
+    checkFoliarWarning();
+  }
 }
 
 function checkFoliarWarning() {
@@ -578,62 +650,80 @@ function checkFoliarWarning() {
   warn.style.display = (method === 'foliar_spray' && wsrc === 'tubewell') ? 'block' : 'none';
 }
 
+// Dual bags ↔ kg conversion for application form
+function laCalcFromBags() {
+  var fertId = document.getElementById('la-fert').value;
+  var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
+  var bags   = parseFloat(document.getElementById('la-bags').value);
+  var dw     = document.getElementById('la-derived-wrap');
+  var dt     = document.getElementById('la-derived-text');
+  if (!fert || !fert.quantity_per_purchase_unit || isNaN(bags) || bags <= 0) { dw.style.display = 'none'; return; }
+  var kg  = bags * parseFloat(fert.quantity_per_purchase_unit);
+  var su  = fert.type === 'liquid' ? 'L' : 'kg';
+  document.getElementById('la-kg').value = r1(kg);
+  dt.textContent = '→ ' + r1(kg) + ' ' + su;
+  dw.style.display = 'block';
+}
+
+function laCalcFromKg() {
+  var fertId = document.getElementById('la-fert').value;
+  var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
+  var kg     = parseFloat(document.getElementById('la-kg').value);
+  var dw     = document.getElementById('la-derived-wrap');
+  var dt     = document.getElementById('la-derived-text');
+  if (!fert || !fert.quantity_per_purchase_unit || isNaN(kg) || kg <= 0) { dw.style.display = 'none'; return; }
+  var qpu  = parseFloat(fert.quantity_per_purchase_unit);
+  var bags = kg / qpu;
+  var pu   = fert.type === 'liquid' ? 'containers' : 'bags';
+  document.getElementById('la-bags').value = r1(bags);
+  dt.textContent = '→ ~' + r1(bags) + ' ' + pu;
+  dw.style.display = 'block';
+}
+
+function laOnFertChange() {
+  // When fertilizer changes, recalculate from bags if bags has a value
+  var bags = parseFloat(document.getElementById('la-bags').value);
+  if (!isNaN(bags) && bags > 0) laCalcFromBags(); else laCalcFromKg();
+}
+
 function renderLandAppLog() {
-  var plotF = (document.getElementById('land-app-plot-filter') || {}).value || '';
-  var typeF = (document.getElementById('land-app-type-filter') || {}).value || '';
-  var combined = [];
-  landGypsum.forEach(function(r) {
-    if (plotF && String(r.field_plot_id) !== plotF) return;
-    if (typeF && typeF !== 'gypsum') return;
-    combined.push({
-      src: 'gypsum_applications', id: r.id, date: r.date,
-      plot: plotName(r.field_plot_id), type: 'gypsum',
-      kg: r.kg_applied, method: r.method, wsrc: r.water_source,
-      fertilizer_id: r.fertilizer_id,
-      worker: r.workers ? r.workers.name : null, notes: r.notes
-    });
+  var plotF = (document.getElementById('land-app-plot-filter')  || {}).value || '';
+  var fertF = (document.getElementById('land-app-fert-filter')  || {}).value || '';
+  var rows  = landFertApps.filter(function(r) {
+    if (plotF && String(r.field_plot_id) !== plotF) return false;
+    if (fertF && String(r.fertilizer_id) !== fertF) return false;
+    return true;
   });
-  landAmendments.forEach(function(r) {
-    if (plotF && String(r.field_plot_id) !== plotF) return;
-    if (typeF && typeF !== 'gypsum' && r.amendment_type !== typeF) return;
-    if (typeF === 'gypsum') return;
-    combined.push({
-      src: 'amendment_applications', id: r.id, date: r.date,
-      plot: plotName(r.field_plot_id), type: r.amendment_type,
-      kg: r.kg_applied, method: r.method, wsrc: r.water_source,
-      fertilizer_id: r.fertilizer_id,
-      worker: r.workers ? r.workers.name : null, notes: r.notes
-    });
-  });
-  combined.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  rows.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
   document.getElementById('land-app-count').textContent =
-    combined.length + ' record' + (combined.length !== 1 ? 's' : '');
+    rows.length + ' record' + (rows.length !== 1 ? 's' : '');
   var tbl = document.getElementById('land-app-table');
-  if (!combined.length) { tbl.innerHTML = '<div class="empty">No applications logged yet.</div>'; return; }
-  var totalKg = combined.reduce(function(s, r) { return s + (parseFloat(r.kg) || 0); }, 0);
+  if (!rows.length) { tbl.innerHTML = '<div class="empty">No applications logged yet.</div>'; return; }
+  var totalKg = rows.reduce(function(s, r) { return s + (parseFloat(r.kg_applied) || 0); }, 0);
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Date</th><th>Plot</th><th>Type</th><th>Method</th><th>Water source</th>' +
-    '<th class="right">kg</th><th>Fertilizer</th><th>Worker</th><th>Notes</th>' +
+    '<th>Date</th><th>Plot</th><th>Fertilizer</th>' +
+    '<th class="right">kg applied</th><th>Method</th><th>Water source</th>' +
+    '<th>Worker</th><th>Notes</th><th></th>' +
     '</tr></thead><tbody>';
-  combined.forEach(function(r) {
-    var fert = r.fertilizer_id ? landFerts.find(function(f) { return f.id === r.fertilizer_id; }) : null;
-    var wsrcWarn = r.method === 'foliar_spray' && r.wsrc === 'tubewell';
-    html += '<tr>';
-    html += '<td class="mono">' + fmtDate(r.date) + '</td>';
-    html += '<td style="font-weight:500">' + r.plot + '</td>';
-    html += '<td><span class="badge ' + (AMEND_BADGE[r.type] || 'badge-gray') + '">' + (AMEND_LABELS[r.type] || r.type) + '</span></td>';
-    html += '<td class="muted-cell" style="font-size:12px">' + (r.method || '—') + '</td>';
-    html += '<td class="muted-cell" style="font-size:12px">' +
-      (wsrcWarn ? '<span style="color:var(--red)">⚠ ' + (r.wsrc || '—') + '</span>' : (r.wsrc || '—')) + '</td>';
-    html += '<td class="mono right">' + (r.kg != null ? Math.round(r.kg).toLocaleString() + ' kg' : '—') + '</td>';
-    html += '<td class="muted-cell" style="font-size:12px">' + (fert ? fert.name : '—') + '</td>';
-    html += '<td class="muted-cell" style="font-size:12px">' + (r.worker || '—') + '</td>';
-    html += '<td class="muted-cell" style="font-size:12px">' + (r.notes || '') + '</td>';
-    html += '</tr>';
+  rows.forEach(function(r) {
+    var fert    = r.fertilizer_id ? landFerts.find(function(f) { return f.id === r.fertilizer_id; }) : null;
+    var wsrcWarn = r.application_method === 'foliar_spray' && r.water_source === 'tubewell';
+    html += '<tr>' +
+      '<td class="mono">' + fmtDate(r.date) + '</td>' +
+      '<td style="font-weight:500">' + plotName(r.field_plot_id) + '</td>' +
+      '<td>' + (fert ? '<span class="badge badge-amber">' + fert.name + '</span>' : '—') + '</td>' +
+      '<td class="mono right">' + (r.kg_applied != null ? Math.round(r.kg_applied).toLocaleString() + ' kg' : '—') + '</td>' +
+      '<td class="muted-cell" style="font-size:12px">' + (r.application_method || '—') + '</td>' +
+      '<td class="muted-cell" style="font-size:12px">' +
+        (wsrcWarn ? '<span style="color:var(--red)">⚠ ' + (r.water_source || '—') + '</span>' : (r.water_source || '—')) + '</td>' +
+      '<td class="muted-cell" style="font-size:12px">' + (r.workers ? r.workers.name : '—') + '</td>' +
+      '<td class="muted-cell" style="font-size:12px">' + (r.notes || '') + '</td>' +
+      '<td><button class="btn btn-sm del-btn" onclick="deleteFertApp(' + r.id + ')">Delete</button></td>' +
+      '</tr>';
   });
-  html += '<tr style="background:var(--bg)"><td colspan="5" style="font-weight:500;padding:10px 18px">Total applied</td>' +
+  html += '<tr style="background:var(--bg)"><td colspan="3" style="font-weight:500;padding:10px 18px">Total applied</td>' +
     '<td class="mono right" style="font-weight:500">' + Math.round(totalKg).toLocaleString() + ' kg</td>' +
-    '<td colspan="3"></td></tr>';
+    '<td colspan="5"></td></tr>';
   html += '</tbody></table></div>';
   tbl.innerHTML = html;
 }
@@ -644,35 +734,124 @@ async function submitLandApp() {
   try {
     var date   = document.getElementById('la-date').value;
     var plotId = document.getElementById('la-plot').value;
-    var type   = document.getElementById('la-type').value;
-    var method = document.getElementById('la-method').value;
-    var wsrc   = document.getElementById('la-wsrc').value;
     var fertId = document.getElementById('la-fert').value;
     var kg     = parseFloat(document.getElementById('la-kg').value);
-    var source = (document.getElementById('la-source').value || '').trim();
+    var method = document.getElementById('la-method').value;
+    var wsrc   = document.getElementById('la-wsrc').value;
     var worker = document.getElementById('la-worker').value;
     var notes  = (document.getElementById('la-notes').value || '').trim();
-    if (!date || !plotId || isNaN(kg) || kg <= 0) throw new Error('Date, plot, and kg are required.');
-    var d = { date: date, field_plot_id: parseInt(plotId), kg_applied: kg };
-    if (method) d.method       = method;
-    if (wsrc)   d.water_source = wsrc;
-    if (fertId) d.fertilizer_id = parseInt(fertId);
-    if (worker) d.worker_id    = parseInt(worker);
-    if (notes)  d.notes        = notes;
-    if (type === 'gypsum') {
-      await sbInsert('gypsum_applications', d);
-    } else {
-      d.amendment_type = type;
-      if (source) d.source = source;
-      await sbInsert('amendment_applications', d);
-    }
+    if (!date || !plotId)      throw new Error('Date and plot are required.');
+    if (!fertId)               throw new Error('Select a fertilizer from the registry.');
+    if (isNaN(kg) || kg <= 0) throw new Error('Enter a valid kg amount.');
+    var d = {
+      date: date, field_plot_id: parseInt(plotId),
+      fertilizer_id: parseInt(fertId), kg_applied: kg
+    };
+    if (method) d.application_method = method;
+    if (wsrc)   d.water_source       = wsrc;
+    if (worker) d.worker_id          = parseInt(worker);
+    if (notes)  d.notes              = notes;
+    await sbInsert('fertilizer_applications', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
     document.getElementById('land-app-form').style.display = 'none';
-    ['la-kg','la-source','la-notes'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
     await loadLandPage();
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
+}
+
+async function deleteFertApp(id) {
+  if (!confirm('Delete this application record?')) return;
+  try {
+    await sbDelete('fertilizer_applications', id);
+    await loadLandPage();
+  } catch (err) { alert('Delete failed: ' + err.message); }
+}
+
+async function deleteLandFertPurchase(id) {
+  if (!confirm('Delete this purchase record?')) return;
+  try {
+    await sbDelete('fertilizer_purchases', id);
+    await loadLandPage();
+  } catch (err) { alert('Delete failed: ' + err.message); }
+}
+
+async function submitLandFertPurchase() {
+  var statusEl = document.getElementById('lp-status');
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
+  try {
+    var fertId = document.getElementById('lp-fert').value;
+    var date   = document.getElementById('lp-date').value;
+    var qty    = parseFloat(document.getElementById('lp-qty').value);
+    if (!fertId || !date || isNaN(qty) || qty <= 0)
+      throw new Error('Fertilizer, date, and quantity required.');
+    var d = { fertilizer_id: parseInt(fertId), date: date, qty: qty };
+    var cost = document.getElementById('lp-cost').value;
+    if (cost) d.cost_per_unit = parseFloat(cost);
+    var sup = (document.getElementById('lp-supplier').value || '').trim();
+    if (sup) d.supplier = sup;
+    var notes = (document.getElementById('lp-notes').value || '').trim();
+    if (notes) d.notes = notes;
+    await sbInsert('fertilizer_purchases', [d]);
+    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
+    setTimeout(function() {
+      document.getElementById('land-purch-modal').style.display = 'none';
+      loadLandPage();
+    }, 700);
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
+  }
+}
+
+function updateLandPurchDerived() {
+  var fertId = document.getElementById('lp-fert').value;
+  var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
+  var qty    = parseFloat(document.getElementById('lp-qty').value);
+  var cost   = parseFloat(document.getElementById('lp-cost').value);
+  var dw     = document.getElementById('lp-derived');
+  var dt     = document.getElementById('lp-derived-text');
+  if (!fert || !fert.quantity_per_purchase_unit) { dw.style.display = 'none'; return; }
+  var qpu = parseFloat(fert.quantity_per_purchase_unit);
+  var su  = fert.type === 'liquid' ? 'L' : 'kg';
+  var parts = [];
+  if (!isNaN(qty) && qty > 0) parts.push(r1(qty * qpu) + ' ' + su + ' total');
+  if (!isNaN(cost) && cost > 0 && qpu > 0) parts.push(pkr(cost / qpu) + ' / ' + su);
+  if (parts.length) { dw.style.display = 'block'; dt.textContent = '→  ' + parts.join('   ·   '); }
+  else { dw.style.display = 'none'; }
+}
+
+function updateLandPurchLabels() {
+  var fertId   = document.getElementById('lp-fert').value;
+  var fert     = landFerts.find(function(f) { return String(f.id) === fertId; });
+  var isLiquid = fert && fert.type === 'liquid';
+  var pu = isLiquid ? 'container' : 'bag';
+  document.getElementById('lp-qty-label').textContent  = 'Quantity (' + pu + 's)';
+  document.getElementById('lp-cost-label').textContent = 'Cost per ' + pu + ' (PKR)';
+  updateLandPurchDerived();
+}
+
+function openLandPurchModal() {
+  var sel = document.getElementById('lp-fert');
+  sel.innerHTML = '<option value="">Select fertilizer</option>' +
+    landFerts.filter(function(f) { return f.active; }).map(function(f) {
+      var su  = f.type === 'liquid' ? 'L' : 'kg';
+      var pu  = f.type === 'liquid' ? 'container' : 'bag';
+      var qpu = f.quantity_per_purchase_unit ? ' · ' + f.quantity_per_purchase_unit + ' ' + su + '/' + pu : '';
+      return '<option value="' + f.id + '">' + f.name + qpu + '</option>';
+    }).join('');
+  document.getElementById('lp-date').value = todayISO();
+  ['lp-qty','lp-cost','lp-supplier','lp-notes'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('lp-qty-label').textContent  = 'Quantity (bags)';
+  document.getElementById('lp-cost-label').textContent = 'Cost per bag (PKR)';
+  document.getElementById('lp-derived').style.display  = 'none';
+  document.getElementById('lp-status').textContent     = '';
+  document.getElementById('land-purch-modal').style.display = 'flex';
+}
+
+function closeLandPurchModal() {
+  document.getElementById('land-purch-modal').style.display = 'none';
 }
 
 

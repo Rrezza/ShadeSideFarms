@@ -43,16 +43,9 @@ async function loadFertilizersPage() {
   document.getElementById('fert-table').innerHTML       = '<div class="loading">Loading…</div>';
   document.getElementById('fert-purch-table').innerHTML = '<div class="loading">Loading…</div>';
   try {
-    var r = await Promise.all([
-      sbGet('fertilizers',
-        'select=*&order=name'),
-      sbGet('fertilizer_purchases',
-        'select=*,fertilizers(id,name,type,quantity_per_purchase_unit)&order=date.desc&limit=300')
-    ]);
-    fertData         = r[0];
-    fertPurchaseData = r[1];
+    var r = await sbGet('fertilizers', 'select=*&order=name');
+    fertData = r;
     renderFertTable();
-    renderFertPurchaseTable();
     renderAbbrevKey('abbrev-fertilizers', ['PKR']);
   } catch (err) {
     document.getElementById('fert-table').innerHTML =
@@ -167,133 +160,6 @@ async function patchFert(id, field, value) {
   } catch (err) {
     alert('Update failed: ' + err.message);
     loadFertilizersPage();
-  }
-}
-
-// ============================================================
-// PURCHASE LOG TABLE
-// ============================================================
-function renderFertPurchaseTable() {
-  document.getElementById('fert-purch-count').textContent =
-    fertPurchaseData.length + ' purchase' + (fertPurchaseData.length !== 1 ? 's' : '');
-  var tbl = document.getElementById('fert-purch-table');
-  if (!fertPurchaseData.length) {
-    tbl.innerHTML = '<div class="empty">No purchases logged. Click + Log purchase.</div>';
-    return;
-  }
-  var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Date</th>' +
-    '<th>Fertilizer</th>' +
-    '<th class="right">Qty</th>' +
-    '<th class="right">Total (kg / L)</th>' +
-    '<th class="right">Cost / unit</th>' +
-    '<th class="right">Cost / kg or L</th>' +
-    '<th class="right">Total cost</th>' +
-    '<th>Supplier</th>' +
-    '<th>Notes</th>' +
-    '<th></th>' +
-    '</tr></thead><tbody>';
-
-  fertPurchaseData.forEach(function(p) {
-    var fert      = p.fertilizers || {};
-    var type      = fert.type || 'granular';
-    var su        = fertStockUnit(type);
-    var pu        = fertPurchUnitLabel(type);
-    var qpu       = fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
-    var qty       = p.qty        != null ? parseFloat(p.qty)        : null;
-    var costPerPU = p.cost_per_unit != null ? parseFloat(p.cost_per_unit) : null;
-
-    var totalSU       = (qty != null && qpu != null)             ? qty * qpu            : null;
-    var costPerSU     = (costPerPU != null && qpu && qpu > 0)    ? costPerPU / qpu      : null;
-    var totalCost     = (qty != null && costPerPU != null)        ? qty * costPerPU      : null;
-
-    html += '<tr>' +
-      '<td class="mono">' + fmtDate(p.date) + '</td>' +
-      '<td style="font-weight:500">' + (fert.name || '—') + '</td>' +
-      '<td class="mono right">' + (qty != null ? r1(qty) + ' ' + pu + (qty !== 1 ? 's' : '') : '—') + '</td>' +
-      '<td class="mono right">' + (totalSU    != null ? r1(totalSU)    + ' ' + su : '—') + '</td>' +
-      '<td class="mono right">' + (costPerPU  != null ? pkr(costPerPU) + ' / ' + pu : '—') + '</td>' +
-      '<td class="mono right">' + (costPerSU  != null ? pkr(costPerSU) + ' / ' + su : '—') + '</td>' +
-      '<td class="mono right">' + (totalCost  != null ? pkr(totalCost) : '—') + '</td>' +
-      '<td class="muted-cell">' + (p.supplier || '—') + '</td>' +
-      '<td class="muted-cell" style="font-size:12px">' + (p.notes || '') + '</td>' +
-      '<td><button class="btn btn-sm del-btn" onclick="deleteFertPurchase(' + p.id + ')">Delete</button></td>' +
-      '</tr>';
-  });
-  html += '</tbody></table></div>';
-  tbl.innerHTML = html;
-}
-
-// ============================================================
-// ADD FERTILIZER MODAL
-// ============================================================
-var FERT_MODAL_FIELDS = [
-  ['fert-supplier',      'supplier',                   'text'],
-  ['fert-notes',         'notes',                      'text'],
-  ['fert-chemical-form', 'chemical_form',              'text'],
-  ['fert-qty-per-unit',  'quantity_per_purchase_unit', 'num'],
-  ['fert-reorder',       'reorder_point',              'num'],
-  ['fert-n',             'n_pct',                      'num'],
-  ['fert-p2o5',          'p2o5_pct',                   'num'],
-  ['fert-k2o',           'k2o_pct',                    'num'],
-  ['fert-ca',            'ca_pct',                     'num'],
-  ['fert-mg',            'mg_pct',                     'num'],
-  ['fert-s',             's_pct',                      'num'],
-  ['fert-fe',            'fe_ppm',                     'num'],
-  ['fert-zn',            'zn_ppm',                     'num'],
-  ['fert-b',             'b_ppm',                      'num'],
-  ['fert-mn',            'mn_ppm',                     'num']
-];
-
-function updateFertModalLabels() {
-  var isLiquid = document.getElementById('fert-type').value === 'liquid';
-  document.getElementById('fert-qty-label').textContent =
-    isLiquid ? 'L per container' : 'kg per bag';
-  document.getElementById('fert-reorder-label').textContent =
-    isLiquid ? 'Reorder point (L)' : 'Reorder point (kg)';
-}
-
-function openFertModal() {
-  document.getElementById('fert-name').value = '';
-  document.getElementById('fert-type').value = 'granular';
-  FERT_MODAL_FIELDS.forEach(function(f) {
-    var el = document.getElementById(f[0]);
-    if (el) el.value = '';
-  });
-  document.getElementById('fert-modal-status').textContent = '';
-  updateFertModalLabels();
-  document.getElementById('fert-modal').style.display = 'flex';
-}
-
-function closeFertModal() {
-  document.getElementById('fert-modal').style.display = 'none';
-}
-
-async function submitFert() {
-  var statusEl = document.getElementById('fert-modal-status');
-  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
-  try {
-    var name = document.getElementById('fert-name').value.trim();
-    if (!name) throw new Error('Name is required.');
-    var type = document.getElementById('fert-type').value;
-    var d = {
-      name:   name,
-      type:   type,
-      unit:   type === 'liquid' ? 'litre' : 'kg',  // legacy col kept consistent
-      active: true
-    };
-    FERT_MODAL_FIELDS.forEach(function(f) {
-      var el = document.getElementById(f[0]);
-      if (!el) return;
-      var v = el.value.trim();
-      if (!v) return;
-      d[f[1]] = f[2] === 'num' ? parseFloat(v) : v;
-    });
-    await sbInsert('fertilizers', [d]);
-    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
-    setTimeout(function() { closeFertModal(); loadFertilizersPage(); }, 800);
-  } catch (err) {
-    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
 }
 
