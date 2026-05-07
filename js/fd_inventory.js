@@ -487,6 +487,16 @@ function fiAcqAutoCalc() {
     ? '→ ' + pkr(total / qty) + ' / kg' : '';
 }
 
+// Helper — latest cost per kg for an ingredient from loaded acquisitions
+function fiLatestCostPerKg(ingredientId) {
+  var rows = fiAcqRows
+    .filter(function(a) {
+      return a.ingredient_id === ingredientId && a.cost_per_kg != null;
+    })
+    .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  return rows.length ? parseFloat(rows[0].cost_per_kg) : null;
+}
+
 async function submitFiAcq() {
   var statusEl = document.getElementById('fi-acq-status');
   statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
@@ -501,10 +511,12 @@ async function submitFiAcq() {
     if (!date)             throw new Error('Date required.');
     if (!ingId)            throw new Error('Select an ingredient.');
     if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be greater than zero.');
+    var cpk = (!isNaN(total) && total > 0 && qty > 0) ? total / qty : null;
     var d = {
       date: date, ingredient_id: parseInt(ingId),
       acquisition_type: type, quantity_kg: qty,
-      total_cost_pkr: isNaN(total) ? null : total,
+      total_cost_pkr:  isNaN(total) ? null : total,
+      cost_per_kg:     cpk,
       recorded_by: worker ? parseInt(worker) : null,
       notes: notes
     };
@@ -649,6 +661,33 @@ function fiBatchUpdatePreview() {
       '<strong>' + outIng.name + '</strong> stock: ' + r1(curConc) + ' kg → ' +
       r1(curConc + qty) + ' kg after mixing</div>';
   }
+
+  // Cost estimate
+  var estTotalCost = 0;
+  var coveredKg    = 0;
+  var noPriceLine  = [];
+  fiBatchRecipeLines.forEach(function(line) {
+    var rate   = parseFloat(line.inclusion_rate) || 0;
+    var kgUsed = qty * rate;
+    var cpk    = fiLatestCostPerKg(line.ingredient_id);
+    if (cpk != null) { estTotalCost += cpk * kgUsed; coveredKg += kgUsed; }
+    else { noPriceLine.push((line.ingredients || {}).name || '?'); }
+  });
+  if (coveredKg > 0) {
+    // Scale up proportionally if some ingredients have no price
+    var scaledTotal = coveredKg < qty * 0.99 ? estTotalCost * (qty / coveredKg) : estTotalCost;
+    var estCpk      = scaledTotal / qty;
+    var coverageNote = noPriceLine.length
+      ? ' <span style="color:var(--amber);font-size:10px">⚠ estimated — no price for: ' + noPriceLine.join(', ') + '</span>'
+      : ' <span style="color:var(--green);font-size:10px">✓</span>';
+    rows += '<div style="margin-top:6px;padding:8px 10px;background:var(--bg);border-radius:7px;font-size:12px">' +
+      '<strong>Estimated cost:</strong> ' + pkr(Math.round(estCpk)) + ' / kg · ' +
+      pkr(Math.round(scaledTotal)) + ' total' + coverageNote + '</div>';
+  } else {
+    rows += '<div style="margin-top:6px;padding:8px 10px;background:var(--bg);border-radius:7px;' +
+      'font-size:12px;color:var(--faint)">Cost estimate unavailable — no purchase prices on record for these ingredients.</div>';
+  }
+
   if (!allOk) {
     rows += '<div style="margin-top:8px;padding:8px 10px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:7px;font-size:12px;color:var(--red)">' +
       '⚠ Insufficient stock for one or more ingredients. Purchase more before mixing.</div>';
@@ -701,6 +740,36 @@ async function submitFiBatch() {
       });
 
     if (lines.length) await sbInsert('concentrate_batch_lines', lines);
+
+    // Auto-calculate cost and create acquisition record for output ingredient
+    var estTotalCost = 0;
+    var coveredKg    = 0;
+    var missingPrices = [];
+    lines.forEach(function(l) {
+      var cpk = fiLatestCostPerKg(l.ingredient_id);
+      if (cpk != null) { estTotalCost += cpk * l.qty_kg_used; coveredKg += l.qty_kg_used; }
+      else {
+        var ing = fiIngredients.find(function(i) { return i.id === l.ingredient_id; });
+        missingPrices.push(ing ? ing.name : String(l.ingredient_id));
+      }
+    });
+
+    if (coveredKg > 0 && recipe.output_ingredient_id) {
+      // Scale up proportionally if partial coverage
+      var scaledCost = coveredKg < qty * 0.99 ? estTotalCost * (qty / coveredKg) : estTotalCost;
+      var cpkCalc    = scaledCost / qty;
+      var costNote   = 'Batch #' + batchId +
+        (missingPrices.length ? ' — partial estimate (no price for: ' + missingPrices.join(', ') + ')' : ' — full cost calculation');
+      await sbInsert('ingredient_acquisitions', [{
+        ingredient_id:    recipe.output_ingredient_id,
+        acquisition_type: 'produced',
+        date:             date,
+        quantity_kg:      qty,
+        cost_per_kg:      Math.round(cpkCalc * 100) / 100,
+        total_cost_pkr:   Math.round(scaledCost),
+        notes:            costNote
+      }]);
+    }
 
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
     setTimeout(function() { closeFiBatchModal(); loadIngredientInventory(); }, 700);
