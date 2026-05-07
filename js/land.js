@@ -1582,8 +1582,7 @@ async function submitLandCrop() {
       crop_name:     regCrop ? regCrop.name : '',
       role:          role || 'primary',
       status:        'growing',
-      health_status: 'unknown',
-      active:        true
+      health_status: 'unknown'
     };
     if (sow)     cd.sow_date                 = sow;
     if (endDate) cd.expected_termination_date = endDate;
