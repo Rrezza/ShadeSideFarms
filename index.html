@@ -389,7 +389,7 @@
       <div class="nav-section-wrap" data-section="feed">
         <div class="nav-section-hdr" onclick="toggleNavSection('feed')"><span>Feed</span><span class="nav-section-arrow">▾</span></div>
         <div class="nav-section-items">
-          <button class="nav-item" data-page="purchases"    onclick="showPage('purchases',this)"><span class="nav-dot"></span>Purchase Log</button>
+          <button class="nav-item" data-page="inginventory" onclick="showPage('inginventory',this)"><span class="nav-dot"></span>Ingredient Inventory</button>
           <button class="nav-item" data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
           <button class="nav-item" data-page="recipesetup"  onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
           <button class="nav-item" data-page="rationplans"  onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
@@ -694,6 +694,49 @@
         <div id="purchase-table"><div class="loading">Loading…</div></div>
       </div>
       <div id="abbrev-purchases"></div>
+    </div>
+
+
+    <!-- Feed: Ingredient Inventory (replaces standalone Purchase Log) -->
+    <div class="page" id="page-inginventory">
+      <div class="page-hdr">
+        <h1>Ingredient Inventory</h1>
+        <div class="page-hdr-right">
+          <button class="btn btn-primary" onclick="openFiAcqModal('purchased')">+ Log purchase</button>
+          <button class="btn" onclick="openFiAcqModal('harvested')">+ Log harvest receipt</button>
+          <button class="btn" onclick="openFiBatchModal()">+ Mix concentrate batch</button>
+          <button class="refresh-btn" onclick="loadIngredientInventory()">↻ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Stock summary -->
+      <div class="section">
+        <div class="section-hdr">
+          <h2>Current stock</h2>
+          <span class="section-meta" id="fi-stock-count"></span>
+        </div>
+        <div id="fi-stock-table"><div class="loading">Loading…</div></div>
+      </div>
+
+      <!-- Acquisition log -->
+      <div class="section">
+        <div class="section-hdr">
+          <h2>Acquisition log</h2>
+          <span class="section-meta" id="fi-acq-count"></span>
+        </div>
+        <div id="fi-acq-table"><div class="loading">Loading…</div></div>
+      </div>
+
+      <!-- Concentrate batches -->
+      <div class="section">
+        <div class="section-hdr">
+          <h2>Concentrate batches</h2>
+          <span class="section-meta" id="fi-batch-count"></span>
+        </div>
+        <div id="fi-batch-table"><div class="loading">Loading…</div></div>
+      </div>
+
+      <div id="abbrev-fi"></div>
     </div>
 
     <!-- Price History -->
@@ -1791,6 +1834,96 @@
     </div>
   </div>
 </div>
+
+<!-- ============================================================ -->
+<!-- FEED INVENTORY MODALS                                         -->
+<!-- ============================================================ -->
+
+<!-- Acquisition modal (purchase / harvest receipt) -->
+<div class="modal-overlay" id="fi-acq-modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="fi-acq-modal-title">Log purchase</h3>
+    <div class="modal-fields">
+      <label>Ingredient</label>
+      <select id="fi-acq-ing"><option value="">Select ingredient</option></select>
+      <label>Date</label>
+      <input type="date" id="fi-acq-date">
+      <!-- hidden type field set by openFiAcqModal -->
+      <input type="hidden" id="fi-acq-type" value="purchased">
+      <label>Quantity (kg)</label>
+      <input type="number" id="fi-acq-qty" min="0.001" step="0.1" placeholder="e.g. 50" oninput="fiAcqAutoCalc()">
+      <div id="fi-acq-cost-section">
+        <label>Total cost (PKR)</label>
+        <input type="number" id="fi-acq-total" min="0" step="1" placeholder="e.g. 4500" oninput="fiAcqAutoCalc()">
+        <div id="fi-acq-cpk-display" style="font-size:12px;color:var(--muted);padding:4px 0"></div>
+      </div>
+      <label>Recorded by</label>
+      <select id="fi-acq-worker"><option value="">— none —</option></select>
+      <label>Notes (optional)</label>
+      <input type="text" id="fi-acq-notes" placeholder="Supplier, lot, quality notes…">
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeFiAcqModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFiAcq()">Save</button>
+      <span id="fi-acq-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Concentrate batch modal -->
+<div class="modal-overlay" id="fi-batch-modal" style="display:none">
+  <div class="modal-box modal-large">
+    <h3>Mix concentrate batch</h3>
+    <p style="font-size:13px;color:var(--muted);margin:8px 0 16px">Select a recipe and enter the total kg to produce. The ingredient preview will show what is needed and whether you have sufficient stock.</p>
+    <div class="modal-fields">
+      <label>Date</label>
+      <input type="date" id="fi-batch-date">
+      <label>Recipe</label>
+      <select id="fi-batch-recipe" onchange="fiBatchRecipeChanged()"><option value="">Select recipe</option></select>
+      <label>Total kg to produce</label>
+      <input type="number" id="fi-batch-qty" min="0.01" step="0.5" placeholder="e.g. 50" oninput="fiBatchUpdatePreview()">
+      <label>Mixed by</label>
+      <select id="fi-batch-worker"><option value="">— none —</option></select>
+      <label>Notes (optional)</label>
+      <input type="text" id="fi-batch-notes">
+    </div>
+    <div id="fi-batch-preview" style="margin:0 0 16px"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeFiBatchModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFiBatch()">Save batch</button>
+      <span id="fi-batch-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Stock adjustment modal (feed inventory) -->
+<div class="modal-overlay" id="fi-adj-modal" style="display:none">
+  <div class="modal-box">
+    <h3 id="fi-adj-title">Adjust stock</h3>
+    <p style="font-size:13px;color:var(--muted);margin:8px 0 16px">Positive delta to add stock (e.g. count found extra). Negative to remove (spoilage, spillage, manual use).</p>
+    <div class="modal-fields">
+      <label>Date</label>
+      <input type="date" id="fi-adj-date">
+      <label>Delta (kg)</label>
+      <input type="number" id="fi-adj-delta" step="0.1" placeholder="e.g. -5 or +10">
+      <label>Reason</label>
+      <select id="fi-adj-reason">
+        <option value="count">Physical count correction</option>
+        <option value="spoilage">Spoilage / waste</option>
+        <option value="spillage">Spillage</option>
+        <option value="other">Other</option>
+      </select>
+      <label>Notes (optional)</label>
+      <input type="text" id="fi-adj-notes">
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeFiAdj()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFiAdj()">Save adjustment</button>
+      <span id="fi-adj-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+    </div>
+  </div>
+</div>
+
 <!-- Auth / Login modal -->
 <div class="modal-overlay" id="auth-login-modal" style="display:none">
   <div class="modal-box" style="max-width:360px">

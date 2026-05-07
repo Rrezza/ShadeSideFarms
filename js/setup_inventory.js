@@ -1,13 +1,11 @@
 // ============================================================
-// setup_inventory.js v18 — Inventory page
+// setup_inventory.js v19 — Inventory page
 // ============================================================
 //
-// Feed ingredients:
-//   Stock = sum(ingredient_acquisitions.quantity_kg)
-//           + sum(ingredient_stock_adjustments.delta_kg)
-//   Adjusted manually via Adjust button.
+// Feed ingredients are now tracked in Feed → Ingredient Inventory
+// (fd_inventory.js). This page shows fertilizer stock only.
 //
-// Fertilizers (v18 update):
+// Fertilizers:
 //   Stock = sum(fertilizer_purchases.qty × quantity_per_purchase_unit)
 //           − sum(gypsum_applications.kg_applied)
 //           − sum(amendment_applications.kg_applied)
@@ -96,40 +94,17 @@ async function loadInventoryPage() {
 }
 
 // ============================================================
-// INGREDIENT STOCK TABLE
+// INGREDIENT STOCK TABLE — moved to fd_inventory.js
 // ============================================================
 function renderInvIng() {
   var tbl = document.getElementById('inv-ing-table');
-  if (!invIngList.length) {
-    tbl.innerHTML = '<div class="empty">No ingredients.</div>';
-    return;
-  }
-  var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Ingredient</th><th>Category</th>' +
-    '<th class="right">Total purchased (kg)</th>' +
-    '<th class="right">Net adjustments (kg)</th>' +
-    '<th class="right">Current stock (kg)</th>' +
-    '<th></th>' +
-    '</tr></thead><tbody>';
-
-  invIngList.forEach(function(i) {
-    var st    = invIngStock[i.id] || { purchased: 0, adjusted: 0 };
-    var stock = st.purchased + st.adjusted;
-    var cls   = stock <= 0 ? 'inv-stock-zero' : (stock < 10 ? 'inv-stock-low' : 'inv-stock-pos');
-    html += '<tr>' +
-      '<td style="font-weight:500">' + i.name + '</td>' +
-      '<td>' + (i.category
-        ? '<span class="badge ' + (CAT_BADGE[i.category] || 'badge-gray') + '">' + i.category + '</span>'
-        : '<span class="muted-cell">—</span>') + '</td>' +
-      '<td class="mono right">' + r1(st.purchased).toLocaleString() + '</td>' +
-      '<td class="mono right">' + (st.adjusted >= 0 ? '+' : '') + r1(st.adjusted).toLocaleString() + '</td>' +
-      '<td class="mono right ' + cls + '">' + r1(stock).toLocaleString() + ' kg</td>' +
-      '<td><button class="btn btn-sm" onclick="openStockAdjModal(' + i.id + ',\'' +
-        i.name.replace(/'/g, "\\'") + '\')">Adjust</button></td>' +
-      '</tr>';
-  });
-  html += '</tbody></table></div>';
-  tbl.innerHTML = html;
+  if (tbl) tbl.innerHTML =
+    '<div style="padding:18px 22px;font-size:13px;color:var(--muted)">' +
+    'Ingredient stock is now tracked in ' +
+    '<a href="#" onclick="showPage(\'inginventory\',null);return false;" ' +
+    'style="color:var(--accent);font-weight:500">Feed \u2192 Ingredient Inventory</a>. ' +
+    'That page shows real-time stock accounting for purchases, harvest receipts, ' +
+    'concentrate batches, and feeding events.</div>';
 }
 
 // ============================================================

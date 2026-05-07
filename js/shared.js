@@ -164,6 +164,8 @@ var PAGE_MAP = {
   costsales:      { module: 'health',  init: 'loadCostSalesPage' },
   // Overview (landing page)
   overview:       { module: 'overview', init: 'loadOverviewPage' },
+  // Feed inventory
+  inginventory:   { module: 'fd_inventory', init: 'loadIngredientInventory' },
   // Land module
   land:           { module: 'land',    init: 'loadLandPage' },
   // Setup module
