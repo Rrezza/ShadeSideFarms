@@ -40,8 +40,7 @@ var fertNutrientsId  = null;  // fertilizer id open in nutrients modal
 // LOAD
 // ============================================================
 async function loadFertilizersPage() {
-  document.getElementById('fert-table').innerHTML       = '<div class="loading">Loading…</div>';
-  document.getElementById('fert-purch-table').innerHTML = '<div class="loading">Loading…</div>';
+  document.getElementById('fert-table').innerHTML = '<div class="loading">Loading…</div>';
   try {
     var r = await sbGet('fertilizers', 'select=*&order=name');
     fertData = r;
