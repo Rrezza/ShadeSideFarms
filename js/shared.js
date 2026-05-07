@@ -166,6 +166,7 @@ var PAGE_MAP = {
   overview:       { module: 'overview', init: 'loadOverviewPage' },
   // Feed inventory
   inginventory:   { module: 'fd_inventory', init: 'loadIngredientInventory' },
+  seedinventory:  { module: 'fd_seeds',     init: 'loadSeedInventory' },
   // Land module
   land:           { module: 'land',    init: 'loadLandPage' },
   // Setup module

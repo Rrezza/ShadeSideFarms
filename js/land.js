@@ -22,6 +22,7 @@ var landFertApps      = [];
 var landTests         = [];
 var landCrops         = [];
 var landHarvests      = [];
+var landAllocations   = [];   // harvest_allocations — for badge/button on harvest rows
 var landObservations  = [];
 var landWatering      = [];
 var landWaterTests    = [];
@@ -29,7 +30,7 @@ var landCropRegistry  = [];
 var landWorkers       = [];
 var landLocations     = [];
 var landLoaded        = false;
-var landActiveTab     = 'plots';
+var landActiveTab     = 'crops';
 var landFertChart     = null;
 var landTrendChart    = null;
 
@@ -146,8 +147,10 @@ async function loadLandPage() {
         'nitrogen_fixer,feeding_notes,notes,active&order=name'),
       sbGet('locations', 'select=id,name,location_type,active&order=name'),
       safeFetch('crop_groups', 'select=id,field_plot_id,name,is_stand,harvest_type,notes,ingredient_id,ingredients(id,name)&order=field_plot_id,name'),
-      safeFetch('ingredients', 'select=id,name,source_type&active=eq.true&order=name'),
-      workers
+      safeFetch('ingredients', 'select=id,name,category,source_type&active=eq.true&order=name'),
+      workers,
+      safeFetch('harvest_allocations',
+        'select=id,harvest_event_id,destination,quantity_kg,ingredient_id,crop_id')
     ]);
 
     landPlots         = r[0];
@@ -165,6 +168,7 @@ async function loadLandPage() {
     landCropGroups    = r[12];
     landIngredients   = r[13];
     landWorkers       = r[14];
+    landAllocations   = r[15] || [];
     landLoaded        = true;
 
     if (loadingEl) loadingEl.innerHTML = '';
@@ -1292,6 +1296,13 @@ function renderLandCrops() {
   var plotF      = (document.getElementById('lc-plot-filter') || {}).value || '';
   var workers    = (typeof anSharedWorkers !== 'undefined' && anSharedWorkers.length) ? anSharedWorkers : landWorkers;
 
+  // Build allocation map: harvest_event_id → total allocated kg
+  var allocMap = {};
+  landAllocations.forEach(function(a) {
+    if (!allocMap[a.harvest_event_id]) allocMap[a.harvest_event_id] = 0;
+    allocMap[a.harvest_event_id] += parseFloat(a.quantity_kg) || 0;
+  });
+
   var groups = landCropGroups.filter(function(g) {
     if (plotF && String(g.field_plot_id) !== plotF) return false;
     if (activeOnly) {
@@ -1420,13 +1431,25 @@ function renderLandCrops() {
       html += '<div class="muted-cell" style="font-size:12px">No harvests logged yet.</div>';
     } else {
       html += '<table style="width:100%;font-size:12px"><thead><tr>' +
-        '<th>Harvest</th><th>Date</th><th class="right">kg</th><th>Destination</th><th>Quality</th><th>Worker</th><th></th>' +
+        '<th>Cut</th><th>Date</th><th class="right">kg</th><th>Destination</th><th>Quality</th><th>Allocation</th><th>Worker</th><th></th>' +
         '</tr></thead><tbody>';
       harvests.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
       harvests.forEach(function(h) {
-        var hid = h.id;
-        var isFodder = (h.destination || '') === 'goat_fodder';
+        var hid         = h.id;
+        var totalKg     = parseFloat(h.quantity_kg) || 0;
+        var allocatedKg = allocMap[hid] || 0;
+        var isFodder    = (h.destination || '') === 'goat_fodder';
         var fn = isFodder && fnStr ? ' <span style="color:var(--amber);font-size:10px" title="' + fnStr.replace(/"/g,'') + '">⚠</span>' : '';
+        var fullyAlloc  = h.allocated === true;
+        var partAlloc   = !fullyAlloc && allocatedKg > 0;
+        var allocBadge  = fullyAlloc
+          ? '<span class="badge badge-green" style="font-size:10px">Allocated</span>'
+          : (partAlloc
+              ? '<span class="badge badge-amber" style="font-size:10px">Partial ' + Math.round(allocatedKg) + '/' + Math.round(totalKg) + 'kg</span>'
+              : '<span class="badge badge-gray" style="font-size:10px">Unallocated</span>');
+        var allocBtn = !fullyAlloc
+          ? '<button class="btn btn-sm" style="font-size:10px;margin-left:4px" onclick="openHarvestAllocModal(' + hid + ',' + g.id + ',' + totalKg + ',\'' + (g.name || 'Group').replace(/'/g,"\\'") + '\')">Allocate</button>'
+          : '';
         html += '<tr>' +
           '<td class="muted-cell">' + (h.cut_number || '—') + '</td>' +
           '<td><input type="date" id="he-date-' + hid + '" value="' + (h.date || '') + '" style="font-size:11px;width:100%"></td>' +
@@ -1437,6 +1460,7 @@ function renderLandCrops() {
             }).join('') +
           '</select>' + fn + '</td>' +
           '<td><input type="text" id="he-qual-' + hid + '" value="' + (h.quality_notes || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:120px" placeholder="—"></td>' +
+          '<td style="white-space:nowrap">' + allocBadge + allocBtn + '</td>' +
           '<td class="muted-cell" style="white-space:nowrap">' + (h.workers ? h.workers.name : '—') + '</td>' +
           '<td style="white-space:nowrap">' +
             '<button class="btn btn-sm" style="font-size:11px" onclick="patchHarvest(' + hid + ')">Save</button>' +
@@ -1615,21 +1639,8 @@ async function submitHarvestEvent(groupId) {
     if (wId)  d.logged_by     = parseInt(wId);
     if (qual) d.quality_notes = qual;
     var rows = await sbInsert('crop_harvest_events', [d]);
-    // Bridge: if group has ingredient_id, create matching acquisition
-    var group = landCropGroups.find(function(g) { return g.id === groupId; });
-    if (group && group.ingredient_id && rows && rows[0]) {
-      var harvestId = rows[0].id;
-      var aq = {
-        ingredient_id:          group.ingredient_id,
-        acquisition_type:       'harvested',
-        date:                   date,
-        quantity_kg:            parseFloat(kg) || 0,
-        crop_harvest_event_id:  harvestId
-      };
-      if (wId) aq.recorded_by = parseInt(wId);
-      await sbInsert('ingredient_acquisitions', [aq]);
-    }
-    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
+    statusEl.textContent = 'Saved. Use Allocate to route this harvest.';
+    statusEl.style.color = 'var(--green)';
     await loadLandPage();
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
@@ -1913,5 +1924,218 @@ async function submitWaterTest() {
     await loadLandPage();
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
+  }
+}
+
+// ============================================================
+// PHASE 2: HARVEST ALLOCATION MODAL
+// ============================================================
+// State
+var p2AllocHid      = null;   // harvest event id
+var p2AllocGroupId  = null;   // crop group id
+var p2AllocTotalKg  = 0;
+var p2AllocRows     = [];     // [{destination, kg, ingredientId, notes}]
+var p2NextRowId     = 0;
+
+function openHarvestAllocModal(hid, groupId, totalKg, groupName) {
+  p2AllocHid     = hid;
+  p2AllocGroupId = groupId;
+  p2AllocTotalKg = totalKg;
+  p2AllocRows    = [];
+  p2NextRowId    = 0;
+
+  var el = document.getElementById('ha-modal-title');
+  if (el) el.textContent = 'Allocate harvest — ' + groupName;
+
+  var sumEl = document.getElementById('ha-total-kg');
+  if (sumEl) sumEl.textContent = Math.round(totalKg).toLocaleString() + ' kg total';
+
+  document.getElementById('ha-status').textContent = '';
+  p2AddAllocRow();          // start with one empty row
+  p2UpdateRemaining();
+  document.getElementById('harvest-alloc-modal').style.display = 'flex';
+}
+
+function closeHarvestAllocModal() {
+  document.getElementById('harvest-alloc-modal').style.display = 'none';
+}
+
+function p2AddAllocRow() {
+  var rid = p2NextRowId++;
+  p2AllocRows.push({ id: rid, destination: '', kg: '', ingredientId: '', notes: '' });
+  p2RenderAllocRows();
+}
+
+function p2RemoveAllocRow(rid) {
+  p2AllocRows = p2AllocRows.filter(function(r) { return r.id !== rid; });
+  p2RenderAllocRows();
+  p2UpdateRemaining();
+}
+
+var P2_DEST_LABELS = {
+  feed_inventory:       'Feed inventory',
+  sold:                 'Sold',
+  seed_stock:           'Seed stock',
+  compost_mulch:        'Compost / mulch',
+  external_processing:  'External processing (e.g. oil pressing)'
+};
+var P2_DEST_KEYS = Object.keys(P2_DEST_LABELS);
+
+function p2RenderAllocRows() {
+  var container = document.getElementById('ha-rows');
+  if (!container) return;
+
+  // Build ingredient options for feed_inventory rows
+  var ingOpts = '<option value="">Select ingredient</option>' +
+    landIngredients.map(function(i) {
+      return '<option value="' + i.id + '">' + i.name +
+        (i.category ? ' (' + i.category + ')' : '') + '</option>';
+    }).join('');
+
+  var html = '';
+  p2AllocRows.forEach(function(row) {
+    var destOpts = '<option value="">Select destination</option>' +
+      P2_DEST_KEYS.map(function(k) {
+        return '<option value="' + k + '"' + (row.destination === k ? ' selected' : '') + '>' + P2_DEST_LABELS[k] + '</option>';
+      }).join('');
+
+    html += '<div class="ha-row" id="ha-row-' + row.id + '" style="display:grid;grid-template-columns:1fr 100px 1fr 80px;gap:8px;align-items:end;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border-lt,#ede9de)">';
+
+    // Destination
+    html += '<div><label style="font-size:11px;color:var(--muted)">Destination</label>' +
+      '<select style="width:100%" onchange="p2RowDestChange(' + row.id + ',this.value)">' + destOpts + '</select></div>';
+
+    // kg
+    html += '<div><label style="font-size:11px;color:var(--muted)">kg</label>' +
+      '<input type="number" value="' + row.kg + '" min="0.01" step="0.5" style="width:100%" placeholder="kg" ' +
+      'oninput="p2RowKgChange(' + row.id + ',this.value)"></div>';
+
+    // Ingredient (shown for feed_inventory, hidden otherwise)
+    var ingStyle = row.destination === 'feed_inventory' ? '' : 'visibility:hidden';
+    html += '<div style="' + ingStyle + '"><label style="font-size:11px;color:var(--muted)">Ingredient</label>' +
+      '<select id="ha-ing-' + row.id + '" style="width:100%">' + ingOpts + '</select></div>';
+
+    // Remove button
+    html += '<div><button class="btn btn-sm del-btn" style="width:100%" onclick="p2RemoveAllocRow(' + row.id + ')">Remove</button></div>';
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+
+  // Restore ingredient selections
+  p2AllocRows.forEach(function(row) {
+    var sel = document.getElementById('ha-ing-' + row.id);
+    if (sel && row.ingredientId) sel.value = row.ingredientId;
+  });
+}
+
+function p2RowDestChange(rid, dest) {
+  var row = p2AllocRows.find(function(r) { return r.id === rid; });
+  if (row) row.destination = dest;
+  // Show/hide ingredient field
+  var ingDiv = (document.getElementById('ha-ing-' + rid) || {}).parentElement;
+  if (ingDiv) ingDiv.style.visibility = dest === 'feed_inventory' ? '' : 'hidden';
+}
+
+function p2RowKgChange(rid, val) {
+  var row = p2AllocRows.find(function(r) { return r.id === rid; });
+  if (row) row.kg = val;
+  p2UpdateRemaining();
+}
+
+function p2UpdateRemaining() {
+  var used = p2AllocRows.reduce(function(s, r) { return s + (parseFloat(r.kg) || 0); }, 0);
+  var rem  = p2AllocTotalKg - used;
+  var el   = document.getElementById('ha-remaining');
+  if (el) {
+    el.textContent = Math.round(rem).toLocaleString() + ' kg remaining';
+    el.style.color = rem < 0 ? 'var(--red)' : rem === 0 ? 'var(--green)' : 'var(--muted)';
+  }
+}
+
+async function submitHarvestAlloc() {
+  var statusEl = document.getElementById('ha-status');
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
+  try {
+    if (!p2AllocHid) throw new Error('No harvest event selected.');
+    if (!p2AllocRows.length) throw new Error('Add at least one allocation row.');
+
+    // Read current values from DOM
+    p2AllocRows.forEach(function(row) {
+      var ingEl = document.getElementById('ha-ing-' + row.id);
+      if (ingEl) row.ingredientId = ingEl.value;
+    });
+
+    // Validate
+    var totalUsed = 0;
+    p2AllocRows.forEach(function(row, i) {
+      var dest = row.destination;
+      var kg   = parseFloat(row.kg);
+      if (!dest) throw new Error('Row ' + (i + 1) + ': select a destination.');
+      if (isNaN(kg) || kg <= 0) throw new Error('Row ' + (i + 1) + ': enter a valid quantity.');
+      if (dest === 'feed_inventory' && !row.ingredientId)
+        throw new Error('Row ' + (i + 1) + ': select an ingredient for feed inventory.');
+      totalUsed += kg;
+    });
+    if (totalUsed > p2AllocTotalKg + 0.01)
+      throw new Error('Total allocated (' + Math.round(totalUsed) + ' kg) exceeds harvest total (' + Math.round(p2AllocTotalKg) + ' kg).');
+
+    // Find primary crop for seed allocations
+    var primaryCrop = landCrops.find(function(c) {
+      return c.crop_group_id === p2AllocGroupId && c.role === 'primary';
+    }) || landCrops.find(function(c) { return c.crop_group_id === p2AllocGroupId; });
+    var seedCropId = primaryCrop ? primaryCrop.crop_id : null;
+
+    // Insert allocation rows and downstream records
+    for (var i = 0; i < p2AllocRows.length; i++) {
+      var row  = p2AllocRows[i];
+      var dest = row.destination;
+      var kg   = parseFloat(row.kg);
+      var ingId = row.ingredientId ? parseInt(row.ingredientId) : null;
+
+      // Insert harvest_allocation
+      var allocResult = await sbInsert('harvest_allocations', [{
+        harvest_event_id: p2AllocHid,
+        destination:      dest,
+        quantity_kg:      kg,
+        ingredient_id:    dest === 'feed_inventory' ? ingId : null,
+        crop_id:          dest === 'seed_stock'     ? seedCropId : null
+      }]);
+
+      // Downstream records
+      if (dest === 'feed_inventory' && ingId) {
+        // Create ingredient acquisition (feeds Phase 1 stock calc)
+        await sbInsert('ingredient_acquisitions', [{
+          ingredient_id:         ingId,
+          acquisition_type:      'harvested',
+          date:                  (landHarvests.find(function(h) { return h.id === p2AllocHid; }) || {}).date || todayISO(),
+          quantity_kg:           kg,
+          crop_harvest_event_id: p2AllocHid
+        }]);
+      }
+
+      if (dest === 'external_processing' && allocResult && allocResult[0]) {
+        // Create pending processing transaction (Phase 3 will complete this)
+        await sbInsert('processing_transactions', [{
+          harvest_allocation_id: allocResult[0].id,
+          quantity_kg_sent:      kg,
+          status:                'pending'
+        }]);
+      }
+    }
+
+    // Mark harvest as fully allocated if total used >= total kg
+    var fullyAllocated = totalUsed >= p2AllocTotalKg - 0.01;
+    if (fullyAllocated) {
+      await sbPatch('crop_harvest_events', p2AllocHid, { allocated: true });
+    }
+
+    statusEl.textContent = fullyAllocated ? 'Fully allocated ✓' : 'Partial allocation saved.';
+    statusEl.style.color = 'var(--green)';
+    setTimeout(function() { closeHarvestAllocModal(); loadLandPage(); }, 900);
+
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.style.color = 'var(--red)';
   }
 }
