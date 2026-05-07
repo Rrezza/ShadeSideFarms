@@ -6,6 +6,141 @@
 // RECIPE SETUP (new in v17)
 // ============================================================
 
+// ============================================================
+// RECIPE DETAIL — inline expand on click
+// ============================================================
+var rsDetailCache = {};   // recipeId → { lines: [...] } or { error: '...' }
+
+var RS_NUTR = [
+  { key: 'crude_protein_pct_dm',       label: 'Crude protein',   unit: '% DM',     ref: 14,  refDir: 'min' },
+  { key: 'crude_fat_pct_dm',           label: 'Crude fat',       unit: '% DM',     ref: null, refDir: null },
+  { key: 'ndf_pct_dm',                 label: 'Fiber (NDF)',     unit: '% DM',     ref: null, refDir: null },
+  { key: 'metabolizable_energy_mj_kg', label: 'ME',              unit: 'MJ/kg DM', ref: 9.0, refDir: 'min' }
+];
+
+async function toggleRecipeDetail(recipeId) {
+  var detailRow = document.getElementById('rsd-' + recipeId);
+  var btn       = document.getElementById('rsd-btn-' + recipeId);
+  if (!detailRow) return;
+
+  var visible = detailRow.style.display !== 'none';
+  if (visible) {
+    detailRow.style.display = 'none';
+    if (btn) btn.textContent = '▾ Details';
+    return;
+  }
+
+  if (btn) btn.textContent = 'Loading…';
+
+  if (!rsDetailCache[recipeId]) {
+    try {
+      var vers = await sbGet('recipe_versions',
+        'recipe_id=eq.' + recipeId + '&select=id&order=version_number.desc&limit=1');
+      if (!vers.length) {
+        rsDetailCache[recipeId] = { lines: [], error: 'No version found.' };
+      } else {
+        var lines = await sbGet('recipe_ingredients',
+          'recipe_version_id=eq.' + vers[0].id +
+          '&select=inclusion_rate,' +
+          'ingredients(id,name,category,crude_protein_pct_dm,crude_fat_pct_dm,' +
+          'ndf_pct_dm,metabolizable_energy_mj_kg,calcium_pct_dm,phosphorus_pct_dm)' +
+          '&order=inclusion_rate.desc');
+        rsDetailCache[recipeId] = { lines: lines };
+      }
+    } catch (e) {
+      rsDetailCache[recipeId] = { lines: [], error: e.message };
+    }
+  }
+
+  // Build blended nutritional values
+  var data = rsDetailCache[recipeId];
+  var blended = {}; var coverage = {};
+  RS_NUTR.forEach(function(f) { blended[f.key] = 0; coverage[f.key] = 0; });
+  if (data.lines) {
+    data.lines.forEach(function(row) {
+      var ing = row.ingredients; if (!ing) return;
+      var incl = parseFloat(row.inclusion_rate) || 0;
+      RS_NUTR.forEach(function(f) {
+        if (ing[f.key] != null) { blended[f.key] += ing[f.key] * incl; coverage[f.key] += incl; }
+      });
+    });
+  }
+  RS_NUTR.forEach(function(f) {
+    blended[f.key] = coverage[f.key] > 0 ? blended[f.key] / coverage[f.key] : null;
+  });
+  var hasNutr = RS_NUTR.some(function(f) { return blended[f.key] != null; });
+
+  var html = '';
+  if (data.error) {
+    html = '<div style="padding:14px 18px;color:var(--red)">' + data.error + '</div>';
+  } else if (!data.lines || !data.lines.length) {
+    html = '<div style="padding:14px 18px;color:var(--faint)">No ingredients in this recipe version.</div>';
+  } else {
+    html = '<div style="padding:14px 18px 18px;background:var(--bg);border-top:1px solid var(--border);' +
+           'display:grid;grid-template-columns:1.4fr 1fr;gap:24px">';
+
+    // Ingredient inclusion table
+    html += '<div>';
+    html += '<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;' +
+            'letter-spacing:0.06em;margin-bottom:8px">Ingredient inclusion</div>';
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr>' +
+            '<th style="text-align:left;padding:3px 6px;border-bottom:1px solid var(--border);color:var(--muted)">Ingredient</th>' +
+            '<th style="text-align:right;padding:3px 6px;border-bottom:1px solid var(--border);color:var(--muted)">%</th>';
+    if (hasNutr) {
+      html += '<th style="text-align:right;padding:3px 6px;border-bottom:1px solid var(--border);color:var(--muted)">CP %DM</th>';
+      html += '<th style="text-align:right;padding:3px 6px;border-bottom:1px solid var(--border);color:var(--muted)">Fat %DM</th>';
+    }
+    html += '</tr></thead><tbody>';
+    data.lines.forEach(function(row) {
+      var ing  = row.ingredients || {};
+      var incl = parseFloat(row.inclusion_rate) || 0;
+      html += '<tr>' +
+        '<td style="padding:4px 6px;font-weight:500">' + (ing.name || '?') + '</td>' +
+        '<td style="padding:4px 6px;text-align:right;font-family:var(--mono)">' +
+          (incl * 100).toFixed(1) + '%</td>';
+      if (hasNutr) {
+        html += '<td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--muted)">' +
+          (ing.crude_protein_pct_dm != null ? ing.crude_protein_pct_dm.toFixed(1) : '—') + '</td>';
+        html += '<td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:var(--muted)">' +
+          (ing.crude_fat_pct_dm != null ? ing.crude_fat_pct_dm.toFixed(1) : '—') + '</td>';
+      }
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+
+    // Nutritional summary
+    html += '<div>';
+    html += '<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;' +
+            'letter-spacing:0.06em;margin-bottom:8px">Blended profile</div>';
+    if (!hasNutr) {
+      html += '<div style="font-size:12px;color:var(--faint)">No nutritional values on file for this ' +
+              'recipe\'s ingredients.<br>Add them in <strong>Setup → Ingredients</strong>.</div>';
+    } else {
+      RS_NUTR.forEach(function(f) {
+        if (blended[f.key] == null) return;
+        var val  = blended[f.key];
+        var flag = '';
+        if (f.ref != null && f.refDir === 'min') {
+          flag = val >= f.ref
+            ? ' <span style="color:var(--green);font-size:10px">✓ ≥' + f.ref + '</span>'
+            : ' <span style="color:var(--amber);font-size:10px">⚠ target ≥' + f.ref + '</span>';
+        }
+        html += '<div style="display:flex;justify-content:space-between;align-items:baseline;' +
+                'padding:5px 0;border-bottom:1px solid var(--border-lt,#ede9de);font-size:13px">' +
+                '<span style="color:var(--muted)">' + f.label + '</span>' +
+                '<span style="font-family:var(--mono);font-weight:500">' +
+                val.toFixed(1) + ' ' + f.unit + flag + '</span></div>';
+      });
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  detailRow.innerHTML = '<td colspan="7" style="padding:0">' + html + '</td>';
+  detailRow.style.display = '';
+  if (btn) btn.textContent = '▴ Details';
+}
+
 async function loadRecipeSetup() {
   var listEl = document.getElementById('recipe-list-table');
   var metaEl = document.getElementById('recipe-list-meta');
@@ -58,11 +193,14 @@ async function loadRecipeSetup() {
           (ingNames.length ? ingNames.join(', ') : '<span style="color:var(--faint)">no ingredients</span>') + '</td>' +
         '<td class="mono">' + (ver ? 'v' + ver.version_number : '—') + '</td>' +
         '<td class="mono">' + (ver ? fmtDate(ver.effective_date) : '—') + '</td>' +
-        '<td><div style="display:flex;gap:8px">' +
+        '<td><div style="display:flex;gap:6px">' +
+          '<button id="rsd-btn-' + r.id + '" class="btn btn-sm" ' +
+            'onclick="toggleRecipeDetail(' + r.id + ')">▾ Details</button>' +
           '<button class="btn btn-sm" onclick="openEditRecipeForm(' + r.id + ')">Edit / new version</button>' +
           '<button class="btn btn-sm btn-danger" onclick="deactivateRecipe(' + r.id + ')">Remove</button>' +
         '</div></td>' +
-      '</tr>';
+      '</tr>' +
+      '<tr id="rsd-' + r.id + '" style="display:none"><td colspan="7" style="padding:0"></td></tr>';
     });
     html += '</tbody></table></div>';
     listEl.innerHTML = html;

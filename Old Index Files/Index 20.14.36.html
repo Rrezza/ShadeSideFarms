@@ -299,15 +299,6 @@
     .plot-stat-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
     .plot-stat-label{color:var(--muted)}
     .plot-stat-val{font-family:var(--mono);font-weight:500}
-
-    /* Crop group mode toggle */
-    .lc-mode-toggle{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;width:100%;margin-top:4px}
-    .lc-mode-btn{flex:1;padding:9px 12px;font-size:13px;font-family:inherit;background:var(--bg);color:var(--muted);border:none;border-right:1px solid var(--border);cursor:pointer;transition:background 0.12s,color 0.12s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .lc-mode-btn:last-child{border-right:none}
-    .lc-mode-btn:hover{background:var(--surface);color:var(--text)}
-    .lc-mode-btn.active{background:#E6F4EA;color:#1F7A3D;font-weight:500}
-    .lc-mode-icon{font-size:11px;margin-right:4px;opacity:0.7}
-    @media(max-width:480px){.lc-mode-btn{font-size:11px;padding:8px 6px}}
   </style>
 </head>
 <body>
@@ -323,7 +314,7 @@
       <button class="nav-item"        data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
       <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
       <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
-      <!-- Concentrate Information page retired — content moved to Recipe Setup and Price History -->
+      <button class="nav-item"        data-page="feed"         onclick="showPage('feed',this)"><span class="nav-dot"></span>Concentrate Information</button>
       <button class="nav-item"        data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
       <div class="nav-section">Animals</div>
       <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
@@ -564,7 +555,7 @@
       <div class="section" id="recipe-form-section" style="display:none">
         <div class="section-hdr"><h2 id="recipe-form-title">New concentrate recipe</h2></div>
         <div style="padding:20px 22px">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;max-width:960px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;max-width:640px">
             <div class="fc-field">
               <label>Recipe name</label>
               <input type="text" id="rf-name" placeholder="e.g. Goat Fattening Concentrate A">
@@ -572,10 +563,6 @@
             <div class="fc-field">
               <label>Species <span style="color:var(--red);font-size:10px">required</span></label>
               <select id="rf-species"><option value="">— select species —</option></select>
-            </div>
-            <div class="fc-field">
-              <label>Output ingredient <span style="color:var(--muted);font-size:10px;font-weight:400">— what this recipe produces</span></label>
-              <select id="rf-output-ing"><option value="">— none selected —</option></select>
             </div>
           </div>
           <div style="margin-bottom:20px">
@@ -650,13 +637,6 @@
                 <option value="365">365 days</option>
               </select>
               <div style="font-size:11px;color:var(--faint);margin-top:4px">Shown in summary stats</div>
-            </div>
-            <h3 style="margin-top:20px">Cost calculator</h3>
-            <div style="margin-top:6px">
-              <label style="font-size:11px;color:var(--muted)">Quantity (kg)</label>
-              <input type="number" id="ph-calc-qty" min="0" step="1" placeholder="e.g. 100"
-                oninput="renderPriceChart()" style="width:100%;margin-top:4px">
-              <div style="font-size:11px;color:var(--faint);margin-top:4px">Shows cost at latest price for each selected ingredient</div>
             </div>
           </div>
           <div class="ph-main">
@@ -1367,17 +1347,9 @@
             <div class="land-form-grid">
               <div class="lf-field" style="grid-column:1/-1">
                 <label>Mode</label>
-                <!-- Hidden radio inputs keep the existing JS submit logic intact -->
-                <input type="radio" name="lc-group-mode" value="new"      checked style="display:none">
-                <input type="radio" name="lc-group-mode" value="existing"         style="display:none">
-                <!-- Visible segmented toggle -->
-                <div class="lc-mode-toggle" id="lc-mode-toggle">
-                  <button type="button" class="lc-mode-btn active" onclick="setCropGroupMode('new')" id="lc-mode-btn-new">
-                    <span class="lc-mode-icon">✦</span> New group
-                  </button>
-                  <button type="button" class="lc-mode-btn" onclick="setCropGroupMode('existing')" id="lc-mode-btn-existing">
-                    <span class="lc-mode-icon">⊕</span> Add to existing group
-                  </button>
+                <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="lc-group-mode" value="new" checked onchange="toggleGroupMode()"> New group</label>
+                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="lc-group-mode" value="existing" onchange="toggleGroupMode()"> Add to existing group on this plot</label>
                 </div>
               </div>
             </div>
@@ -1621,18 +1593,22 @@
       <div id="abbrev-ingredients"></div>
     </div>
 
-    <!-- Fertilizers — registry only. Purchases and inventory live in Land → Fertilizers -->
+    <!-- Fertilizers (NEW, mirrors Ingredients pattern) -->
     <div class="page" id="page-fertilizers">
       <div class="page-hdr"><h1>Fertilizers</h1>
         <div class="page-hdr-right">
           <button class="btn btn-primary" onclick="openFertModal()">+ Add fertilizer</button>
+          <button class="btn" onclick="openFertPurchaseModal()">+ Log purchase</button>
           <button class="refresh-btn" onclick="loadFertilizersPage()">↻ Refresh</button>
         </div>
       </div>
-      <div style="padding:10px 22px 0;font-size:12px;color:var(--muted)">Registry only — purchases and stock are managed in <strong>Land → Fertilizers</strong>.</div>
       <div class="section">
         <div class="section-hdr"><h2>Fertilizer registry</h2><span class="section-meta" id="fert-count"></span></div>
         <div id="fert-table"><div class="loading">Loading…</div></div>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Purchase log</h2><span class="section-meta" id="fert-purch-count"></span></div>
+        <div id="fert-purch-table"><div class="loading">Loading…</div></div>
       </div>
       <div id="abbrev-fertilizers"></div>
     </div>

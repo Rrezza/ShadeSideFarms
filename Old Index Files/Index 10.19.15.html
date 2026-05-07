@@ -323,7 +323,7 @@
       <button class="nav-item"        data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
       <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
       <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
-      <!-- Concentrate Information page retired — content moved to Recipe Setup and Price History -->
+      <button class="nav-item"        data-page="feed"         onclick="showPage('feed',this)"><span class="nav-dot"></span>Concentrate Information</button>
       <button class="nav-item"        data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
       <div class="nav-section">Animals</div>
       <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
@@ -564,7 +564,7 @@
       <div class="section" id="recipe-form-section" style="display:none">
         <div class="section-hdr"><h2 id="recipe-form-title">New concentrate recipe</h2></div>
         <div style="padding:20px 22px">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;max-width:960px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;max-width:640px">
             <div class="fc-field">
               <label>Recipe name</label>
               <input type="text" id="rf-name" placeholder="e.g. Goat Fattening Concentrate A">
@@ -572,10 +572,6 @@
             <div class="fc-field">
               <label>Species <span style="color:var(--red);font-size:10px">required</span></label>
               <select id="rf-species"><option value="">— select species —</option></select>
-            </div>
-            <div class="fc-field">
-              <label>Output ingredient <span style="color:var(--muted);font-size:10px;font-weight:400">— what this recipe produces</span></label>
-              <select id="rf-output-ing"><option value="">— none selected —</option></select>
             </div>
           </div>
           <div style="margin-bottom:20px">
@@ -650,13 +646,6 @@
                 <option value="365">365 days</option>
               </select>
               <div style="font-size:11px;color:var(--faint);margin-top:4px">Shown in summary stats</div>
-            </div>
-            <h3 style="margin-top:20px">Cost calculator</h3>
-            <div style="margin-top:6px">
-              <label style="font-size:11px;color:var(--muted)">Quantity (kg)</label>
-              <input type="number" id="ph-calc-qty" min="0" step="1" placeholder="e.g. 100"
-                oninput="renderPriceChart()" style="width:100%;margin-top:4px">
-              <div style="font-size:11px;color:var(--faint);margin-top:4px">Shows cost at latest price for each selected ingredient</div>
             </div>
           </div>
           <div class="ph-main">

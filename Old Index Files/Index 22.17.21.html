@@ -323,7 +323,7 @@
       <button class="nav-item"        data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
       <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
       <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
-      <!-- Concentrate Information page retired — content moved to Recipe Setup and Price History -->
+      <button class="nav-item"        data-page="feed"         onclick="showPage('feed',this)"><span class="nav-dot"></span>Concentrate Information</button>
       <button class="nav-item"        data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
       <div class="nav-section">Animals</div>
       <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
@@ -650,13 +650,6 @@
                 <option value="365">365 days</option>
               </select>
               <div style="font-size:11px;color:var(--faint);margin-top:4px">Shown in summary stats</div>
-            </div>
-            <h3 style="margin-top:20px">Cost calculator</h3>
-            <div style="margin-top:6px">
-              <label style="font-size:11px;color:var(--muted)">Quantity (kg)</label>
-              <input type="number" id="ph-calc-qty" min="0" step="1" placeholder="e.g. 100"
-                oninput="renderPriceChart()" style="width:100%;margin-top:4px">
-              <div style="font-size:11px;color:var(--faint);margin-top:4px">Shows cost at latest price for each selected ingredient</div>
             </div>
           </div>
           <div class="ph-main">

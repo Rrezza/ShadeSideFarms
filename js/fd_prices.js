@@ -131,6 +131,13 @@ function renderPriceChart() {
       ? avgPts.reduce(function(s, p) { return s + p.cost_per_kg; }, 0) / avgPts.length
       : null;
 
+    var calcQty = parseFloat((document.getElementById('ph-calc-qty') || {}).value);
+    var costRow = (!isNaN(calcQty) && calcQty > 0 && latest)
+      ? '<tr><td class="s-label">Cost · ' + Math.round(calcQty) + ' kg</td>' +
+        '<td class="s-val" style="font-weight:600;color:var(--text)">' +
+        pkr(Math.round(calcQty * latest.y)) + '</td></tr>'
+      : '';
+
     statsHtml +=
       '<table class="stats-table" style="min-width:200px">' +
       '<thead><tr><th colspan="2" style="font-size:11px;color:' + (colors[id] || '#27623A') +
@@ -140,6 +147,7 @@ function renderPriceChart() {
       '<tr><td class="s-label">' + phAvgDays + '-day avg</td><td class="s-val">' + (avgVal != null ? pkr(avgVal) : '—') + '</td></tr>' +
       '<tr><td class="s-label">Min · Max</td><td class="s-val">' + pkr(minVal) + ' · ' + pkr(maxVal) + '</td></tr>' +
       '<tr><td class="s-label">Records (shown)</td><td class="s-val">' + pts.length + '</td></tr>' +
+      costRow +
       '</tbody></table>';
   });
 

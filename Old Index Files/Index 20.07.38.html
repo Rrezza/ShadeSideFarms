@@ -299,15 +299,6 @@
     .plot-stat-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
     .plot-stat-label{color:var(--muted)}
     .plot-stat-val{font-family:var(--mono);font-weight:500}
-
-    /* Crop group mode toggle */
-    .lc-mode-toggle{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;width:100%;margin-top:4px}
-    .lc-mode-btn{flex:1;padding:9px 12px;font-size:13px;font-family:inherit;background:var(--bg);color:var(--muted);border:none;border-right:1px solid var(--border);cursor:pointer;transition:background 0.12s,color 0.12s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .lc-mode-btn:last-child{border-right:none}
-    .lc-mode-btn:hover{background:var(--surface);color:var(--text)}
-    .lc-mode-btn.active{background:#E6F4EA;color:#1F7A3D;font-weight:500}
-    .lc-mode-icon{font-size:11px;margin-right:4px;opacity:0.7}
-    @media(max-width:480px){.lc-mode-btn{font-size:11px;padding:8px 6px}}
   </style>
 </head>
 <body>
@@ -323,7 +314,7 @@
       <button class="nav-item"        data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
       <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
       <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
-      <!-- Concentrate Information page retired — content moved to Recipe Setup and Price History -->
+      <button class="nav-item"        data-page="feed"         onclick="showPage('feed',this)"><span class="nav-dot"></span>Concentrate Information</button>
       <button class="nav-item"        data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
       <div class="nav-section">Animals</div>
       <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
@@ -336,8 +327,8 @@
       <button class="nav-item" data-page="costsales"      onclick="showPage('costsales',this)"><span class="nav-dot"></span>Cost &amp; Sales</button>
       <div class="nav-section">Land</div>
       <button class="nav-item" data-page="land-plots"  onclick="navLandTab('plots',this)"><span class="nav-dot"></span>Plots</button>
-      <button class="nav-item" data-page="land-fert"   onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizers</button>
-      <button class="nav-item" data-page="land-app"    onclick="navLandTab('app',this)"><span class="nav-dot"></span>Applications</button>
+      <button class="nav-item" data-page="land-fert"   onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizer Inventory</button>
+      <button class="nav-item" data-page="land-app"    onclick="navLandTab('app',this)"><span class="nav-dot"></span>Application Log</button>
       <button class="nav-item" data-page="land-soil"   onclick="navLandTab('soil',this)"><span class="nav-dot"></span>Soil Tests</button>
       <button class="nav-item" data-page="land-crops"  onclick="navLandTab('crops',this)"><span class="nav-dot"></span>Crop Tracking</button>
       <button class="nav-item" data-page="land-water"  onclick="navLandTab('water',this)"><span class="nav-dot"></span>Watering</button>
@@ -564,7 +555,7 @@
       <div class="section" id="recipe-form-section" style="display:none">
         <div class="section-hdr"><h2 id="recipe-form-title">New concentrate recipe</h2></div>
         <div style="padding:20px 22px">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;max-width:960px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;max-width:640px">
             <div class="fc-field">
               <label>Recipe name</label>
               <input type="text" id="rf-name" placeholder="e.g. Goat Fattening Concentrate A">
@@ -572,10 +563,6 @@
             <div class="fc-field">
               <label>Species <span style="color:var(--red);font-size:10px">required</span></label>
               <select id="rf-species"><option value="">— select species —</option></select>
-            </div>
-            <div class="fc-field">
-              <label>Output ingredient <span style="color:var(--muted);font-size:10px;font-weight:400">— what this recipe produces</span></label>
-              <select id="rf-output-ing"><option value="">— none selected —</option></select>
             </div>
           </div>
           <div style="margin-bottom:20px">
@@ -650,13 +637,6 @@
                 <option value="365">365 days</option>
               </select>
               <div style="font-size:11px;color:var(--faint);margin-top:4px">Shown in summary stats</div>
-            </div>
-            <h3 style="margin-top:20px">Cost calculator</h3>
-            <div style="margin-top:6px">
-              <label style="font-size:11px;color:var(--muted)">Quantity (kg)</label>
-              <input type="number" id="ph-calc-qty" min="0" step="1" placeholder="e.g. 100"
-                oninput="renderPriceChart()" style="width:100%;margin-top:4px">
-              <div style="font-size:11px;color:var(--faint);margin-top:4px">Shows cost at latest price for each selected ingredient</div>
             </div>
           </div>
           <div class="ph-main">
@@ -1076,8 +1056,8 @@
       <!-- Sub-tab bar — hidden; navigation driven by sidebar -->
       <div class="land-tab-bar" style="display:none">
         <button class="land-tab active" onclick="showLandTab('plots',this)">Plots</button>
-        <button class="land-tab" onclick="showLandTab('fert',this)">Fertilizers</button>
-        <button class="land-tab" onclick="showLandTab('app',this)">Applications</button>
+        <button class="land-tab" onclick="showLandTab('fert',this)">Fertilizer Inventory</button>
+        <button class="land-tab" onclick="showLandTab('app',this)">Application Log</button>
         <button class="land-tab" onclick="showLandTab('soil',this)">Soil Tests</button>
         <button class="land-tab" onclick="showLandTab('crops',this)">Crop Tracking</button>
         <button class="land-tab" onclick="showLandTab('water',this)">Watering</button>
@@ -1152,27 +1132,14 @@
 
       <!-- ===== TAB 2: FERTILIZER INVENTORY ===== -->
       <div id="land-panel-fert" class="land-panel" style="display:none">
-        <!-- Stock summary -->
         <div class="land-section">
           <div class="land-section-hdr">
-            <h2>Fertilizers</h2>
+            <h2>Fertilizer Inventory</h2>
             <span class="land-section-meta" id="land-fert-meta"></span>
           </div>
           <div id="land-fert-table"></div>
-        </div>
-        <!-- Purchase log -->
-        <div class="land-section" style="margin-top:0;border-top:1px solid var(--border)">
-          <div class="land-section-hdr">
-            <h2>Purchase Log</h2>
-            <span class="land-section-meta" id="land-purch-count"></span>
-            <button class="btn btn-sm btn-primary" onclick="openLandPurchModal()" style="margin-left:auto">+ Log purchase</button>
-          </div>
-          <div id="land-purch-table"></div>
-        </div>
-        <!-- Price history chart -->
-        <div class="land-section" style="margin-top:0;border-top:1px solid var(--border)">
-          <div style="padding:14px 22px;background:var(--bg)">
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Cost per kg / L over time</div>
+          <div style="padding:14px 22px;border-top:1px solid var(--border);background:var(--bg)">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Price history (PKR per unit)</div>
             <div style="height:240px;position:relative"><canvas id="land-fert-price-chart"></canvas></div>
           </div>
         </div>
@@ -1182,41 +1149,48 @@
       <div id="land-panel-app" class="land-panel" style="display:none">
         <div class="land-section">
           <div class="land-section-hdr">
-            <h2>Applications</h2>
+            <h2>Application Log</h2>
             <span class="land-section-meta" id="land-app-count"></span>
           </div>
-          <!-- Log form -->
           <div id="land-app-form" style="display:none">
             <div class="land-form-grid">
               <div class="lf-field"><label>Date</label><input type="date" id="la-date"></div>
-              <div class="lf-field"><label>Plot *</label><select id="la-plot"><option value="">Select plot</option></select></div>
-              <div class="lf-field"><label>Fertilizer *</label><select id="la-fert" onchange="laOnFertChange()"><option value="">Select fertilizer</option></select></div>
-              <div class="lf-field"><label>Bags / containers</label><input type="number" id="la-bags" min="0" step="0.5" placeholder="enter bags..." oninput="laCalcFromBags()"></div>
-              <div class="lf-field"><label>kg applied</label><input type="number" id="la-kg" min="0" step="0.5" placeholder="or enter kg directly..." oninput="laCalcFromKg()"></div>
-              <div class="lf-field" id="la-derived-wrap" style="display:none"><label></label>
-                <div id="la-derived-text" style="font-size:13px;color:var(--muted);padding:8px 0;font-style:italic"></div></div>
+              <div class="lf-field"><label>Plot</label><select id="la-plot"><option value="">Select plot</option></select></div>
+              <div class="lf-field"><label>Type</label>
+                <select id="la-type">
+                  <option value="gypsum">Gypsum</option>
+                  <option value="compost">Compost</option>
+                  <option value="bsf_frass">BSF frass</option>
+                  <option value="biochar">Biochar</option>
+                  <option value="lime">Lime</option>
+                  <option value="farmyard_manure">Farmyard manure</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
               <div class="lf-field"><label>Method</label>
                 <select id="la-method" onchange="checkFoliarWarning()">
                   <option value="soil_incorporation">Soil incorporation</option>
                   <option value="broadcast">Broadcast</option>
-                  <option value="banded">Banded</option>
                   <option value="foliar_spray">Foliar spray</option>
                   <option value="drip_injection">Drip injection</option>
                 </select>
               </div>
               <div class="lf-field"><label>Water source</label>
                 <select id="la-wsrc" onchange="checkFoliarWarning()">
-                  <option value="na">N/A</option>
                   <option value="tubewell">Tubewell</option>
                   <option value="rainwater">Rainwater</option>
                   <option value="stored">Stored / tank</option>
+                  <option value="na">N/A</option>
                 </select>
               </div>
+              <div class="lf-field"><label>Fertilizer (stock)</label><select id="la-fert"><option value="">— none —</option></select></div>
+              <div class="lf-field"><label>kg applied</label><input type="number" id="la-kg" min="0" step="0.5" placeholder="kg"></div>
+              <div class="lf-field"><label>Source / origin</label><input type="text" id="la-source" placeholder="e.g. on-farm BSF"></div>
               <div class="lf-field"><label>Worker</label><select id="la-worker"><option value="">—</option></select></div>
               <div class="lf-field" style="grid-column:1/-1"><label>Notes</label><input type="text" id="la-notes" placeholder="coverage area, observations…"></div>
             </div>
             <div id="la-foliar-warn" style="display:none;margin:0 22px 12px;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bdr);border-radius:8px;font-size:12px;color:var(--red)">
-              ⚠ <strong>Tubewell water is incompatible with foliar micronutrient applications.</strong> Bicarbonate precipitates iron and zinc — the application will be ineffective. Use rainwater or stored water for foliar sprays.
+              ⚠ <strong>Tubewell water is incompatible with foliar iron/zinc applications.</strong> Bicarbonate precipitates micronutrients — the application will be ineffective. Use rainwater or stored water for foliar sprays.
             </div>
             <div style="padding:0 22px 18px;display:flex;gap:10px">
               <button class="btn btn-primary" onclick="submitLandApp()">Save application</button>
@@ -1224,19 +1198,27 @@
               <span id="la-status" style="font-size:13px;color:var(--muted);align-self:center"></span>
             </div>
           </div>
-          <!-- Filters + table -->
           <div style="padding:14px 22px;border-bottom:1px solid var(--border);display:flex;gap:14px;flex-wrap:wrap;align-items:center">
             <button class="btn btn-sm" onclick="toggleLandAppForm()">+ Log application</button>
             <label style="font-size:13px;color:var(--muted)">Plot</label>
             <select id="land-app-plot-filter" onchange="renderLandAppLog()"><option value="">All plots</option></select>
-            <label style="font-size:13px;color:var(--muted)">Fertilizer</label>
-            <select id="land-app-fert-filter" onchange="renderLandAppLog()"><option value="">All fertilizers</option></select>
+            <label style="font-size:13px;color:var(--muted)">Type</label>
+            <select id="land-app-type-filter" onchange="renderLandAppLog()">
+              <option value="">All types</option>
+              <option value="gypsum">Gypsum</option>
+              <option value="compost">Compost</option>
+              <option value="bsf_frass">BSF frass</option>
+              <option value="biochar">Biochar</option>
+              <option value="lime">Lime</option>
+              <option value="farmyard_manure">Farmyard manure</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div id="land-app-table"></div>
         </div>
       </div>
 
-            <!-- ===== TAB 4: SOIL TESTS ===== -->
+      <!-- ===== TAB 4: SOIL TESTS ===== -->
       <div id="land-panel-soil" class="land-panel" style="display:none">
         <div class="land-section">
           <div class="land-section-hdr">
@@ -1367,17 +1349,9 @@
             <div class="land-form-grid">
               <div class="lf-field" style="grid-column:1/-1">
                 <label>Mode</label>
-                <!-- Hidden radio inputs keep the existing JS submit logic intact -->
-                <input type="radio" name="lc-group-mode" value="new"      checked style="display:none">
-                <input type="radio" name="lc-group-mode" value="existing"         style="display:none">
-                <!-- Visible segmented toggle -->
-                <div class="lc-mode-toggle" id="lc-mode-toggle">
-                  <button type="button" class="lc-mode-btn active" onclick="setCropGroupMode('new')" id="lc-mode-btn-new">
-                    <span class="lc-mode-icon">✦</span> New group
-                  </button>
-                  <button type="button" class="lc-mode-btn" onclick="setCropGroupMode('existing')" id="lc-mode-btn-existing">
-                    <span class="lc-mode-icon">⊕</span> Add to existing group
-                  </button>
+                <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="lc-group-mode" value="new" checked onchange="toggleGroupMode()"> New group</label>
+                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="lc-group-mode" value="existing" onchange="toggleGroupMode()"> Add to existing group on this plot</label>
                 </div>
               </div>
             </div>
@@ -1621,18 +1595,22 @@
       <div id="abbrev-ingredients"></div>
     </div>
 
-    <!-- Fertilizers — registry only. Purchases and inventory live in Land → Fertilizers -->
+    <!-- Fertilizers (NEW, mirrors Ingredients pattern) -->
     <div class="page" id="page-fertilizers">
       <div class="page-hdr"><h1>Fertilizers</h1>
         <div class="page-hdr-right">
           <button class="btn btn-primary" onclick="openFertModal()">+ Add fertilizer</button>
+          <button class="btn" onclick="openFertPurchaseModal()">+ Log purchase</button>
           <button class="refresh-btn" onclick="loadFertilizersPage()">↻ Refresh</button>
         </div>
       </div>
-      <div style="padding:10px 22px 0;font-size:12px;color:var(--muted)">Registry only — purchases and stock are managed in <strong>Land → Fertilizers</strong>.</div>
       <div class="section">
         <div class="section-hdr"><h2>Fertilizer registry</h2><span class="section-meta" id="fert-count"></span></div>
         <div id="fert-table"><div class="loading">Loading…</div></div>
+      </div>
+      <div class="section">
+        <div class="section-hdr"><h2>Purchase log</h2><span class="section-meta" id="fert-purch-count"></span></div>
+        <div id="fert-purch-table"><div class="loading">Loading…</div></div>
       </div>
       <div id="abbrev-fertilizers"></div>
     </div>
@@ -1699,35 +1677,6 @@
 </div>
 
 <!-- ======================== MODALS ======================== -->
-
-<!-- Land: Log fertilizer purchase modal -->
-<div class="modal-overlay" id="land-purch-modal" style="display:none">
-  <div class="modal-box">
-    <h3>Log fertilizer purchase</h3>
-    <div class="modal-fields">
-      <label>Fertilizer</label>
-      <select id="lp-fert" onchange="updateLandPurchLabels()"><option value="">Select fertilizer</option></select>
-      <label>Date</label>
-      <input type="date" id="lp-date">
-      <label id="lp-qty-label">Quantity (bags)</label>
-      <input type="number" id="lp-qty" min="0" step="1" placeholder="e.g. 3" oninput="updateLandPurchDerived()">
-      <label id="lp-cost-label">Cost per bag (PKR)</label>
-      <input type="number" id="lp-cost" min="0" step="1" placeholder="e.g. 3200" oninput="updateLandPurchDerived()">
-      <div id="lp-derived" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:13px;color:var(--muted)">
-        <span id="lp-derived-text"></span>
-      </div>
-      <label>Supplier</label>
-      <input type="text" id="lp-supplier" placeholder="Where did you get it?">
-      <label>Notes (optional)</label>
-      <input type="text" id="lp-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeLandPurchModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitLandFertPurchase()">Save</button>
-      <span id="lp-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
 <!-- Auth / Login modal -->
 <div class="modal-overlay" id="auth-login-modal" style="display:none">
   <div class="modal-box" style="max-width:360px">
