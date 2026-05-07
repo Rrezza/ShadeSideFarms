@@ -180,6 +180,8 @@ async function loadLandPage() {
     document.getElementById('land-updated').textContent =
       'Updated ' + new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' });
     renderAbbrevKey('abbrev-land', ['EC', 'SAR', 'OM', 'RSC', 'PKR', 'BSF', 'ESP']);
+    // Always restore the active tab panel regardless of how loadLandPage was called
+    if (typeof showLandTab === 'function') showLandTab(landActiveTab, null);
   } catch (err) {
     if (loadingEl) loadingEl.innerHTML =
       '<div style="padding:22px;color:var(--red)"><strong>Error loading land data:</strong> ' + err.message +
@@ -232,7 +234,7 @@ function populateLandDropdowns() {
         .filter(function(i) { return i.source_type === 'produced' || i.source_type === 'dual'; })
         .map(function(i) { return '<option value="' + i.id + '">' + i.name + '</option>'; }).join('');
   }
-  ['land-app-plot-filter','land-test-plot-filter','land-water-plot-filter'].forEach(function(id) {
+  ['land-app-plot-filter','land-test-plot-filter','land-water-plot-filter','lc-plot-filter'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.innerHTML = plotFilter;
   });
 
