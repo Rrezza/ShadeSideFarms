@@ -85,10 +85,10 @@ async function loadIngredientInventory() {
 
       // Batches (for display — full join)
       fiSafe('concentrate_batches',
-        'select=id,date,qty_kg_produced,notes,recorded_by,' +
+        'select=id,batch_date,qty_kg_produced,notes,recorded_by,' +
         'workers(name),' +
         'recipes(id,name,output_ingredient_id,out_ing:ingredients!output_ingredient_id(id,name))' +
-        '&order=date.desc&limit=200'),
+        '&order=batch_date.desc&limit=200'),
 
       // Feeding events (for stock decrement)
       fiSafe('feeding_events',
@@ -409,7 +409,7 @@ function renderFiBatchLog() {
     var rec    = b.recipes || {};
     var outIng = rec.out_ing || {};
     html += '<tr>' +
-      '<td class="mono">' + fmtDate(b.date) + '</td>' +
+      '<td class="mono">' + fmtDate(b.batch_date || b.date) + '</td>' +
       '<td style="font-weight:500">' + (rec.name || '—') + '</td>' +
       '<td>' + (outIng.name ? '<span class="badge badge-lime">' + outIng.name + '</span>' : '<span class="badge badge-amber">Not set</span>') + '</td>' +
       '<td class="mono right">' + (b.qty_kg_produced != null ? r1(parseFloat(b.qty_kg_produced)).toLocaleString() + ' kg' : '—') + '</td>' +
@@ -678,7 +678,7 @@ async function submitFiBatch() {
 
     // Insert batch
     var batchResult = await sbInsert('concentrate_batches', [{
-      date: date,
+      batch_date: date,
       recipe_id: parseInt(recId),
       qty_kg_produced: qty,
       notes: notes,
