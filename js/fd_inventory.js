@@ -65,7 +65,7 @@ async function loadIngredientInventory() {
   try {
     var r = await Promise.all([
       sbGet('ingredients',
-        'active=eq.true&select=id,name,category,reorder_point_kg&order=category,name'),
+        'active=eq.true&select=id,name,category&order=category,name'),
 
       // Acquisitions (display version — also used for stock calc)
       sbGet('ingredient_acquisitions',
@@ -247,7 +247,7 @@ function renderFiStock() {
       var net  = fiNetStock(s);
       var totalIn  = s.in_acquired + s.in_mixed;
       var totalOut = s.out_mixed + s.out_hay + s.out_fodder + s.out_concentrate;
-      var reorder  = ing.reorder_point_kg != null ? parseFloat(ing.reorder_point_kg) : null;
+      var reorder  = null; // reorder_point_kg not yet on ingredients table
 
       var cls = net <= 0 ? 'inv-stock-zero'
         : (reorder != null && net < reorder ? 'inv-stock-low' : 'inv-stock-pos');
