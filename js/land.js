@@ -134,7 +134,7 @@ async function loadLandPage() {
         'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
         'workers(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by,' +
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,notes,logged_by,' +
         'workers(name)&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
@@ -1226,7 +1226,7 @@ function buildObsPanel(c, observations) {
           '<option value="false"' + (!o.pest_disease_flag ? ' selected' : '') + '>No</option>' +
           '<option value="true"'  + ( o.pest_disease_flag ? ' selected' : '') + '>Yes ⚠</option>' +
         '</select></td>' +
-        '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.note || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
+        '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.notes || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
         '<td class="muted-cell" style="white-space:nowrap">' + (o.workers ? o.workers.name : '—') + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" style="font-size:11px" onclick="patchObservation(' + oid + ',' + c.id + ')">Save</button>' +
@@ -1655,9 +1655,9 @@ async function submitObservation(cropId) {
     var flag   = document.getElementById('of-flag-' + cropId).value === 'true';
     var wId    = document.getElementById('of-worker-' + cropId).value;
     var note   = (document.getElementById('of-note-' + cropId).value || '').trim();
-    var d = { plot_crop_id: cropId, pest_disease_flag: flag };
+    var d = { plot_crop_id: cropId, pest_disease_flag: flag, observed_at: new Date().toISOString() };
     if (health) d.health_status = health;
-    if (note)   d.note          = note;
+    if (note)   d.notes         = note;
     if (wId)    d.logged_by     = parseInt(wId);
     await sbInsert('crop_observations', [d]);
     await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
@@ -1675,7 +1675,7 @@ async function patchObservation(obsId, cropId) {
     var health = document.getElementById('oe-health-' + obsId).value;
     var flag   = document.getElementById('oe-flag-'   + obsId).value === 'true';
     var note   = (document.getElementById('oe-note-'  + obsId).value || '').trim();
-    await sbPatch('crop_observations', obsId, { health_status: health, pest_disease_flag: flag, note: note || null });
+    await sbPatch('crop_observations', obsId, { health_status: health, pest_disease_flag: flag, notes: note || null });
     var cropObs = landObservations.filter(function(o) { return o.plot_crop_id === cropId; });
     cropObs.sort(function(a, b) { return (b.observed_at || '').localeCompare(a.observed_at || ''); });
     if (cropObs.length && cropObs[0].id === obsId) {
