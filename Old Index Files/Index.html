@@ -300,42 +300,6 @@
     .plot-stat-label{color:var(--muted)}
     .plot-stat-val{font-family:var(--mono);font-weight:500}
 
-    /* Collapsible sidebar sections */
-    .nav-section-hdr{display:flex;align-items:center;justify-content:space-between;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:0 12px;margin:16px 0 6px;cursor:pointer;user-select:none}
-    .nav-section-hdr:hover{color:rgba(255,255,255,0.55)}
-    .nav-section-arrow{transition:transform 0.18s ease;font-size:10px}
-    .nav-section-wrap.collapsed .nav-section-arrow{transform:rotate(-90deg)}
-    .nav-section-wrap.collapsed .nav-section-items{display:none}
-    .nav-section-items{display:flex;flex-direction:column;gap:1px}
-
-    /* Plot Overview cards */
-    .ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
-    .ov-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
-    .ov-card-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-    .ov-card-code{font-size:15px;font-weight:600;color:var(--text)}
-    .ov-card-meta{font-size:12px;color:var(--faint);margin-top:3px}
-    .ov-card-badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-    .ov-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500;text-transform:capitalize;white-space:nowrap}
-    .ov-badge-green{background:#E6F4EA;color:#1F7A3D}
-    .ov-badge-amber{background:#FEF3C7;color:#92400E}
-    .ov-badge-blue{background:#DBEAFE;color:#1E40AF}
-    .ov-badge-gray{background:#F1F0EB;color:#6F6B5E}
-    .ov-pest-warning{background:var(--red-lt);border:1px solid var(--red-bdr);color:var(--red);padding:7px 11px;border-radius:8px;font-size:12px;font-weight:500}
-    .ov-section-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
-    .ov-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;font-size:12px;gap:10px}
-    .ov-row-label{color:var(--muted);flex-shrink:0}
-    .ov-row-val{font-family:var(--mono);font-size:11.5px;text-align:right;color:var(--text)}
-    .ov-crop-group{font-size:12px;font-weight:500;color:var(--text);margin-top:2px}
-    .ov-crop-grp-name{}
-    .ov-crop-count{color:var(--faint);font-weight:400;font-size:11px}
-    .ov-crop-member{font-size:12px;color:var(--text);padding-left:10px;padding-top:2px}
-    .ov-crop-days{color:var(--faint);font-size:11px}
-    .ov-empty-line{font-size:12px;color:var(--faint);font-style:italic}
-    .ov-faint{color:var(--faint);font-size:11px}
-    .ov-pest-dot{color:var(--red);font-weight:600}
-    .ov-actions{display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)}
-    .ov-actions .btn-sm{font-size:11px;padding:4px 10px}
-
     /* Crop group mode toggle */
     .lc-mode-toggle{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;width:100%;margin-top:4px}
     .lc-mode-btn{flex:1;padding:9px 12px;font-size:13px;font-family:inherit;background:var(--bg);color:var(--muted);border:none;border-right:1px solid var(--border);cursor:pointer;transition:background 0.12s,color 0.12s;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -354,84 +318,45 @@
       <div class="farm-sub">Operations Dashboard</div>
     </div>
     <div class="sidebar-nav">
-      <!-- Overview (landing page) -->
-      <button class="nav-item active" data-page="overview" onclick="showPage('overview',this)" style="margin-bottom:8px"><span class="nav-dot"></span>Overview</button>
-
-      <!-- Land -->
-      <div class="nav-section-wrap" data-section="land">
-        <div class="nav-section-hdr" onclick="toggleNavSection('land')"><span>Land</span><span class="nav-section-arrow">▾</span></div>
-        <div class="nav-section-items">
-          <button class="nav-item" data-page="land-crops"  onclick="navLandTab('crops',this)"><span class="nav-dot"></span>Crop Tracking</button>
-          <button class="nav-item" data-page="land-fert"   onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizer Inventory</button>
-          <button class="nav-item" data-page="land-app"    onclick="navLandTab('app',this)"><span class="nav-dot"></span>Fertilizer Applications</button>
-          <button class="nav-item" data-page="land-water"  onclick="navLandTab('water',this)"><span class="nav-dot"></span>Watering</button>
-          <button class="nav-item" data-page="land-soil"   onclick="navLandTab('soil',this)"><span class="nav-dot"></span>Soil Tests</button>
-          <button class="nav-item" data-page="land-wtest"  onclick="navLandTab('wtest',this)"><span class="nav-dot"></span>Water Tests</button>
-        </div>
-      </div>
-
-      <!-- Animals -->
-      <div class="nav-section-wrap" data-section="animals">
-        <div class="nav-section-hdr" onclick="toggleNavSection('animals')"><span>Animals</span><span class="nav-section-arrow">▾</span></div>
-        <div class="nav-section-items">
-          <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
-          <button class="nav-item" data-page="angroups"       onclick="showPage('angroups',this)"><span class="nav-dot"></span>Groups</button>
-          <button class="nav-item" data-page="intake"         onclick="showPage('intake',this)"><span class="nav-dot"></span>Intake</button>
-          <button class="nav-item" data-page="weighttracking" onclick="showPage('weighttracking',this)"><span class="nav-dot"></span>Weight Tracking</button>
-          <button class="nav-item" data-page="anfeed"         onclick="showPage('anfeed',this)"><span class="nav-dot"></span>Feeding</button>
-          <button class="nav-item" data-page="health"         onclick="showPage('health',this)"><span class="nav-dot"></span>Health</button>
-          <button class="nav-item" data-page="breeding"       onclick="showPage('breeding',this)"><span class="nav-dot"></span>Breeding</button>
-          <button class="nav-item" data-page="costsales"      onclick="showPage('costsales',this)"><span class="nav-dot"></span>Cost &amp; Sales</button>
-        </div>
-      </div>
-
-      <!-- Feed -->
-      <div class="nav-section-wrap" data-section="feed">
-        <div class="nav-section-hdr" onclick="toggleNavSection('feed')"><span>Feed</span><span class="nav-section-arrow">▾</span></div>
-        <div class="nav-section-items">
-          <button class="nav-item" data-page="inginventory" onclick="showPage('inginventory',this)"><span class="nav-dot"></span>Ingredient Inventory</button>
-          <button class="nav-item" data-page="seedinventory" onclick="showPage('seedinventory',this)"><span class="nav-dot"></span>Seed Inventory</button>
-          <button class="nav-item" data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
-          <button class="nav-item" data-page="recipesetup"  onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
-          <button class="nav-item" data-page="rationplans"  onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
-          <!-- Concentrate Information page retired -->
-          <button class="nav-item" data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
-        </div>
-      </div>
-
-      <!-- Setup -->
-      <div class="nav-section-wrap" data-section="setup">
-        <div class="nav-section-hdr" onclick="toggleNavSection('setup')"><span>Setup</span><span class="nav-section-arrow">▾</span></div>
-        <div class="nav-section-items">
-          <button class="nav-item" data-page="setupplots"   onclick="showPage('setupplots',this)"><span class="nav-dot"></span>Plots</button>
-          <button class="nav-item" data-page="workers"      onclick="showPage('workers',this)"><span class="nav-dot"></span>Workers</button>
-          <button class="nav-item" data-page="locations"    onclick="showPage('locations',this)"><span class="nav-dot"></span>Locations</button>
-          <button class="nav-item" data-page="ingredients"  onclick="showPage('ingredients',this)"><span class="nav-dot"></span>Ingredients</button>
-          <button class="nav-item" data-page="species"      onclick="showPage('species',this)"><span class="nav-dot"></span>Species</button>
-          <button class="nav-item" data-page="crops"        onclick="showPage('crops',this)"><span class="nav-dot"></span>Crops</button>
-          <button class="nav-item" data-page="fertilizers"  onclick="showPage('fertilizers',this)"><span class="nav-dot"></span>Fertilizers</button>
-          <button class="nav-item" data-page="tools"        onclick="showPage('tools',this)"><span class="nav-dot"></span>Tools</button>
-          <button class="nav-item" data-page="inventory"    onclick="showPage('inventory',this)"><span class="nav-dot"></span>Inventory</button>
-        </div>
-      </div>
+      <div class="nav-section">Feed</div>
+      <button class="nav-item active" data-page="purchases"    onclick="showPage('purchases',this)"><span class="nav-dot"></span>Purchase Log</button>
+      <button class="nav-item"        data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
+      <button class="nav-item"        data-page="recipesetup"   onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
+      <button class="nav-item"        data-page="rationplans"   onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
+      <!-- Concentrate Information page retired — content moved to Recipe Setup and Price History -->
+      <button class="nav-item"        data-page="projections"  onclick="showPage('projections',this)"><span class="nav-dot"></span>Cost Projections</button>
+      <div class="nav-section">Animals</div>
+      <button class="nav-item" data-page="animalslist"    onclick="showPage('animalslist',this)"><span class="nav-dot"></span>Animals</button>
+      <button class="nav-item" data-page="angroups"       onclick="showPage('angroups',this)"><span class="nav-dot"></span>Groups</button>
+      <button class="nav-item" data-page="intake"         onclick="showPage('intake',this)"><span class="nav-dot"></span>Intake</button>
+      <button class="nav-item" data-page="weighttracking" onclick="showPage('weighttracking',this)"><span class="nav-dot"></span>Weight Tracking</button>
+      <button class="nav-item" data-page="anfeed"         onclick="showPage('anfeed',this)"><span class="nav-dot"></span>Feeding</button>
+      <button class="nav-item" data-page="health"         onclick="showPage('health',this)"><span class="nav-dot"></span>Health</button>
+      <button class="nav-item" data-page="breeding"       onclick="showPage('breeding',this)"><span class="nav-dot"></span>Breeding</button>
+      <button class="nav-item" data-page="costsales"      onclick="showPage('costsales',this)"><span class="nav-dot"></span>Cost &amp; Sales</button>
+      <div class="nav-section">Land</div>
+      <button class="nav-item" data-page="land-plots"  onclick="navLandTab('plots',this)"><span class="nav-dot"></span>Plots</button>
+      <button class="nav-item" data-page="land-fert"   onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizers</button>
+      <button class="nav-item" data-page="land-app"    onclick="navLandTab('app',this)"><span class="nav-dot"></span>Applications</button>
+      <button class="nav-item" data-page="land-soil"   onclick="navLandTab('soil',this)"><span class="nav-dot"></span>Soil Tests</button>
+      <button class="nav-item" data-page="land-crops"  onclick="navLandTab('crops',this)"><span class="nav-dot"></span>Crop Tracking</button>
+      <button class="nav-item" data-page="land-water"  onclick="navLandTab('water',this)"><span class="nav-dot"></span>Watering</button>
+      <button class="nav-item" data-page="land-wtest"  onclick="navLandTab('wtest',this)"><span class="nav-dot"></span>Water Tests</button>
+      <div class="nav-section">Setup</div>
+      <button class="nav-item" data-page="workers"      onclick="showPage('workers',this)"><span class="nav-dot"></span>Workers</button>
+      <button class="nav-item" data-page="locations"    onclick="showPage('locations',this)"><span class="nav-dot"></span>Locations</button>
+      <button class="nav-item" data-page="ingredients"  onclick="showPage('ingredients',this)"><span class="nav-dot"></span>Ingredients</button>
+      <button class="nav-item" data-page="species"      onclick="showPage('species',this)"><span class="nav-dot"></span>Species</button>
+      <button class="nav-item" data-page="crops"        onclick="showPage('crops',this)"><span class="nav-dot"></span>Crops</button>
+      <button class="nav-item" data-page="fertilizers"  onclick="showPage('fertilizers',this)"><span class="nav-dot"></span>Fertilizers</button>
+      <button class="nav-item" data-page="tools"        onclick="showPage('tools',this)"><span class="nav-dot"></span>Tools</button>
+      <button class="nav-item" data-page="inventory"    onclick="showPage('inventory',this)"><span class="nav-dot"></span>Inventory</button>
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
-
-
-    <!-- ======================== OVERVIEW (LANDING PAGE) ======================== -->
-    <div class="page active" id="page-overview">
-      <div class="page-hdr">
-        <div><h1>Plot Overview</h1><div class="last-updated" id="ov-updated"></div></div>
-        <div class="page-hdr-right">
-          <button class="refresh-btn" onclick="loadOverviewPage()">↻ Refresh</button>
-        </div>
-      </div>
-      <div id="ov-content"><div class="loading">Loading…</div></div>
-    </div>
 
     <!-- ======================== FEED MODULE ======================== -->
 
@@ -685,7 +610,7 @@
     </div>
 
     <!-- Purchase Log -->
-    <div class="page" id="page-purchases">
+    <div class="page active" id="page-purchases">
       <div class="page-hdr"><h1>Purchase log</h1><button class="refresh-btn" onclick="loadPurchases()">↻ Refresh</button></div>
       <div class="section">
         <div class="section-hdr">
@@ -699,70 +624,6 @@
         <div id="purchase-table"><div class="loading">Loading…</div></div>
       </div>
       <div id="abbrev-purchases"></div>
-    </div>
-
-
-    <!-- Feed: Ingredient Inventory (replaces standalone Purchase Log) -->
-    <div class="page" id="page-inginventory">
-      <div class="page-hdr">
-        <h1>Ingredient Inventory</h1>
-        <div class="page-hdr-right">
-          <button class="btn btn-primary" onclick="openFiAcqModal('purchased')">+ Log purchase</button>
-          <button class="btn" onclick="openFiAcqModal('harvested')">+ Log harvest receipt</button>
-          <button class="btn" onclick="openFiBatchModal()">+ Mix concentrate batch</button>
-          <button class="refresh-btn" onclick="loadIngredientInventory()">↻ Refresh</button>
-        </div>
-      </div>
-
-      <!-- Stock summary -->
-      <div class="section">
-        <div class="section-hdr">
-          <h2>Current stock</h2>
-          <span class="section-meta" id="fi-stock-count"></span>
-        </div>
-        <div id="fi-stock-table"><div class="loading">Loading…</div></div>
-      </div>
-
-      <!-- Acquisition log -->
-      <div class="section">
-        <div class="section-hdr">
-          <h2>Acquisition log</h2>
-          <span class="section-meta" id="fi-acq-count"></span>
-        </div>
-        <div id="fi-acq-table"><div class="loading">Loading…</div></div>
-      </div>
-
-      <!-- Concentrate batches -->
-      <div class="section">
-        <div class="section-hdr">
-          <h2>Concentrate batches</h2>
-          <span class="section-meta" id="fi-batch-count"></span>
-        </div>
-        <div id="fi-batch-table"><div class="loading">Loading…</div></div>
-      </div>
-
-      <div id="abbrev-fi"></div>
-    </div>
-
-
-    <!-- Feed: Seed Inventory -->
-    <div class="page" id="page-seedinventory">
-      <div class="page-hdr">
-        <h1>Seed Inventory</h1>
-        <div class="page-hdr-right">
-          <button class="btn btn-primary" onclick="openSdPurchModal()">+ Log seed purchase</button>
-          <button class="refresh-btn" onclick="loadSeedInventory()">↻ Refresh</button>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Current seed stock</h2><span class="section-meta" id="sd-stock-count"></span></div>
-        <div id="sd-stock-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Purchase log</h2><span class="section-meta" id="sd-purch-count"></span></div>
-        <div id="sd-purch-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div id="abbrev-seeds"></div>
     </div>
 
     <!-- Price History -->
@@ -1214,12 +1075,79 @@
 
       <!-- Sub-tab bar — hidden; navigation driven by sidebar -->
       <div class="land-tab-bar" style="display:none">
-        <button class="land-tab active" onclick="showLandTab('crops',this)">Crop Tracking</button>
-        <button class="land-tab" onclick="showLandTab('fert',this)">Fertilizer Inventory</button>
-        <button class="land-tab" onclick="showLandTab('app',this)">Fertilizer Applications</button>
-        <button class="land-tab" onclick="showLandTab('water',this)">Watering</button>
+        <button class="land-tab active" onclick="showLandTab('plots',this)">Plots</button>
+        <button class="land-tab" onclick="showLandTab('fert',this)">Fertilizers</button>
+        <button class="land-tab" onclick="showLandTab('app',this)">Applications</button>
         <button class="land-tab" onclick="showLandTab('soil',this)">Soil Tests</button>
+        <button class="land-tab" onclick="showLandTab('crops',this)">Crop Tracking</button>
+        <button class="land-tab" onclick="showLandTab('water',this)">Watering</button>
         <button class="land-tab" onclick="showLandTab('wtest',this)">Water Tests</button>
+      </div>
+
+      <!-- ===== TAB 1: PLOTS ===== -->
+      <div id="land-panel-plots" class="land-panel">
+        <div class="land-section">
+          <div class="land-section-hdr">
+            <h2>Plots</h2>
+            <span class="land-section-meta" id="land-plot-count"></span>
+          </div>
+          <div id="land-plot-form" style="display:none">
+            <div class="land-form-grid">
+              <div class="lf-field"><label>Plot code (auto-suggested)</label><input type="text" id="lp-code" placeholder="P01"></div>
+              <div class="lf-field"><label>Plot name</label><input type="text" id="lp-name" placeholder="e.g. North Canal Strip"></div>
+              <div class="lf-field"><label>Location (farm reference)</label><select id="lp-loc"><option value="">Select location</option></select></div>
+              <div class="lf-field"><label>Plot type</label>
+                <select id="lp-type">
+                  <option value="field">Field</option>
+                  <option value="linear">Linear (strip / hedgerow)</option>
+                  <option value="edge">Edge (perimeter / bank)</option>
+                  <option value="infrastructure">Infrastructure</option>
+                </select>
+              </div>
+              <div class="lf-field"><label>Area</label><input type="number" id="lp-area" min="0" step="0.01" placeholder="e.g. 1.5"></div>
+              <div class="lf-field"><label>Unit</label>
+                <select id="lp-aunit">
+                  <option value="acres">Acres</option>
+                  <option value="kanals">Kanals</option>
+                </select>
+              </div>
+              <div class="lf-field"><label>Use case</label>
+                <select id="lp-use">
+                  <option value="">— select —</option>
+                  <option value="agricultural">Agricultural</option>
+                  <option value="fodder">Fodder</option>
+                  <option value="fallow">Fallow</option>
+                  <option value="pasture">Pasture</option>
+                  <option value="rehabilitation">Rehabilitation</option>
+                  <option value="access">Access / pathway</option>
+                  <option value="infrastructure">Infrastructure</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="lf-field"><label>Irrigation method</label>
+                <select id="lp-irr">
+                  <option value="">— select —</option>
+                  <option value="flood">Flood</option>
+                  <option value="furrow">Furrow</option>
+                  <option value="drip">Drip</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div class="lf-field" style="grid-column:1/-1"><label>Description / location detail</label><input type="text" id="lp-desc" placeholder="e.g. north-east corner, adjacent to main canal"></div>
+              <div class="lf-field" style="grid-column:1/-1"><label>Notes</label><textarea id="lp-notes" rows="2" placeholder="Soil history, observations, previous crops…"></textarea></div>
+            </div>
+            <div style="padding:0 22px 18px;display:flex;gap:10px">
+              <button class="btn btn-primary" onclick="submitLandPlot()">Save plot</button>
+              <button class="btn" onclick="toggleLandPlotForm()">Cancel</button>
+              <span id="lp-status" style="font-size:13px;color:var(--muted);align-self:center"></span>
+            </div>
+          </div>
+          <div style="padding:14px 22px;border-bottom:1px solid var(--border)">
+            <button class="btn btn-sm" onclick="toggleLandPlotForm()">+ Add plot</button>
+          </div>
+          <div id="land-plots-loading"></div>
+          <div id="land-plot-table"></div>
+        </div>
       </div>
 
       <!-- ===== TAB 2: FERTILIZER INVENTORY ===== -->
@@ -1439,8 +1367,10 @@
             <div class="land-form-grid">
               <div class="lf-field" style="grid-column:1/-1">
                 <label>Mode</label>
+                <!-- Hidden radio inputs keep the existing JS submit logic intact -->
                 <input type="radio" name="lc-group-mode" value="new"      checked style="display:none">
                 <input type="radio" name="lc-group-mode" value="existing"         style="display:none">
+                <!-- Visible segmented toggle -->
                 <div class="lc-mode-toggle" id="lc-mode-toggle">
                   <button type="button" class="lc-mode-btn active" onclick="setCropGroupMode('new')" id="lc-mode-btn-new">
                     <span class="lc-mode-icon">✦</span> New group
@@ -1619,76 +1549,7 @@
     <!-- ======================== SETUP MODULE ======================== -->
 
     <!-- Workers -->
-    
-    <!-- Setup → Plots (moved from Land) -->
-    <div class="page" id="page-setupplots">
-      <div class="page-hdr"><h1>Plots</h1>
-        <div class="page-hdr-right">
-          <button class="btn btn-primary" onclick="toggleSpForm()">+ Add plot</button>
-          <button class="refresh-btn" onclick="loadSetupPlotsPage()">↻ Refresh</button>
-        </div>
-      </div>
-      <div style="padding:10px 22px 0;font-size:12px;color:var(--muted)">Plot definitions. View activity per plot in <strong>Overview</strong>; log activity in the relevant <strong>Land</strong> sub-page.</div>
-      <div class="section">
-        <div class="section-hdr"><h2>Plot registry</h2><span class="section-meta" id="sp-count"></span></div>
-        <div id="sp-form" style="display:none;padding:18px 22px;background:var(--bg);border-bottom:1px solid var(--border)">
-          <div class="land-form-grid">
-            <div class="lf-field"><label>Plot code (auto-suggested)</label><input type="text" id="sp-code" placeholder="P01"></div>
-            <div class="lf-field"><label>Plot name</label><input type="text" id="sp-name" placeholder="e.g. North Canal Strip"></div>
-            <div class="lf-field"><label>Location (farm reference)</label><select id="sp-loc"><option value="">Select location</option></select></div>
-            <div class="lf-field"><label>Plot type</label>
-              <select id="sp-type">
-                <option value="field">Field</option>
-                <option value="linear">Linear (strip / hedgerow)</option>
-                <option value="edge">Edge (perimeter / bank)</option>
-                <option value="infrastructure">Infrastructure</option>
-              </select>
-            </div>
-            <div class="lf-field"><label>Area</label><input type="number" id="sp-area" min="0" step="0.01" placeholder="e.g. 1.5"></div>
-            <div class="lf-field"><label>Unit</label>
-              <select id="sp-aunit">
-                <option value="acres">Acres</option>
-                <option value="kanals">Kanals</option>
-              </select>
-            </div>
-            <div class="lf-field"><label>Use case</label>
-              <select id="sp-use">
-                <option value="">— select —</option>
-                <option value="agricultural">Agricultural</option>
-                <option value="fodder">Fodder</option>
-                <option value="fallow">Fallow</option>
-                <option value="pasture">Pasture</option>
-                <option value="rehabilitation">Rehabilitation</option>
-                <option value="hedgerow">Hedgerow</option>
-                <option value="access">Access / pathway</option>
-                <option value="infrastructure">Infrastructure</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div class="lf-field"><label>Irrigation method</label>
-              <select id="sp-irr">
-                <option value="">— select —</option>
-                <option value="flood">Flood</option>
-                <option value="furrow">Furrow</option>
-                <option value="drip">Drip</option>
-                <option value="none">None</option>
-              </select>
-            </div>
-            <div class="lf-field" style="grid-column:1/-1"><label>Description / location detail</label><input type="text" id="sp-desc" placeholder="e.g. north-east corner, adjacent to main canal"></div>
-            <div class="lf-field" style="grid-column:1/-1"><label>Notes</label><textarea id="sp-notes" rows="2" placeholder="Soil history, observations, previous crops…"></textarea></div>
-          </div>
-          <div style="padding:12px 0 0;display:flex;gap:10px">
-            <button class="btn btn-primary" onclick="submitSpPlot()">Save plot</button>
-            <button class="btn" onclick="toggleSpForm()">Cancel</button>
-            <span id="sp-status" style="font-size:13px;color:var(--muted);align-self:center"></span>
-          </div>
-        </div>
-        <div id="sp-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div id="abbrev-setup-plots"></div>
-    </div>
-
-<div class="page" id="page-workers">
+    <div class="page" id="page-workers">
       <div class="page-hdr">
         <div><h1>Workers</h1><div class="last-updated" id="workers-updated"></div></div>
         <button class="refresh-btn" onclick="loadWorkersPage()">↻ Refresh</button>
@@ -1867,179 +1728,6 @@
     </div>
   </div>
 </div>
-
-<!-- ============================================================ -->
-<!-- FEED INVENTORY MODALS                                         -->
-<!-- ============================================================ -->
-
-<!-- Acquisition modal (purchase / harvest receipt) -->
-<div class="modal-overlay" id="fi-acq-modal" style="display:none">
-  <div class="modal-box">
-    <h3 id="fi-acq-modal-title">Log purchase</h3>
-    <div class="modal-fields">
-      <label>Ingredient</label>
-      <select id="fi-acq-ing"><option value="">Select ingredient</option></select>
-      <label>Date</label>
-      <input type="date" id="fi-acq-date">
-      <!-- hidden type field set by openFiAcqModal -->
-      <input type="hidden" id="fi-acq-type" value="purchased">
-      <label>Quantity (kg)</label>
-      <input type="number" id="fi-acq-qty" min="0.001" step="0.1" placeholder="e.g. 50" oninput="fiAcqAutoCalc()">
-      <div id="fi-acq-cost-section">
-        <label>Total cost (PKR)</label>
-        <input type="number" id="fi-acq-total" min="0" step="1" placeholder="e.g. 4500" oninput="fiAcqAutoCalc()">
-        <div id="fi-acq-cpk-display" style="font-size:12px;color:var(--muted);padding:4px 0"></div>
-      </div>
-      <label>Recorded by</label>
-      <select id="fi-acq-worker"><option value="">— none —</option></select>
-      <label>Notes (optional)</label>
-      <input type="text" id="fi-acq-notes" placeholder="Supplier, lot, quality notes…">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeFiAcqModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitFiAcq()">Save</button>
-      <span id="fi-acq-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
-<!-- Concentrate batch modal -->
-<div class="modal-overlay" id="fi-batch-modal" style="display:none">
-  <div class="modal-box modal-large">
-    <h3>Mix concentrate batch</h3>
-    <p style="font-size:13px;color:var(--muted);margin:8px 0 16px">Select a recipe and enter the total kg to produce. The ingredient preview will show what is needed and whether you have sufficient stock.</p>
-    <div class="modal-fields">
-      <label>Date</label>
-      <input type="date" id="fi-batch-date">
-      <label>Recipe</label>
-      <select id="fi-batch-recipe" onchange="fiBatchRecipeChanged()"><option value="">Select recipe</option></select>
-      <label>Total kg to produce</label>
-      <input type="number" id="fi-batch-qty" min="0.01" step="0.5" placeholder="e.g. 50" oninput="fiBatchUpdatePreview()">
-      <label>Mixed by</label>
-      <select id="fi-batch-worker"><option value="">— none —</option></select>
-      <label>Notes (optional)</label>
-      <input type="text" id="fi-batch-notes">
-    </div>
-    <div id="fi-batch-preview" style="margin:0 0 16px"></div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeFiBatchModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitFiBatch()">Save batch</button>
-      <span id="fi-batch-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
-<!-- Stock adjustment modal (feed inventory) -->
-<div class="modal-overlay" id="fi-adj-modal" style="display:none">
-  <div class="modal-box">
-    <h3 id="fi-adj-title">Adjust stock</h3>
-    <p style="font-size:13px;color:var(--muted);margin:8px 0 16px">Positive delta to add stock (e.g. count found extra). Negative to remove (spoilage, spillage, manual use).</p>
-    <div class="modal-fields">
-      <label>Date</label>
-      <input type="date" id="fi-adj-date">
-      <label>Delta (kg)</label>
-      <input type="number" id="fi-adj-delta" step="0.1" placeholder="e.g. -5 or +10">
-      <label>Reason</label>
-      <select id="fi-adj-reason">
-        <option value="count">Physical count correction</option>
-        <option value="spoilage">Spoilage / waste</option>
-        <option value="spillage">Spillage</option>
-        <option value="other">Other</option>
-      </select>
-      <label>Notes (optional)</label>
-      <input type="text" id="fi-adj-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeFiAdj()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitFiAdj()">Save adjustment</button>
-      <span id="fi-adj-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
-
-<!-- ============================================================ -->
-<!-- PHASE 2 MODALS                                                -->
-<!-- ============================================================ -->
-
-<!-- Harvest Allocation Modal -->
-<div class="modal-overlay" id="harvest-alloc-modal" style="display:none">
-  <div class="modal-box modal-large">
-    <h3 id="ha-modal-title">Allocate harvest</h3>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <span id="ha-total-kg" style="font-size:13px;font-weight:500;color:var(--text)"></span>
-      <span id="ha-remaining" style="font-size:13px;color:var(--muted)"></span>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin:0 0 14px">Split this harvest across destinations. Feed inventory allocations go directly into ingredient stock. Seed stock is linked to the primary crop of this group. External processing creates a pending pressing transaction.</p>
-    <div id="ha-rows"></div>
-    <button class="btn btn-sm" onclick="p2AddAllocRow()" style="margin-bottom:16px">+ Add destination</button>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeHarvestAllocModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitHarvestAlloc()">Save allocations</button>
-      <span id="ha-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
-<!-- Seed Purchase Modal -->
-<div class="modal-overlay" id="sd-purch-modal" style="display:none">
-  <div class="modal-box">
-    <h3>Log seed purchase</h3>
-    <div class="modal-fields">
-      <label>Crop</label>
-      <select id="sd-crop"><option value="">Select crop</option></select>
-      <label>Variety</label>
-      <input type="text" id="sd-variety" placeholder="e.g. Chakwal-50, local desi">
-      <label>Date</label>
-      <input type="date" id="sd-date">
-      <label>Quantity (kg)</label>
-      <input type="number" id="sd-qty" min="0.001" step="0.1" placeholder="e.g. 5">
-      <label>Cost per kg (PKR)</label>
-      <input type="number" id="sd-cpk" min="0" step="1" placeholder="optional">
-      <label>Germination % (from label)</label>
-      <input type="number" id="sd-germ" min="0" max="100" step="1" placeholder="e.g. 92">
-      <label>Supplier</label>
-      <input type="text" id="sd-supplier" placeholder="optional">
-      <label>Lot / batch ref</label>
-      <input type="text" id="sd-lot" placeholder="optional">
-      <label>Notes</label>
-      <input type="text" id="sd-notes" placeholder="optional">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeSdPurchModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSdPurch()">Save</button>
-      <span id="sd-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
-<!-- Seed Stock Adjustment Modal -->
-<div class="modal-overlay" id="sd-adj-modal" style="display:none">
-  <div class="modal-box">
-    <h3 id="sd-adj-title">Adjust seed stock</h3>
-    <div class="modal-fields">
-      <label>Date</label>
-      <input type="date" id="sd-adj-date">
-      <label>Delta (kg) — positive to add, negative to remove</label>
-      <input type="number" id="sd-adj-delta" step="0.01" placeholder="e.g. -0.5 or +2">
-      <label>Reason</label>
-      <select id="sd-adj-reason">
-        <option value="count">Physical count correction</option>
-        <option value="germination_test">Germination test use</option>
-        <option value="spoilage">Spoilage / expired</option>
-        <option value="other">Other</option>
-      </select>
-      <label>Notes</label>
-      <input type="text" id="sd-adj-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeSdAdj()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSdAdj()">Save</button>
-      <span id="sd-adj-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
 <!-- Auth / Login modal -->
 <div class="modal-overlay" id="auth-login-modal" style="display:none">
   <div class="modal-box" style="max-width:360px">
