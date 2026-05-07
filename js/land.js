@@ -170,7 +170,6 @@ async function loadLandPage() {
     if (loadingEl) loadingEl.innerHTML = '';
 
     populateLandDropdowns();
-    renderLandPlots();
     renderLandFert();
     renderLandAppLog();
     renderLandTests();
