@@ -13,7 +13,9 @@ async function loadRecipeSetup() {
   listEl.innerHTML = '<div class="loading">Loading…</div>';
 
   try {
-    var recipes = await sbGet('recipes', 'active=eq.true&select=id,name,species(id,common_name)&order=name');
+    var recipes = await sbGet('recipes',
+      'active=eq.true&select=id,name,species(id,common_name),output_ingredient_id,' +
+      'out_ing:ingredients!output_ingredient_id(id,name)&order=name');
     if (metaEl) metaEl.textContent = recipes.length + ' recipe' + (recipes.length !== 1 ? 's' : '');
 
     if (!recipes.length) {
@@ -39,14 +41,19 @@ async function loadRecipeSetup() {
     }
 
     var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-      '<th>Name</th><th>Species</th><th>Ingredients</th><th>Version</th><th>Effective</th><th></th>' +
+      '<th>Name</th><th>Species</th><th>Output ingredient</th><th>Ingredients</th><th>Version</th><th>Effective</th><th></th>' +
       '</tr></thead><tbody>';
     recipes.forEach(function(r) {
       var ver = latestVer[r.id];
       var ingNames = ver ? (ingCountMap[ver.id] || []) : [];
+      var outIng = r.out_ing;
+      var outBadge = outIng
+        ? '<span class="badge badge-lime">' + outIng.name + '</span>'
+        : '<span class="badge badge-amber" title="Set this so concentrate batches can track stock">⚠ Not set</span>';
       html += '<tr>' +
         '<td style="font-weight:500">' + r.name + '</td>' +
         '<td>' + (r.species ? r.species.common_name : '<span style="color:var(--faint)">—</span>') + '</td>' +
+        '<td>' + outBadge + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' +
           (ingNames.length ? ingNames.join(', ') : '<span style="color:var(--faint)">no ingredients</span>') + '</td>' +
         '<td class="mono">' + (ver ? 'v' + ver.version_number : '—') + '</td>' +
@@ -71,6 +78,16 @@ async function _ensureRecipeIngredients() {
   try {
     rsAllIngredients = await sbGet('ingredients', 'active=eq.true&select=id,name,category&order=category,name');
   } catch (e) { rsAllIngredients = []; }
+}
+
+function _populateOutputIngSelect() {
+  var sel = document.getElementById('rf-output-ing');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— none selected —</option>' +
+    rsAllIngredients.map(function(i) {
+      return '<option value="' + i.id + '">' + i.name +
+        (i.category ? ' (' + i.category + ')' : '') + '</option>';
+    }).join('');
 }
 
 async function _loadSpeciesIntoSelect(selEl) {
@@ -105,11 +122,14 @@ async function openNewRecipeForm() {
   rfRowCounter = 0;
   document.getElementById('recipe-form-section').style.display = 'block';
   document.getElementById('recipe-form-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  // Load species and first ingredient row in parallel
+  // Load species and ingredients in parallel
   await Promise.all([
     _loadSpeciesIntoSelect(document.getElementById('rf-species')),
+    _ensureRecipeIngredients(),
     addRecipeIngRow()
   ]);
+  _populateOutputIngSelect();
+  document.getElementById('rf-output-ing').value = '';
 }
 
 async function openEditRecipeForm(recipeId) {
@@ -123,14 +143,21 @@ async function openEditRecipeForm(recipeId) {
 
   try {
     await _ensureRecipeIngredients();
-    var recipes = await sbGet('recipes', 'id=eq.' + recipeId + '&select=id,name,species_id');
+    var recipes = await sbGet('recipes',
+      'id=eq.' + recipeId + '&select=id,name,species_id,output_ingredient_id');
     if (!recipes.length) return;
     var recipe = recipes[0];
     document.getElementById('rf-name').value = recipe.name;
 
-    // Load species into select then restore saved value
-    await _loadSpeciesIntoSelect(document.getElementById('rf-species'));
+    // Load species and ingredients in parallel then restore values
+    await Promise.all([
+      _loadSpeciesIntoSelect(document.getElementById('rf-species')),
+      _ensureRecipeIngredients()
+    ]);
     if (recipe.species_id) document.getElementById('rf-species').value = recipe.species_id;
+    _populateOutputIngSelect();
+    if (recipe.output_ingredient_id)
+      document.getElementById('rf-output-ing').value = recipe.output_ingredient_id;
 
     var versions = await sbGet('recipe_versions',
       'recipe_id=eq.' + recipeId + '&select=id&order=version_number.desc&limit=1');
@@ -202,8 +229,9 @@ function closeRecipeForm() {
 }
 
 async function submitConcentrateRecipe() {
-  var name      = (document.getElementById('rf-name')    || {}).value || '';
-  var speciesId = (document.getElementById('rf-species') || {}).value || '';
+  var name      = (document.getElementById('rf-name')       || {}).value || '';
+  var speciesId = (document.getElementById('rf-species')    || {}).value || '';
+  var outIngId  = (document.getElementById('rf-output-ing') || {}).value || '';
   var statusEl  = document.getElementById('rf-status');
 
   name = name.trim();
@@ -232,12 +260,17 @@ async function submitConcentrateRecipe() {
   try {
     var recipeId;
     if (rfEditRecipeId) {
-      await sbPatch('recipes', rfEditRecipeId, { name: name, species_id: parseInt(speciesId) });
+      await sbPatch('recipes', rfEditRecipeId, {
+        name: name,
+        species_id: parseInt(speciesId),
+        output_ingredient_id: outIngId ? parseInt(outIngId) : null
+      });
       recipeId = rfEditRecipeId;
     } else {
       var newRecipe = await sbInsert('recipes', {
         name: name,
         species_id: parseInt(speciesId),
+        output_ingredient_id: outIngId ? parseInt(outIngId) : null,
         active: true
       });
       recipeId = newRecipe[0].id;
