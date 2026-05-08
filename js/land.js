@@ -134,8 +134,8 @@ async function loadLandPage() {
         'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
         'workers(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by,' +
-        'workers(name)&order=observed_at.desc'),
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by' +
+        '&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
         'water_source,logged_by,notes,workers(name)&order=date.desc'),
@@ -1227,7 +1227,11 @@ function buildObsPanel(c, observations) {
           '<option value="true"'  + ( o.pest_disease_flag ? ' selected' : '') + '>Yes ⚠</option>' +
         '</select></td>' +
         '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.note || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
-        '<td class="muted-cell" style="white-space:nowrap">' + (o.workers ? o.workers.name : '—') + '</td>' +
+        '<td class="muted-cell" style="white-space:nowrap">' + (function() {
+            if (!o.logged_by) return '—';
+            var w = landWorkers.find(function(w) { return w.id === o.logged_by; });
+            return w ? w.name : '—';
+          })() + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" style="font-size:11px" onclick="patchObservation(' + oid + ',' + c.id + ')">Save</button>' +
           '<button class="btn btn-sm" style="font-size:11px;color:var(--red);margin-left:4px" onclick="deleteObservation(' + oid + ',' + c.id + ')">Delete</button>' +
