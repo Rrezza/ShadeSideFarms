@@ -1211,29 +1211,41 @@ function buildObsPanel(c, observations) {
   if (!observations.length) {
     html += '<div class="muted-cell" style="font-size:12px">No observations logged yet.</div>';
   } else {
-    html += '<table style="width:100%;font-size:12px"><thead><tr>' +
-      '<th>Date</th><th>Health</th><th>Flag</th><th>Note</th><th>Worker</th><th></th>' +
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr>' +
+      '<th style="white-space:nowrap;padding:4px 8px">Date</th>' +
+      '<th style="padding:4px 8px">Health</th>' +
+      '<th style="padding:4px 8px">Flag</th>' +
+      '<th style="padding:4px 8px;width:99%">Note</th>' +
+      '<th style="white-space:nowrap;padding:4px 8px">Worker</th>' +
+      '<th style="padding:4px 8px"></th>' +
       '</tr></thead><tbody>';
     observations.slice(0, 10).forEach(function(o) {
       var oid = o.id;
-      html += '<tr>' +
-        '<td class="mono" style="white-space:nowrap">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
-        '<td><select id="oe-health-' + oid + '" style="font-size:11px;width:100%">' +
+      html += '<tr style="vertical-align:top;border-top:1px solid var(--border-lt,#f0ece2)">' +
+        '<td class="mono" style="white-space:nowrap;padding:8px 8px 4px">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
+        '<td style="padding:8px 8px 4px"><select id="oe-health-' + oid + '" style="font-size:11px;width:100%;min-width:90px">' +
           ['unknown','good','stressed','failing'].map(function(v) {
             return '<option value="' + v + '"' + (o.health_status === v ? ' selected' : '') + '>' + v + '</option>';
           }).join('') + '</select></td>' +
-        '<td><select id="oe-flag-' + oid + '" style="font-size:11px;width:100%">' +
+        '<td style="padding:8px 8px 4px"><select id="oe-flag-' + oid + '" style="font-size:11px;width:100%">' +
           '<option value="false"' + (!o.pest_disease_flag ? ' selected' : '') + '>No</option>' +
           '<option value="true"'  + ( o.pest_disease_flag ? ' selected' : '') + '>Yes ⚠</option>' +
         '</select></td>' +
-        '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.note || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
-        '<td class="muted-cell" style="white-space:nowrap">' + (function() {
+        '<td style="padding:8px 8px 4px">' +
+          '<textarea id="oe-note-' + oid + '" rows="2" ' +
+            'style="font-size:11px;width:100%;min-width:200px;resize:vertical;' +
+            'font-family:inherit;line-height:1.45;padding:4px 6px;' +
+            'border:1px solid var(--border);border-radius:5px;background:var(--surface)">' +
+            (o.note || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          '</textarea>' +
+        '</td>' +
+        '<td class="muted-cell" style="white-space:nowrap;padding:8px 8px 4px">' + (function() {
             var wid = o.logged_by || o.recorded_by;
             if (!wid) return '—';
             var w = landWorkers.find(function(w) { return w.id === wid; });
             return w ? w.name : '—';
           })() + '</td>' +
-        '<td style="white-space:nowrap">' +
+        '<td style="white-space:nowrap;padding:8px 8px 4px">' +
           '<button class="btn btn-sm" style="font-size:11px" onclick="patchObservation(' + oid + ',' + c.id + ')">Save</button>' +
           '<button class="btn btn-sm" style="font-size:11px;color:var(--red);margin-left:4px" onclick="deleteObservation(' + oid + ',' + c.id + ')">Delete</button>' +
           '<span id="oe-status-' + oid + '" style="font-size:10px;color:var(--muted);margin-left:4px"></span>' +
@@ -1682,7 +1694,7 @@ async function patchObservation(obsId, cropId) {
   try {
     var health = document.getElementById('oe-health-' + obsId).value;
     var flag   = document.getElementById('oe-flag-'   + obsId).value === 'true';
-    var note   = (document.getElementById('oe-note-'  + obsId).value || '').trim();
+    var note   = ((document.getElementById('oe-note-'  + obsId) || {}).value || '').trim();
     await sbPatch('crop_observations', obsId, { health_status: health, pest_disease_flag: flag, note: note || null });
     var cropObs = landObservations.filter(function(o) { return o.plot_crop_id === cropId; });
     cropObs.sort(function(a, b) { return (b.observed_at || '').localeCompare(a.observed_at || ''); });
