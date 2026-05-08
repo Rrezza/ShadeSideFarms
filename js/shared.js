@@ -4,7 +4,7 @@
 // Loaded once on page load. All other js/*.js files depend on this.
 // v17: added animal_groups / group_members shared state.
 
-var APP_BUILD = '2026-05-08 · r47';  // Updated with each deployment
+var APP_BUILD = '2026-05-08 · r48';  // Updated with each deployment
 // ============================================================
 
 // ---- Supabase config ----
