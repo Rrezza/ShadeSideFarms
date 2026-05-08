@@ -3,6 +3,8 @@
 // shared animal data, abbreviations key.
 // Loaded once on page load. All other js/*.js files depend on this.
 // v17: added animal_groups / group_members shared state.
+
+var APP_BUILD = '2026-05-08 · r47';  // Updated with each deployment
 // ============================================================
 
 // ---- Supabase config ----
@@ -309,8 +311,10 @@ var fcPenStats = null;
 // INITIAL BOOTSTRAP
 // ============================================================
 async function loadAll() {
-  var statusEl = document.getElementById('sb-status');
+  var statusEl  = document.getElementById('sb-status');
+  var buildEl   = document.getElementById('sb-build');
   if (statusEl) statusEl.textContent = 'Loading...';
+  if (buildEl)  buildEl.textContent  = APP_BUILD;
   try {
     await loadModule('overview');
     if (typeof window.loadOverviewPage === 'function') await window.loadOverviewPage();
