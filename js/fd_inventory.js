@@ -143,9 +143,11 @@ function fiComputeStock(ingredients, acquisitions, adjustments,
     };
   });
 
-  // +IN: acquisitions
+  // +IN: acquisitions (exclude 'produced' — those come via concentrate_batches
+  //      and are tracked separately via in_mixed. Produced acquisitions exist
+  //      only for price history.)
   acquisitions.forEach(function(a) {
-    if (map[a.ingredient_id] && a.quantity_kg != null)
+    if (map[a.ingredient_id] && a.quantity_kg != null && a.acquisition_type !== 'produced')
       map[a.ingredient_id].in_acquired += parseFloat(a.quantity_kg);
   });
 
