@@ -310,11 +310,6 @@
 
     /* Plot Overview cards */
     .ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
-    .ov-loc-hdr{grid-column:1/-1;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;padding:6px 0 4px;border-bottom:1px solid var(--border)}
-    .ov-page-section{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
-    .ov-page-section h2{font-size:15px;font-weight:500;color:var(--text)}
-    .ov-page-section-meta{font-size:12px;color:var(--faint)}
-    .ov-card-animal{border-left:3px solid var(--amber-bdr)}
     .ov-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
     .ov-card-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
     .ov-card-code{font-size:15px;font-weight:600;color:var(--text)}
@@ -422,6 +417,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
+    <div id="sb-build" style="font-size:10px;color:rgba(255,255,255,0.18);padding:2px 16px 8px;letter-spacing:0.03em"></div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -2376,11 +2372,11 @@
   </div>
 </div>
 
-<script src="js/shared.js?v=22"></script>
-<script src="js/an_helpers.js?v=22"></script>
-<script src="js/fd_shared.js?v=22"></script>
-<script src="js/setup_shared.js?v=22"></script>
-<script src="js/health.js?v=22"></script>
+<script src="js/shared.js?v=21"></script>
+<script src="js/an_helpers.js?v=21"></script>
+<script src="js/fd_shared.js?v=21"></script>
+<script src="js/setup_shared.js?v=21"></script>
+<script src="js/health.js?v=21"></script>
 <script src="js/auth.js?v=18"></script>
 <script>document.addEventListener("DOMContentLoaded", function() { authInit(); });</script>
 </body>

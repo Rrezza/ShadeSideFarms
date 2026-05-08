@@ -3,8 +3,7 @@
 // shared animal data, abbreviations key.
 // Loaded once on page load. All other js/*.js files depend on this.
 // v17: added animal_groups / group_members shared state.
-
-var APP_BUILD = '2026-05-08 · r48';  // Updated with each deployment
+// v18: overview loads animal group data; renderOverview groups plots by location + adds animal group cards.
 // ============================================================
 
 // ---- Supabase config ----
@@ -138,7 +137,7 @@ function loadModule(name) {
   if (!loadModule._inflight) loadModule._inflight = {};
   loadModule._inflight[name] = new Promise(function(resolve, reject) {
     var s = document.createElement('script');
-    s.src = 'js/' + name + '.js?v=21';
+    s.src = 'js/' + name + '.js?v=22';
     s.onload = function() { moduleLoaded[name] = true; resolve(); };
     s.onerror = function() { reject(new Error('Failed to load js/' + name + '.js')); };
     document.head.appendChild(s);
@@ -311,10 +310,8 @@ var fcPenStats = null;
 // INITIAL BOOTSTRAP
 // ============================================================
 async function loadAll() {
-  var statusEl  = document.getElementById('sb-status');
-  var buildEl   = document.getElementById('sb-build');
+  var statusEl = document.getElementById('sb-status');
   if (statusEl) statusEl.textContent = 'Loading...';
-  if (buildEl)  buildEl.textContent  = APP_BUILD;
   try {
     await loadModule('overview');
     if (typeof window.loadOverviewPage === 'function') await window.loadOverviewPage();

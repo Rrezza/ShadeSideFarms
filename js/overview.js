@@ -75,6 +75,13 @@ async function loadOverviewPage() {
     ovFerts         = r[8];
     ovCropRegistry  = r[9];
 
+    // Load animal group data (cached after first load; safe-fail so plots still render)
+    if (!anSharedLoaded) {
+      await loadSharedAnimalData().catch(function(err) {
+        console.warn('Overview: animal data load failed —', err.message);
+      });
+    }
+
     renderOverview();
 
     var updEl = document.getElementById('ov-updated');
@@ -113,31 +120,77 @@ function renderOverview() {
   var content = document.getElementById('ov-content');
   if (!content) return;
 
-  // Filter to active land management plots
+  // ── Plots ─────────────────────────────────────────────────────
   var plots = ovPlots.filter(function(p) {
     if (p.status === 'inactive') return false;
     var uc = (p.use_case || '').toLowerCase();
-    if (!uc) return true; // unset = include by default
+    if (!uc) return true;
     return OV_INCLUDE_USE_CASES.indexOf(uc) !== -1;
   });
 
-  if (!plots.length) {
-    content.innerHTML = '<div class="empty" style="padding:40px;text-align:center">' +
-      'No active plots to display. Add plots in <a href="#" onclick="goToPage(\'setupplots\');return false;">Setup → Plots</a>.' +
-      '</div>';
-    return;
-  }
-
-  // Sort by plot_code
+  // Sort by location name first, then plot_code within each location
   plots.sort(function(a, b) {
+    var locA = (a.locations && a.locations.name) ? a.locations.name : '';
+    var locB = (b.locations && b.locations.name) ? b.locations.name : '';
+    var cmp = locA.localeCompare(locB);
+    if (cmp !== 0) return cmp;
     return (a.plot_code || '').localeCompare(b.plot_code || '');
   });
 
-  var html = '<div class="ov-grid">';
+  // Group plots by location name for rendering with headers
+  var locGroups = {};
+  var locOrder  = [];
   plots.forEach(function(p) {
-    html += renderOvCard(p);
+    var key = (p.locations && p.locations.name) ? p.locations.name : '';
+    if (!locGroups[key]) { locGroups[key] = []; locOrder.push(key); }
+    locGroups[key].push(p);
   });
-  html += '</div>';
+  locOrder.sort(function(a, b) {
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b);
+  });
+  var multiLoc = locOrder.length > 1 || (locOrder.length === 1 && locOrder[0] !== '');
+
+  // ── Animal groups ──────────────────────────────────────────────
+  var PRODUCTIVE_PURPOSES = ['meat', 'breeder', 'dual_purpose'];
+  var anGroups = anSharedLoaded
+    ? anSharedGroups.filter(function(g) {
+        return g.status === 'active' &&
+               PRODUCTIVE_PURPOSES.indexOf(g.primary_purpose) !== -1;
+      })
+    : [];
+
+  var html = '';
+
+  // Plots section
+  if (plots.length) {
+    html += '<div class="ov-page-section"><h2>Plots</h2>' +
+      '<span class="ov-page-section-meta">' + plots.length + ' active</span></div>' +
+      '<div class="ov-grid">';
+    locOrder.forEach(function(locKey) {
+      if (multiLoc) {
+        html += '<div class="ov-loc-hdr">' + (locKey || 'No location assigned') + '</div>';
+      }
+      locGroups[locKey].forEach(function(p) { html += renderOvCard(p); });
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="empty" style="padding:40px;text-align:center">' +
+      'No active plots to display. Add plots in <a href="#" onclick="goToPage(\'setupplots\');return false;">Setup \u2192 Plots</a>.' +
+      '</div>';
+  }
+
+  // Animal groups section
+  if (anGroups.length) {
+    html += '<div class="ov-page-section" style="margin-top:32px"><h2>Animal Groups</h2>' +
+      '<span class="ov-page-section-meta">' + anGroups.length +
+      ' active productive group' + (anGroups.length !== 1 ? 's' : '') + '</span></div>' +
+      '<div class="ov-grid">';
+    anGroups.forEach(function(g) { html += renderOvAnimalCard(g); });
+    html += '</div>';
+  }
+
   content.innerHTML = html;
 }
 
@@ -319,7 +372,65 @@ function renderOvCard(p) {
   '</div>';
 }
 
-// Navigate to a Land sub-page and pre-filter to a specific plot
+function renderOvAnimalCard(g) {
+  var animals = getGroupAnimals(g.id);
+  var stats   = computeGroupStats(animals);
+  var comp    = animals.length ? speciesComposition(animals) : 'No members';
+  var grpLoc  = anSharedGroupLocations.find(function(l) { return l.group_id === g.id; });
+  var locName = grpLoc
+    ? (grpLoc.locations ? grpLoc.locations.name : getLocationName(grpLoc.location_id))
+    : '';
+
+  var adgStr = stats.adg
+    ? r1(stats.adg) + ' g/d'
+    : (stats.adgInsufficient ? '<span style="color:var(--faint)">Insufficient data</span>' : '\u2014');
+
+  var weightRow = stats.avgCurrent != null
+    ? '<div class="ov-row"><span class="ov-row-label">Avg weight</span>' +
+      '<span class="ov-row-val">' + r1(stats.avgCurrent) + ' kg' +
+      (stats.avgEntry != null
+        ? ' <span style="color:var(--faint);font-size:11px">(entry ' + r1(stats.avgEntry) + ')</span>'
+        : '') +
+      '</span></div>'
+    : '';
+
+  var targetRow = (g.primary_purpose === 'meat' && g.target_weight_kg)
+    ? '<div class="ov-row"><span class="ov-row-label">Target weight</span>' +
+      '<span class="ov-row-val">' + r1(g.target_weight_kg) + ' kg</span></div>'
+    : '';
+
+  return '<div class="ov-card ov-card-animal">' +
+    '<div class="ov-card-hdr">' +
+      '<div>' +
+        '<div class="ov-card-code">' + g.name + '</div>' +
+        '<div class="ov-card-meta">' + comp +
+          (locName ? ' \u00b7 ' + locName : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="ov-card-badges">' + purposeBadge(g.primary_purpose) + '</div>' +
+    '</div>' +
+
+    '<div class="ov-section">' +
+      '<div class="ov-section-label">Performance</div>' +
+      '<div class="ov-row"><span class="ov-row-label">Head count</span>' +
+        '<span class="ov-row-val">' + stats.headCount + '</span></div>' +
+      weightRow +
+      '<div class="ov-row"><span class="ov-row-label">Avg days on farm</span>' +
+        '<span class="ov-row-val">' + (stats.avgDays > 0 ? stats.avgDays + 'd' : '\u2014') + '</span></div>' +
+      '<div class="ov-row"><span class="ov-row-label">ADG</span>' +
+        '<span class="ov-row-val">' + adgStr + '</span></div>' +
+      targetRow +
+    '</div>' +
+
+    '<div class="ov-actions">' +
+      '<button class="btn btn-sm" onclick="goToPage(\'weighttracking\')">Log weights</button>' +
+      '<button class="btn btn-sm" onclick="goToPage(\'anfeed\')">Feeding</button>' +
+      '<button class="btn btn-sm" onclick="goToPage(\'health\')">Health</button>' +
+    '</div>' +
+  '</div>';
+}
+
+
 function ovGoToPlot(landPage, plotId) {
   // Navigate via the existing sidebar nav
   var btn = document.querySelector('.nav-item[data-page="' + landPage + '"]');
