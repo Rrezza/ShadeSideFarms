@@ -316,3 +316,66 @@ async function submitFertPurchase() {
 }
 
 // ============================================================
+
+// ============================================================
+// ADD FERTILIZER MODAL
+// ============================================================
+function openFertModal() {
+  document.getElementById('fert-modal-title').textContent = 'Add fertilizer';
+  ['fert-name','fert-chemical-form','fert-supplier','fert-notes',
+   'fert-qty-per-unit','fert-reorder',
+   'fert-n','fert-p2o5','fert-k2o','fert-ca','fert-mg','fert-s',
+   'fert-fe','fert-zn','fert-b','fert-mn'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('fert-type').value = 'granular';
+  document.getElementById('fert-modal-status').textContent = '';
+  updateFertModalLabels();
+  document.getElementById('fert-modal').style.display = 'flex';
+}
+
+function closeFertModal() {
+  document.getElementById('fert-modal').style.display = 'none';
+}
+
+function updateFertModalLabels() {
+  var type     = document.getElementById('fert-type').value;
+  var isLiquid = type === 'liquid';
+  document.getElementById('fert-qty-label').textContent    = isLiquid ? 'L per container' : 'kg per bag';
+  document.getElementById('fert-reorder-label').textContent = isLiquid ? 'Reorder point (L)' : 'Reorder point (kg)';
+}
+
+async function submitFert() {
+  var statusEl = document.getElementById('fert-modal-status');
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
+  try {
+    var name = document.getElementById('fert-name').value.trim();
+    if (!name) throw new Error('Name is required.');
+    var d = { name: name, type: document.getElementById('fert-type').value, active: true };
+    var chemForm = document.getElementById('fert-chemical-form').value.trim();
+    if (chemForm) d.chemical_form = chemForm;
+    var qpu = document.getElementById('fert-qty-per-unit').value;
+    if (qpu) d.quantity_per_purchase_unit = parseFloat(qpu);
+    var reorder = document.getElementById('fert-reorder').value;
+    if (reorder) d.reorder_point = parseFloat(reorder);
+    var supplier = document.getElementById('fert-supplier').value.trim();
+    if (supplier) d.supplier = supplier;
+    var notes = document.getElementById('fert-notes').value.trim();
+    if (notes) d.notes = notes;
+    var nutrientFields = [
+      ['fert-n','n_pct'],['fert-p2o5','p2o5_pct'],['fert-k2o','k2o_pct'],
+      ['fert-ca','ca_pct'],['fert-mg','mg_pct'],['fert-s','s_pct'],
+      ['fert-fe','fe_ppm'],['fert-zn','zn_ppm'],['fert-b','b_ppm'],['fert-mn','mn_ppm']
+    ];
+    nutrientFields.forEach(function(pair) {
+      var v = document.getElementById(pair[0]).value;
+      if (v !== '') d[pair[1]] = parseFloat(v);
+    });
+    await sbInsert('fertilizers', [d]);
+    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
+    setTimeout(function() { closeFertModal(); loadFertilizersPage(); }, 800);
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
+  }
+}

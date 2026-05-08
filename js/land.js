@@ -131,14 +131,14 @@ async function loadLandPage() {
         '&order=sow_date.desc'),
       // New tables — safe fallback to [] on error
       safeFetch('crop_harvest_events',
-        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,recorded_by,' +
-        'allocated,workers(name)&order=date.desc'),
+        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
+        'workers(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by,recorded_by' +
-        '&order=observed_at.desc'),
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,notes,logged_by,' +
+        'workers(name)&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
-        'water_source,logged_by,recorded_by,notes&order=date.desc'),
+        'water_source,logged_by,notes,workers(name)&order=date.desc'),
       safeFetch('water_tests',
         'select=id,date,source,test_type,is_baseline,lab_name,ec_us_cm,ph,sar,rsc_meq_l,' +
         'bicarbonate_meq_l,sodium_meq_l,calcium_meq_l,magnesium_meq_l,notes&order=date.desc'),
@@ -642,7 +642,6 @@ function toggleLandAppForm() {
     document.getElementById('la-date').value = todayISO();
     document.getElementById('la-bags').value = '';
     document.getElementById('la-kg').value   = '';
-    document.getElementById('la-derived-wrap').style.display = 'none';
     checkFoliarWarning();
   }
 }
@@ -660,29 +659,18 @@ function laCalcFromBags() {
   var fertId = document.getElementById('la-fert').value;
   var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
   var bags   = parseFloat(document.getElementById('la-bags').value);
-  var dw     = document.getElementById('la-derived-wrap');
-  var dt     = document.getElementById('la-derived-text');
-  if (!fert || !fert.quantity_per_purchase_unit || isNaN(bags) || bags <= 0) { dw.style.display = 'none'; return; }
-  var kg  = bags * parseFloat(fert.quantity_per_purchase_unit);
-  var su  = fert.type === 'liquid' ? 'L' : 'kg';
+  if (!fert || !fert.quantity_per_purchase_unit || isNaN(bags) || bags <= 0) return;
+  var kg = bags * parseFloat(fert.quantity_per_purchase_unit);
   document.getElementById('la-kg').value = r1(kg);
-  dt.textContent = '→ ' + r1(kg) + ' ' + su;
-  dw.style.display = 'block';
 }
 
 function laCalcFromKg() {
   var fertId = document.getElementById('la-fert').value;
   var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
   var kg     = parseFloat(document.getElementById('la-kg').value);
-  var dw     = document.getElementById('la-derived-wrap');
-  var dt     = document.getElementById('la-derived-text');
-  if (!fert || !fert.quantity_per_purchase_unit || isNaN(kg) || kg <= 0) { dw.style.display = 'none'; return; }
+  if (!fert || !fert.quantity_per_purchase_unit || isNaN(kg) || kg <= 0) return;
   var qpu  = parseFloat(fert.quantity_per_purchase_unit);
-  var bags = kg / qpu;
-  var pu   = fert.type === 'liquid' ? 'containers' : 'bags';
-  document.getElementById('la-bags').value = r1(bags);
-  dt.textContent = '→ ~' + r1(bags) + ' ' + pu;
-  dw.style.display = 'block';
+  document.getElementById('la-bags').value = r1(kg / qpu);
 }
 
 function laOnFertChange() {
@@ -748,6 +736,8 @@ async function submitLandApp() {
     if (!date || !plotId)      throw new Error('Date and plot are required.');
     if (!fertId)               throw new Error('Select a fertilizer from the registry.');
     if (isNaN(kg) || kg <= 0) throw new Error('Enter a valid kg amount.');
+    if (method === 'foliar_spray' && (!wsrc || wsrc === 'na'))
+      throw new Error('Water source is required for foliar spray applications.');
     var d = {
       date: date, field_plot_id: parseInt(plotId),
       fertilizer_id: parseInt(fertId), kg_applied: kg
@@ -1211,41 +1201,24 @@ function buildObsPanel(c, observations) {
   if (!observations.length) {
     html += '<div class="muted-cell" style="font-size:12px">No observations logged yet.</div>';
   } else {
-    html += '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr>' +
-      '<th style="white-space:nowrap;padding:4px 8px">Date</th>' +
-      '<th style="padding:4px 8px">Health</th>' +
-      '<th style="padding:4px 8px">Flag</th>' +
-      '<th style="padding:4px 8px;width:99%">Note</th>' +
-      '<th style="white-space:nowrap;padding:4px 8px">Worker</th>' +
-      '<th style="padding:4px 8px"></th>' +
+    html += '<table style="width:100%;font-size:12px"><thead><tr>' +
+      '<th>Date</th><th>Health</th><th>Flag</th><th>Note</th><th>Worker</th><th></th>' +
       '</tr></thead><tbody>';
     observations.slice(0, 10).forEach(function(o) {
       var oid = o.id;
-      html += '<tr style="vertical-align:top;border-top:1px solid var(--border-lt,#f0ece2)">' +
-        '<td class="mono" style="white-space:nowrap;padding:8px 8px 4px">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
-        '<td style="padding:8px 8px 4px"><select id="oe-health-' + oid + '" style="font-size:11px;width:100%;min-width:90px">' +
+      html += '<tr>' +
+        '<td class="mono" style="white-space:nowrap">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
+        '<td><select id="oe-health-' + oid + '" style="font-size:11px;width:100%">' +
           ['unknown','good','stressed','failing'].map(function(v) {
             return '<option value="' + v + '"' + (o.health_status === v ? ' selected' : '') + '>' + v + '</option>';
           }).join('') + '</select></td>' +
-        '<td style="padding:8px 8px 4px"><select id="oe-flag-' + oid + '" style="font-size:11px;width:100%">' +
+        '<td><select id="oe-flag-' + oid + '" style="font-size:11px;width:100%">' +
           '<option value="false"' + (!o.pest_disease_flag ? ' selected' : '') + '>No</option>' +
           '<option value="true"'  + ( o.pest_disease_flag ? ' selected' : '') + '>Yes ⚠</option>' +
         '</select></td>' +
-        '<td style="padding:8px 8px 4px">' +
-          '<textarea id="oe-note-' + oid + '" rows="2" ' +
-            'style="font-size:11px;width:100%;min-width:200px;resize:vertical;' +
-            'font-family:inherit;line-height:1.45;padding:4px 6px;' +
-            'border:1px solid var(--border);border-radius:5px;background:var(--surface)">' +
-            (o.note || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-          '</textarea>' +
-        '</td>' +
-        '<td class="muted-cell" style="white-space:nowrap;padding:8px 8px 4px">' + (function() {
-            var wid = o.logged_by || o.recorded_by;
-            if (!wid) return '—';
-            var w = landWorkers.find(function(w) { return w.id === wid; });
-            return w ? w.name : '—';
-          })() + '</td>' +
-        '<td style="white-space:nowrap;padding:8px 8px 4px">' +
+        '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.notes || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
+        '<td class="muted-cell" style="white-space:nowrap">' + (o.workers ? o.workers.name : '—') + '</td>' +
+        '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" style="font-size:11px" onclick="patchObservation(' + oid + ',' + c.id + ')">Save</button>' +
           '<button class="btn btn-sm" style="font-size:11px;color:var(--red);margin-left:4px" onclick="deleteObservation(' + oid + ',' + c.id + ')">Delete</button>' +
           '<span id="oe-status-' + oid + '" style="font-size:10px;color:var(--muted);margin-left:4px"></span>' +
@@ -1385,8 +1358,7 @@ function renderLandCrops() {
 
     // ── SINGLE MEMBER DETAIL ──
     if (!isMulti && members.length === 1) {
-      var m0   = members[0];
-      var cObs = landObservations.filter(function(o) { return o.plot_crop_id === m0.id; });
+      var m0 = members[0];
       html += '<div class="crop-card-detail">';
       html += '<span>Sown: ' + (m0.sow_date ? fmtDate(m0.sow_date) : '—') + '</span>';
       if (m0.expected_termination_date) html += '<span>Expected end: ' + fmtDate(m0.expected_termination_date) + '</span>';
@@ -1395,8 +1367,6 @@ function renderLandCrops() {
       if (m0.notes) html += '<span class="muted-cell">' + m0.notes + '</span>';
       html += '</div>';
       if (fnStr) html += '<div class="crop-feed-warn">⚠ ' + fnStr + '</div>';
-      html += buildObsPanel(m0, cObs);
-      html += buildObsForm(m0, workers);
     }
 
     // ── MULTI MEMBER LIST ──
@@ -1677,7 +1647,7 @@ async function submitObservation(cropId) {
     var note   = (document.getElementById('of-note-' + cropId).value || '').trim();
     var d = { plot_crop_id: cropId, pest_disease_flag: flag, observed_at: new Date().toISOString() };
     if (health) d.health_status = health;
-    if (note)   d.note          = note;
+    if (note)   d.notes         = note;
     if (wId)    d.logged_by     = parseInt(wId);
     await sbInsert('crop_observations', [d]);
     await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
@@ -1694,8 +1664,8 @@ async function patchObservation(obsId, cropId) {
   try {
     var health = document.getElementById('oe-health-' + obsId).value;
     var flag   = document.getElementById('oe-flag-'   + obsId).value === 'true';
-    var note   = ((document.getElementById('oe-note-'  + obsId) || {}).value || '').trim();
-    await sbPatch('crop_observations', obsId, { health_status: health, pest_disease_flag: flag, note: note || null });
+    var note   = (document.getElementById('oe-note-'  + obsId).value || '').trim();
+    await sbPatch('crop_observations', obsId, { health_status: health, pest_disease_flag: flag, notes: note || null });
     var cropObs = landObservations.filter(function(o) { return o.plot_crop_id === cropId; });
     cropObs.sort(function(a, b) { return (b.observed_at || '').localeCompare(a.observed_at || ''); });
     if (cropObs.length && cropObs[0].id === obsId) {
@@ -1812,12 +1782,7 @@ function renderWateringLog() {
       '<td class="muted-cell">' + (r.water_source || '—') + '</td>' +
       '<td class="mono right">' + (r.duration_hours != null ? parseFloat(r.duration_hours).toFixed(1) : '—') + '</td>' +
       '<td class="mono right">' + (r.estimated_volume_litres != null ? Math.round(r.estimated_volume_litres).toLocaleString() : '—') + '</td>' +
-      '<td class="muted-cell">' + (function() {
-        var wid = r.logged_by || r.recorded_by;
-        if (!wid) return '—';
-        var w = landWorkers.find(function(w) { return w.id === wid; });
-        return w ? w.name : '—';
-      })() + '</td>' +
+      '<td class="muted-cell">' + (r.workers ? r.workers.name : '—') + '</td>' +
       '<td class="muted-cell" style="font-size:12px">' + (r.notes || '') + '</td>' +
       '</tr>';
   });
