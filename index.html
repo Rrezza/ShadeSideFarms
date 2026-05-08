@@ -22,11 +22,11 @@
     html{font-size:15px}
     body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
     .shell{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
-    .sidebar{background:var(--green-dk);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-    .sidebar-logo{padding:28px 24px 24px;border-bottom:1px solid rgba(255,255,255,0.1)}
+    .sidebar{background:var(--green-dk);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow:hidden}
+    .sidebar-logo{padding:28px 24px 24px;border-bottom:1px solid rgba(255,255,255,0.1);flex-shrink:0}
     .farm-name{font-size:15px;font-weight:600;color:#FFF;letter-spacing:0.02em}
     .farm-sub{font-size:11px;color:rgba(255,255,255,0.45);margin-top:3px;text-transform:uppercase;letter-spacing:0.08em}
-    .sidebar-nav{padding:16px 12px;flex:1}
+    .sidebar-nav{padding:16px 12px;flex:1;overflow-y:auto;min-height:0}
     .nav-section{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:0 12px;margin:16px 0 6px}
     .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,0.6);font-size:14px;cursor:pointer;border:none;background:transparent;width:100%;text-align:left}
     .nav-item:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9)}
@@ -422,7 +422,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r49</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r50</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
