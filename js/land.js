@@ -131,14 +131,14 @@ async function loadLandPage() {
         '&order=sow_date.desc'),
       // New tables — safe fallback to [] on error
       safeFetch('crop_harvest_events',
-        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
-        'workers(name)&order=date.desc'),
+        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,recorded_by,' +
+        'allocated,workers(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by' +
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,note,logged_by,recorded_by' +
         '&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
-        'water_source,logged_by,notes,workers(name)&order=date.desc'),
+        'water_source,logged_by,recorded_by,notes&order=date.desc'),
       safeFetch('water_tests',
         'select=id,date,source,test_type,is_baseline,lab_name,ec_us_cm,ph,sar,rsc_meq_l,' +
         'bicarbonate_meq_l,sodium_meq_l,calcium_meq_l,magnesium_meq_l,notes&order=date.desc'),
@@ -1228,8 +1228,9 @@ function buildObsPanel(c, observations) {
         '</select></td>' +
         '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.note || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
         '<td class="muted-cell" style="white-space:nowrap">' + (function() {
-            if (!o.logged_by) return '—';
-            var w = landWorkers.find(function(w) { return w.id === o.logged_by; });
+            var wid = o.logged_by || o.recorded_by;
+            if (!wid) return '—';
+            var w = landWorkers.find(function(w) { return w.id === wid; });
             return w ? w.name : '—';
           })() + '</td>' +
         '<td style="white-space:nowrap">' +
@@ -1372,7 +1373,8 @@ function renderLandCrops() {
 
     // ── SINGLE MEMBER DETAIL ──
     if (!isMulti && members.length === 1) {
-      var m0 = members[0];
+      var m0   = members[0];
+      var cObs = landObservations.filter(function(o) { return o.plot_crop_id === m0.id; });
       html += '<div class="crop-card-detail">';
       html += '<span>Sown: ' + (m0.sow_date ? fmtDate(m0.sow_date) : '—') + '</span>';
       if (m0.expected_termination_date) html += '<span>Expected end: ' + fmtDate(m0.expected_termination_date) + '</span>';
@@ -1381,6 +1383,8 @@ function renderLandCrops() {
       if (m0.notes) html += '<span class="muted-cell">' + m0.notes + '</span>';
       html += '</div>';
       if (fnStr) html += '<div class="crop-feed-warn">⚠ ' + fnStr + '</div>';
+      html += buildObsPanel(m0, cObs);
+      html += buildObsForm(m0, workers);
     }
 
     // ── MULTI MEMBER LIST ──
@@ -1796,7 +1800,12 @@ function renderWateringLog() {
       '<td class="muted-cell">' + (r.water_source || '—') + '</td>' +
       '<td class="mono right">' + (r.duration_hours != null ? parseFloat(r.duration_hours).toFixed(1) : '—') + '</td>' +
       '<td class="mono right">' + (r.estimated_volume_litres != null ? Math.round(r.estimated_volume_litres).toLocaleString() : '—') + '</td>' +
-      '<td class="muted-cell">' + (r.workers ? r.workers.name : '—') + '</td>' +
+      '<td class="muted-cell">' + (function() {
+        var wid = r.logged_by || r.recorded_by;
+        if (!wid) return '—';
+        var w = landWorkers.find(function(w) { return w.id === wid; });
+        return w ? w.name : '—';
+      })() + '</td>' +
       '<td class="muted-cell" style="font-size:12px">' + (r.notes || '') + '</td>' +
       '</tr>';
   });
