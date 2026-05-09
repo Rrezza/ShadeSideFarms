@@ -596,37 +596,89 @@ function renderLandFertChart() {
     var qpu  = fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
     var cpkg = qpu ? parseFloat(pp.cost_per_unit) / qpu : parseFloat(pp.cost_per_unit);
     var su   = fert.type === 'liquid' ? 'L' : 'kg';
-    if (!byFert[fert.id]) byFert[fert.id] = { labels: [], values: [], su: su, name: fert.name };
-    byFert[fert.id].labels.push(fmtDate(pp.date));
+    if (!byFert[fert.id]) byFert[fert.id] = { dates: [], labels: [], values: [], su: su, name: fert.name };
+    byFert[fert.id].dates.push(pp.date);          // raw ISO for filtering
+    byFert[fert.id].labels.push(fmtDate(pp.date)); // formatted for display
     byFert[fert.id].values.push(Math.round(cpkg));
   });
 
-  // Populate filter dropdown from ALL active fertilizers
+  // ── Populate fertilizer dropdown from all active fertilizers ─
   var filterEl = document.getElementById('land-chart-fert-filter');
   if (filterEl && filterEl.options.length <= 1) {
-    // Only rebuild options on first render to preserve user selection
     filterEl.innerHTML = '<option value="">All</option>' +
       landFerts.filter(function(f) { return f.active; }).map(function(f) {
         return '<option value="' + f.id + '">' + f.name + '</option>';
       }).join('');
   }
-
-  // Apply filter
   var selectedId = filterEl ? filterEl.value : '';
+
+  // ── Apply period filter ────────────────────────────────────
+  var periodEl  = document.getElementById('land-chart-period');
+  var periodDays = periodEl && periodEl.value ? parseInt(periodEl.value) : null;
+  if (periodDays) {
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - periodDays);
+    var cutoffISO = cutoff.toISOString().slice(0, 10);
+    Object.keys(byFert).forEach(function(id) {
+      var e = byFert[id];
+      var kept = e.dates.map(function(d, i) { return { d: d, l: e.labels[i], v: e.values[i] }; })
+        .filter(function(pt) { return pt.d >= cutoffISO; });
+      e.dates  = kept.map(function(pt) { return pt.d; });
+      e.labels = kept.map(function(pt) { return pt.l; });
+      e.values = kept.map(function(pt) { return pt.v; });
+    });
+  }
+
+  // ── Apply fertilizer filter ────────────────────────────────
   if (selectedId) {
     var filtered = {};
     if (byFert[selectedId]) filtered[selectedId] = byFert[selectedId];
     byFert = filtered;
   }
 
-  // Show "no price data" message if the selected fertilizer has no cost entries
+  // ── Stats panel ────────────────────────────────────────────
+  var statsBody = document.getElementById('land-chart-stats-body');
+  if (statsBody) {
+    var allVals = [];
+    Object.keys(byFert).forEach(function(id) {
+      byFert[id].values.forEach(function(v) { if (v != null) allVals.push(v); });
+    });
+    if (!allVals.length) {
+      statsBody.innerHTML = selectedId
+        ? '<span style="color:var(--faint)">No cost data for this fertilizer' + (periodDays ? ' in this period.' : '.') + '</span>'
+        : '<span style="color:var(--faint)">Select a fertilizer to see statistics.</span>';
+    } else {
+      var sorted = allVals.slice().sort(function(a, b) { return a - b; });
+      var n      = sorted.length;
+      var mean   = sorted.reduce(function(s, v) { return s + v; }, 0) / n;
+      var med    = n % 2 === 0
+        ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2
+        : sorted[Math.floor(n / 2)];
+      var su = selectedId && byFert[selectedId] ? byFert[selectedId].su : 'kg';
+      function statRow(label, val) {
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">' +
+          '<span style="color:var(--muted)">' + label + '</span>' +
+          '<span style="font-weight:500">PKR ' + Math.round(val) + ' / ' + su + '</span></div>';
+      }
+      statsBody.innerHTML =
+        statRow('Mean',   mean) +
+        statRow('Median', med)  +
+        statRow('Min',    sorted[0])    +
+        statRow('Max',    sorted[n - 1]) +
+        '<div style="display:flex;justify-content:space-between;padding:5px 0">' +
+          '<span style="color:var(--muted)">n</span>' +
+          '<span style="font-weight:500">' + n + ' purchase' + (n !== 1 ? 's' : '') + '</span></div>';
+    }
+  }
+
+  // ── No-data overlay ────────────────────────────────────────
   var noDataEl = document.getElementById('land-chart-no-data');
   if (noDataEl) {
-    var hasData = Object.keys(byFert).length > 0;
+    var hasData = Object.keys(byFert).some(function(id) { return byFert[id].values.length > 0; });
     noDataEl.style.display = hasData ? 'none' : 'flex';
     noDataEl.textContent   = selectedId
-      ? 'No cost data logged for this fertilizer yet.'
-      : 'No cost data logged for any fertilizer yet.';
+      ? 'No cost data logged for this fertilizer' + (periodDays ? ' in this period.' : '.')
+      : 'No cost data logged yet.';
   }
 
   // Sort each series by original date order (purchases are fetched date desc — reverse)
