@@ -587,7 +587,7 @@ function renderLandFertChart() {
   landFertChart = null;
 
   // Build per-fertilizer series. If qpu is set, cost/kg = cost_per_unit / qpu.
-  // If qpu is NOT set, treat cost_per_unit as already cost/kg (user entered it that way).
+  // If qpu is NOT set, treat cost_per_unit as already cost/kg.
   var byFert = {};
   landFertPurchases.forEach(function(pp) {
     if (pp.cost_per_unit == null) return;
@@ -597,10 +597,30 @@ function renderLandFertChart() {
     var cpkg = qpu ? parseFloat(pp.cost_per_unit) / qpu : parseFloat(pp.cost_per_unit);
     var su   = fert.type === 'liquid' ? 'L' : 'kg';
     if (!byFert[fert.id]) byFert[fert.id] = { labels: [], values: [], su: su, name: fert.name };
-    // Keep insertion sorted by date
     byFert[fert.id].labels.push(fmtDate(pp.date));
     byFert[fert.id].values.push(Math.round(cpkg));
   });
+
+  // Populate filter dropdown (only fertilizers with cost data)
+  var filterEl = document.getElementById('land-chart-fert-filter');
+  if (filterEl) {
+    var currentVal = filterEl.value;
+    filterEl.innerHTML = '<option value="">All</option>' +
+      Object.keys(byFert).map(function(id) {
+        return '<option value="' + id + '"' + (currentVal === id ? ' selected' : '') + '>' +
+          byFert[id].name + '</option>';
+      }).join('');
+    // Restore selection if still valid, otherwise default to All
+    if (currentVal && !byFert[currentVal]) filterEl.value = '';
+  }
+
+  // Apply filter
+  var selectedId = filterEl ? filterEl.value : '';
+  if (selectedId) {
+    var filtered = {};
+    filtered[selectedId] = byFert[selectedId];
+    byFert = filtered;
+  }
 
   // Sort each series by original date order (purchases are fetched date desc — reverse)
   Object.keys(byFert).forEach(function(id) {

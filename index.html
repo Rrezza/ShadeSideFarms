@@ -422,7 +422,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r52</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r53</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -1249,8 +1249,16 @@
         </div>
         <!-- Price history chart -->
         <div class="land-section" style="margin-top:20px">
-          <div style="padding:14px 22px;background:var(--bg)">
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Cost per kg / L over time</div>
+          <div class="land-section-hdr">
+            <h2>Cost per kg / L over time</h2>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <label style="font-size:12px;color:var(--muted)">Fertilizer</label>
+              <select id="land-chart-fert-filter" onchange="renderLandFertChart()" style="font-size:12px">
+                <option value="">All</option>
+              </select>
+            </div>
+          </div>
+          <div style="padding:14px 22px">
             <div style="height:240px;position:relative"><canvas id="land-fert-price-chart"></canvas></div>
           </div>
         </div>
