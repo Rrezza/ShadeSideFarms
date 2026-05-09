@@ -601,25 +601,32 @@ function renderLandFertChart() {
     byFert[fert.id].values.push(Math.round(cpkg));
   });
 
-  // Populate filter dropdown (only fertilizers with cost data)
+  // Populate filter dropdown from ALL active fertilizers
   var filterEl = document.getElementById('land-chart-fert-filter');
-  if (filterEl) {
-    var currentVal = filterEl.value;
+  if (filterEl && filterEl.options.length <= 1) {
+    // Only rebuild options on first render to preserve user selection
     filterEl.innerHTML = '<option value="">All</option>' +
-      Object.keys(byFert).map(function(id) {
-        return '<option value="' + id + '"' + (currentVal === id ? ' selected' : '') + '>' +
-          byFert[id].name + '</option>';
+      landFerts.filter(function(f) { return f.active; }).map(function(f) {
+        return '<option value="' + f.id + '">' + f.name + '</option>';
       }).join('');
-    // Restore selection if still valid, otherwise default to All
-    if (currentVal && !byFert[currentVal]) filterEl.value = '';
   }
 
   // Apply filter
   var selectedId = filterEl ? filterEl.value : '';
   if (selectedId) {
     var filtered = {};
-    filtered[selectedId] = byFert[selectedId];
+    if (byFert[selectedId]) filtered[selectedId] = byFert[selectedId];
     byFert = filtered;
+  }
+
+  // Show "no price data" message if the selected fertilizer has no cost entries
+  var noDataEl = document.getElementById('land-chart-no-data');
+  if (noDataEl) {
+    var hasData = Object.keys(byFert).length > 0;
+    noDataEl.style.display = hasData ? 'none' : 'flex';
+    noDataEl.textContent   = selectedId
+      ? 'No cost data logged for this fertilizer yet.'
+      : 'No cost data logged for any fertilizer yet.';
   }
 
   // Sort each series by original date order (purchases are fetched date desc — reverse)
@@ -642,7 +649,7 @@ function renderLandFertChart() {
   if (!allLabels.length) {
     var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    return;
+    return;  // no-data overlay already shown above
   }
 
   var datasets = [];
