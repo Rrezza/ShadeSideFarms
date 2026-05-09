@@ -422,7 +422,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r51</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r52</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -1239,7 +1239,7 @@
           <div id="land-fert-table"></div>
         </div>
         <!-- Purchase log -->
-        <div class="land-section" style="margin-top:0;border-top:1px solid var(--border)">
+        <div class="land-section" style="margin-top:20px">
           <div class="land-section-hdr">
             <h2>Purchase Log</h2>
             <span class="land-section-meta" id="land-purch-count"></span>
@@ -1248,7 +1248,7 @@
           <div id="land-purch-table"></div>
         </div>
         <!-- Price history chart -->
-        <div class="land-section" style="margin-top:0;border-top:1px solid var(--border)">
+        <div class="land-section" style="margin-top:20px">
           <div style="padding:14px 22px;background:var(--bg)">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:8px">Cost per kg / L over time</div>
             <div style="height:240px;position:relative"><canvas id="land-fert-price-chart"></canvas></div>
@@ -1852,12 +1852,14 @@
       <select id="lp-fert" onchange="updateLandPurchLabels()"><option value="">Select fertilizer</option></select>
       <label>Date</label>
       <input type="date" id="lp-date">
-      <label id="lp-qty-label">Quantity (bags)</label>
-      <input type="number" id="lp-qty" min="0" step="1" placeholder="e.g. 3" oninput="updateLandPurchDerived()">
+      <label id="lp-qty-label">Bags / containers</label>
+      <input type="number" id="lp-qty" min="0" step="0.5" placeholder="enter bags…" oninput="lpCalcFromBags()">
+      <label>kg / L total</label>
+      <input type="number" id="lp-kg" min="0" step="0.5" placeholder="or enter kg directly…" oninput="lpCalcFromKg()">
       <label id="lp-cost-label">Cost per bag (PKR)</label>
-      <input type="number" id="lp-cost" min="0" step="1" placeholder="e.g. 3200" oninput="updateLandPurchDerived()">
-      <div id="lp-derived" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:13px;color:var(--muted)">
-        <span id="lp-derived-text"></span>
+      <input type="number" id="lp-cost" min="0" step="1" placeholder="e.g. 3200" oninput="lpUpdateCostPreview()">
+      <div id="lp-cost-preview" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:13px;color:var(--muted)">
+        <span id="lp-cost-preview-text"></span>
       </div>
       <label>Supplier</label>
       <input type="text" id="lp-supplier" placeholder="Where did you get it?">

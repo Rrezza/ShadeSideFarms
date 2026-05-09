@@ -585,47 +585,79 @@ function renderLandFertChart() {
   var existing = Chart.getChart(canvas);
   if (existing) existing.destroy();
   landFertChart = null;
+
+  // Build per-fertilizer series. If qpu is set, cost/kg = cost_per_unit / qpu.
+  // If qpu is NOT set, treat cost_per_unit as already cost/kg (user entered it that way).
   var byFert = {};
   landFertPurchases.forEach(function(pp) {
     if (pp.cost_per_unit == null) return;
     var fert = landFerts.find(function(f) { return f.id === pp.fertilizer_id; });
-    var qpu  = fert && fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
-    if (!qpu || qpu <= 0) return;
-    var cpkg = parseFloat(pp.cost_per_unit) / qpu;
-    var su   = fert && fert.type === 'liquid' ? 'L' : 'kg';
-    if (!byFert[pp.fertilizer_id]) byFert[pp.fertilizer_id] = { pts: [], su: su, name: fert ? fert.name : String(pp.fertilizer_id) };
-    byFert[pp.fertilizer_id].pts.push({ x: pp.date, y: cpkg });
+    if (!fert) return;
+    var qpu  = fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
+    var cpkg = qpu ? parseFloat(pp.cost_per_unit) / qpu : parseFloat(pp.cost_per_unit);
+    var su   = fert.type === 'liquid' ? 'L' : 'kg';
+    if (!byFert[fert.id]) byFert[fert.id] = { labels: [], values: [], su: su, name: fert.name };
+    // Keep insertion sorted by date
+    byFert[fert.id].labels.push(fmtDate(pp.date));
+    byFert[fert.id].values.push(Math.round(cpkg));
   });
+
+  // Sort each series by original date order (purchases are fetched date desc — reverse)
   Object.keys(byFert).forEach(function(id) {
-    byFert[id].pts.sort(function(a, b) { return a.x.localeCompare(b.x); });
+    var e = byFert[id];
+    // Zip, reverse (so oldest first), unzip
+    var pairs = e.labels.map(function(l, i) { return [l, e.values[i]]; }).reverse();
+    e.labels = pairs.map(function(p) { return p[0]; });
+    e.values = pairs.map(function(p) { return p[1]; });
   });
-  var datasets = []; var idx = 0;
+
+  // Collect all unique labels in date order for the shared x-axis
+  var allLabels = [];
+  Object.keys(byFert).forEach(function(id) {
+    byFert[id].labels.forEach(function(l) {
+      if (allLabels.indexOf(l) === -1) allLabels.push(l);
+    });
+  });
+
+  if (!allLabels.length) {
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  var datasets = [];
+  var idx = 0;
   Object.keys(byFert).forEach(function(id) {
     var entry = byFert[id];
+    // Align values to allLabels — null where no data point
+    var aligned = allLabels.map(function(lbl) {
+      var pos = entry.labels.indexOf(lbl);
+      return pos !== -1 ? entry.values[pos] : null;
+    });
     datasets.push({
       label: entry.name + ' (PKR / ' + entry.su + ')',
-      data: entry.pts,
+      data: aligned,
       borderColor: CHART_COLORS[idx % CHART_COLORS.length],
       backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
-      tension: 0.2, pointRadius: 3, borderWidth: 2
+      spanGaps: true, tension: 0.2, pointRadius: 4, borderWidth: 2
     });
     idx++;
   });
-  if (!datasets.length) { var ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); return; }
+
   landFertChart = new Chart(canvas, {
-    type: 'line', data: { datasets: datasets },
+    type: 'line',
+    data: { labels: allLabels, datasets: datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: 'bottom', labels: { font: { size: 11 } } },
         tooltip: { callbacks: {
-          title: function(items) { return fmtDate(items[0].parsed.x); },
-          label: function(c) { return c.dataset.label + ': PKR ' + Math.round(c.parsed.y); }
+          label: function(c) { return c.dataset.label + ': PKR ' + c.parsed.y; }
         }}
       },
       scales: {
-        x: { type: 'time', time: { unit: 'month' }, ticks: { font: { size: 10 } }, grid: { color: '#E8E4DA' } },
-        y: { ticks: { font: { size: 10 }, callback: function(v) { return 'PKR ' + Math.round(v); } }, grid: { color: '#E8E4DA' } }
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 }, grid: { color: '#E8E4DA' } },
+        y: { ticks: { font: { size: 10 }, callback: function(v) { return 'PKR ' + v; } }, grid: { color: '#E8E4DA' } }
       }
     }
   });
@@ -777,9 +809,24 @@ async function submitLandFertPurchase() {
   try {
     var fertId = document.getElementById('lp-fert').value;
     var date   = document.getElementById('lp-date').value;
-    var qty    = parseFloat(document.getElementById('lp-qty').value);
+    var bags   = parseFloat(document.getElementById('lp-qty').value);
+    var kg     = parseFloat(document.getElementById('lp-kg').value);
+    var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
+    // Accept bags (preferred) or kg fallback. Convert kg→bags if qpu known.
+    var qpu    = fert && fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
+    var qty;
+    if (!isNaN(bags) && bags > 0) {
+      qty = bags;
+    } else if (!isNaN(kg) && kg > 0 && qpu) {
+      qty = kg / qpu;
+    } else if (!isNaN(kg) && kg > 0) {
+      // No qpu — store kg directly as qty (stock calc uses qpu; without it stock shows as 0)
+      qty = kg;
+    } else {
+      qty = NaN;
+    }
     if (!fertId || !date || isNaN(qty) || qty <= 0)
-      throw new Error('Fertilizer, date, and quantity required.');
+      throw new Error('Fertilizer, date, and quantity are required.');
     var d = { fertilizer_id: parseInt(fertId), date: date, qty: qty };
     var cost = document.getElementById('lp-cost').value;
     if (cost) d.cost_per_unit = parseFloat(cost);
@@ -798,33 +845,51 @@ async function submitLandFertPurchase() {
   }
 }
 
-function updateLandPurchDerived() {
+// ── Purchase modal: bags ↔ kg auto-fill ──────────────────────
+function _lpFert() {
   var fertId = document.getElementById('lp-fert').value;
-  var fert   = landFerts.find(function(f) { return String(f.id) === fertId; });
-  var qty    = parseFloat(document.getElementById('lp-qty').value);
-  var cost   = parseFloat(document.getElementById('lp-cost').value);
-  var dw     = document.getElementById('lp-derived');
-  var dt     = document.getElementById('lp-derived-text');
-  if (!fert || !fert.quantity_per_purchase_unit) { dw.style.display = 'none'; return; }
-  var qpu = parseFloat(fert.quantity_per_purchase_unit);
-  var su  = fert.type === 'liquid' ? 'L' : 'kg';
-  var parts = [];
-  if (!isNaN(qty) && qty > 0) parts.push(r1(qty * qpu) + ' ' + su + ' total');
-  if (!isNaN(cost) && cost > 0 && qpu > 0) parts.push(pkr(cost / qpu) + ' / ' + su);
-  if (parts.length) { dw.style.display = 'block'; dt.textContent = '→  ' + parts.join('   ·   '); }
-  else { dw.style.display = 'none'; }
+  return landFerts.find(function(f) { return String(f.id) === fertId; }) || null;
 }
-
+function lpCalcFromBags() {
+  var fert = _lpFert();
+  var bags = parseFloat(document.getElementById('lp-qty').value);
+  if (!fert || !fert.quantity_per_purchase_unit || isNaN(bags) || bags <= 0) return;
+  document.getElementById('lp-kg').value = r1(bags * parseFloat(fert.quantity_per_purchase_unit));
+  lpUpdateCostPreview();
+}
+function lpCalcFromKg() {
+  var fert = _lpFert();
+  var kg   = parseFloat(document.getElementById('lp-kg').value);
+  if (!fert || !fert.quantity_per_purchase_unit || isNaN(kg) || kg <= 0) return;
+  document.getElementById('lp-qty').value = r1(kg / parseFloat(fert.quantity_per_purchase_unit));
+  lpUpdateCostPreview();
+}
+function lpUpdateCostPreview() {
+  var fert  = _lpFert();
+  var cost  = parseFloat(document.getElementById('lp-cost').value);
+  var bags  = parseFloat(document.getElementById('lp-qty').value);
+  var kg    = parseFloat(document.getElementById('lp-kg').value);
+  var prev  = document.getElementById('lp-cost-preview');
+  var prevT = document.getElementById('lp-cost-preview-text');
+  if (!fert || isNaN(cost) || cost <= 0) { prev.style.display = 'none'; return; }
+  var su    = fert.type === 'liquid' ? 'L' : 'kg';
+  var parts = [];
+  var qpu   = fert.quantity_per_purchase_unit ? parseFloat(fert.quantity_per_purchase_unit) : null;
+  if (qpu && !isNaN(bags) && bags > 0) parts.push(pkr(cost / qpu) + ' / ' + su);
+  if (!isNaN(bags) && bags > 0) parts.push(pkr(cost * bags) + ' total');
+  if (parts.length) { prev.style.display = 'block'; prevT.textContent = '→  ' + parts.join('   ·   '); }
+  else { prev.style.display = 'none'; }
+}
 function updateLandPurchLabels() {
-  var fertId   = document.getElementById('lp-fert').value;
-  var fert     = landFerts.find(function(f) { return String(f.id) === fertId; });
+  var fert     = _lpFert();
   var isLiquid = fert && fert.type === 'liquid';
   var pu = isLiquid ? 'container' : 'bag';
-  document.getElementById('lp-qty-label').textContent  = 'Quantity (' + pu + 's)';
+  document.getElementById('lp-qty-label').textContent  = 'Bags / containers';
   document.getElementById('lp-cost-label').textContent = 'Cost per ' + pu + ' (PKR)';
-  updateLandPurchDerived();
+  // Recalculate whichever direction has data
+  var bags = parseFloat(document.getElementById('lp-qty').value);
+  if (!isNaN(bags) && bags > 0) lpCalcFromBags(); else lpCalcFromKg();
 }
-
 function openLandPurchModal() {
   var sel = document.getElementById('lp-fert');
   sel.innerHTML = '<option value="">Select fertilizer</option>' +
@@ -835,16 +900,14 @@ function openLandPurchModal() {
       return '<option value="' + f.id + '">' + f.name + qpu + '</option>';
     }).join('');
   document.getElementById('lp-date').value = todayISO();
-  ['lp-qty','lp-cost','lp-supplier','lp-notes'].forEach(function(id) {
+  ['lp-qty','lp-kg','lp-cost','lp-supplier','lp-notes'].forEach(function(id) {
     document.getElementById(id).value = '';
   });
-  document.getElementById('lp-qty-label').textContent  = 'Quantity (bags)';
-  document.getElementById('lp-cost-label').textContent = 'Cost per bag (PKR)';
-  document.getElementById('lp-derived').style.display  = 'none';
-  document.getElementById('lp-status').textContent     = '';
+  document.getElementById('lp-cost-label').textContent   = 'Cost per bag (PKR)';
+  document.getElementById('lp-cost-preview').style.display = 'none';
+  document.getElementById('lp-status').textContent       = '';
   document.getElementById('land-purch-modal').style.display = 'flex';
 }
-
 function closeLandPurchModal() {
   document.getElementById('land-purch-modal').style.display = 'none';
 }
