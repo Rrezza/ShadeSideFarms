@@ -10,3 +10,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Claude Code session data
+.claude/
