@@ -636,41 +636,6 @@ function renderLandFertChart() {
     byFert = filtered;
   }
 
-  // ── Stats panel ────────────────────────────────────────────
-  var statsBody = document.getElementById('land-chart-stats-body');
-  if (statsBody) {
-    var allVals = [];
-    Object.keys(byFert).forEach(function(id) {
-      byFert[id].values.forEach(function(v) { if (v != null) allVals.push(v); });
-    });
-    if (!allVals.length) {
-      statsBody.innerHTML = selectedId
-        ? '<span style="color:var(--faint)">No cost data for this fertilizer' + (periodDays ? ' in this period.' : '.') + '</span>'
-        : '<span style="color:var(--faint)">Select a fertilizer to see statistics.</span>';
-    } else {
-      var sorted = allVals.slice().sort(function(a, b) { return a - b; });
-      var n      = sorted.length;
-      var mean   = sorted.reduce(function(s, v) { return s + v; }, 0) / n;
-      var med    = n % 2 === 0
-        ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2
-        : sorted[Math.floor(n / 2)];
-      var su = selectedId && byFert[selectedId] ? byFert[selectedId].su : 'kg';
-      function statRow(label, val) {
-        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">' +
-          '<span style="color:var(--muted)">' + label + '</span>' +
-          '<span style="font-weight:500">PKR ' + Math.round(val) + ' / ' + su + '</span></div>';
-      }
-      statsBody.innerHTML =
-        statRow('Mean',   mean) +
-        statRow('Median', med)  +
-        statRow('Min',    sorted[0])    +
-        statRow('Max',    sorted[n - 1]) +
-        '<div style="display:flex;justify-content:space-between;padding:5px 0">' +
-          '<span style="color:var(--muted)">n</span>' +
-          '<span style="font-weight:500">' + n + ' purchase' + (n !== 1 ? 's' : '') + '</span></div>';
-    }
-  }
-
   // ── No-data overlay ────────────────────────────────────────
   var noDataEl = document.getElementById('land-chart-no-data');
   if (noDataEl) {
@@ -681,7 +646,7 @@ function renderLandFertChart() {
       : 'No cost data logged yet.';
   }
 
-  // Sort each series by original date order (purchases are fetched date desc — reverse)
+  // Sort each series oldest-first (purchases are fetched date desc — reverse)
   Object.keys(byFert).forEach(function(id) {
     var e = byFert[id];
     // Zip, reverse (so oldest first), unzip
@@ -689,6 +654,43 @@ function renderLandFertChart() {
     e.labels = pairs.map(function(p) { return p[0]; });
     e.values = pairs.map(function(p) { return p[1]; });
   });
+
+  // ── Stats panel (computed after sort so values are oldest-first) ───
+  var statsBody = document.getElementById('land-chart-stats-body');
+  if (statsBody) {
+    var allVals  = [];
+    var latestVal = null;
+    var su = selectedId && byFert[selectedId] ? byFert[selectedId].su : 'kg';
+    Object.keys(byFert).forEach(function(id) {
+      var vals = byFert[id].values; // oldest-first after sort
+      vals.forEach(function(v) { if (v != null) allVals.push(v); });
+      if (vals.length) latestVal = vals[vals.length - 1];
+    });
+    if (!allVals.length) {
+      statsBody.innerHTML = selectedId
+        ? '<span style="color:var(--faint)">No cost data for this fertilizer' + (periodDays ? ' in this period.' : '.') + '</span>'
+        : '<span style="color:var(--faint)">Select a fertilizer to see statistics.</span>';
+    } else {
+      var sorted = allVals.slice().sort(function(a, b) { return a - b; });
+      var n      = sorted.length;
+      var mean   = sorted.reduce(function(s, v) { return s + v; }, 0) / n;
+      var med    = n % 2 === 0 ? (sorted[n/2-1] + sorted[n/2]) / 2 : sorted[Math.floor(n/2)];
+      function statRow(label, val) {
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">' +
+          '<span style="color:var(--muted)">' + label + '</span>' +
+          '<span style="font-weight:500">PKR ' + Math.round(val) + ' / ' + su + '</span></div>';
+      }
+      statsBody.innerHTML =
+        statRow('Latest', latestVal) +
+        statRow('Mean',   mean)      +
+        statRow('Median', med)       +
+        statRow('Min',    sorted[0]) +
+        statRow('Max',    sorted[n - 1]) +
+        '<div style="display:flex;justify-content:space-between;padding:5px 0">' +
+          '<span style="color:var(--muted)">n (period)</span>' +
+          '<span style="font-weight:500">' + n + '</span></div>';
+    }
+  }
 
   // Collect all unique labels in date order for the shared x-axis
   var allLabels = [];

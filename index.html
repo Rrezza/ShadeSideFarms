@@ -422,7 +422,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-08 · r55</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-10 · r56</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -779,35 +779,24 @@
           <div class="ph-sidebar">
             <h3>Ingredients</h3>
             <div class="ing-checkbox-list" id="ing-checkbox-list"></div>
-            <h3 style="margin-top:20px">Date range</h3>
-            <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
-              <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--muted);width:28px">From</label><input type="date" id="ph-from" onchange="renderPriceChart()" style="flex:1"></div>
-              <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--muted);width:28px">To</label><input type="date" id="ph-to" onchange="renderPriceChart()" style="flex:1"></div>
-              <button class="btn btn-sm" onclick="clearDateRange()" style="align-self:flex-start;margin-top:4px">Clear range</button>
-            </div>
-            <h3 style="margin-top:20px">Rolling average</h3>
+            <h3 style="margin-top:20px">Period</h3>
             <div style="margin-top:6px">
-              <select id="ph-avg-days" onchange="onPhAvgDaysChange()" style="width:100%">
-                <option value="30">30 days</option>
-                <option value="60">60 days</option>
-                <option value="90" selected>90 days</option>
-                <option value="180">180 days</option>
-                <option value="365">365 days</option>
+              <select id="ph-period" onchange="renderPriceChart()" style="width:100%">
+                <option value="">All time</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="180">Last 6 months</option>
+                <option value="365">Last 12 months</option>
               </select>
-              <div style="font-size:11px;color:var(--faint);margin-top:4px">Shown in summary stats</div>
-            </div>
-            <h3 style="margin-top:20px">Cost calculator</h3>
-            <div style="margin-top:6px">
-              <label style="font-size:11px;color:var(--muted)">Quantity (kg)</label>
-              <input type="number" id="ph-calc-qty" min="0" step="1" placeholder="e.g. 100"
-                oninput="renderPriceChart()" style="width:100%;margin-top:4px">
-              <div style="font-size:11px;color:var(--faint);margin-top:4px">Shows cost at latest price for each selected ingredient</div>
             </div>
           </div>
           <div class="ph-main">
-            <div class="ph-chart-area"><canvas id="price-chart" role="img" aria-label="Price per kg over time"></canvas></div>
+            <div class="ph-chart-area" style="position:relative">
+              <canvas id="price-chart" role="img" aria-label="Price per kg over time"></canvas>
+              <div id="ph-no-data" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:13px;color:var(--faint)"></div>
+            </div>
             <div class="ph-chart-error" id="ph-chart-error"></div>
-            <div style="border-top:1px solid var(--border);padding:16px 22px"><div id="ph-stats-tables" style="display:flex;flex-wrap:wrap;gap:24px"><div style="font-size:13px;color:var(--faint)">No ingredients selected.</div></div></div>
+            <div style="border-top:1px solid var(--border);padding:16px 22px"><div id="ph-stats-tables" style="display:flex;flex-wrap:wrap;gap:20px"><div style="font-size:13px;color:var(--faint)">No ingredients selected.</div></div></div>
           </div>
         </div>
       </div>

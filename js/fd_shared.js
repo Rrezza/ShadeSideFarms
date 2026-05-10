@@ -22,7 +22,6 @@ var priceChart            = null;
 var phIngsList            = [];
 var phData                = {};
 var phSelected            = {};
-var phAvgDays             = 90;
 
 // Purchase log state
 var purchaseRows          = [];
