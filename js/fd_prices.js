@@ -119,10 +119,10 @@ function renderPriceChart() {
       return pos !== -1 ? s.values[pos] : null;
     });
     datasets.push({
-      label: s.name,
+      label: s.name + ' (PKR / kg)',
       data: aligned,
       borderColor: s.color, backgroundColor: s.color,
-      spanGaps: true, tension: 0.2, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2
+      spanGaps: true, tension: 0.2, pointRadius: 4, borderWidth: 2
     });
 
     // Stats block for this ingredient
@@ -141,8 +141,7 @@ function renderPriceChart() {
     statsHtml +=
       '<div style="min-width:180px;flex:1;max-width:260px;background:var(--bg);' +
       'border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:13px">' +
-      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:' + s.color +
-      ';margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--border)">' + s.name + '</div>' +
+      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--border)">' + s.name + '</div>' +
       statRow('Latest', latest) +
       statRow('Mean',   mean)   +
       statRow('Median', med)    +
@@ -191,7 +190,7 @@ function renderPriceChart() {
         plugins: {
           legend: { position: 'bottom', labels: { font: { size: 11 } } },
           tooltip: { callbacks: {
-            label: function(c) { return c.dataset.label + ': ' + pkr(c.parsed.y) + ' / kg'; }
+            label: function(c) { return c.dataset.label + ': PKR ' + Math.round(c.parsed.y); }
           }}
         },
         scales: {

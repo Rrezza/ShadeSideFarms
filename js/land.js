@@ -733,7 +733,7 @@ function renderLandFertChart() {
       plugins: {
         legend: { position: 'bottom', labels: { font: { size: 11 } } },
         tooltip: { callbacks: {
-          label: function(c) { return c.dataset.label + ': PKR ' + c.parsed.y; }
+          label: function(c) { return c.dataset.label + ': PKR ' + Math.round(c.parsed.y); }
         }}
       },
       scales: {
