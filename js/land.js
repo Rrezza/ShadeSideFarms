@@ -604,11 +604,14 @@ function renderLandFertChart() {
 
   // ── Populate fertilizer dropdown from all active fertilizers ─
   var filterEl = document.getElementById('land-chart-fert-filter');
-  if (filterEl && filterEl.options.length <= 1) {
-    filterEl.innerHTML = '<option value="">All</option>' +
-      landFerts.filter(function(f) { return f.active; }).map(function(f) {
-        return '<option value="' + f.id + '">' + f.name + '</option>';
-      }).join('');
+  if (filterEl && filterEl.options.length === 0) {
+    filterEl.innerHTML = landFerts.filter(function(f) { return f.active; }).map(function(f) {
+      return '<option value="' + f.id + '">' + f.name + '</option>';
+    }).join('');
+    // Auto-select the first fertilizer that has purchase data
+    var firstWithData = landFerts.filter(function(f) { return f.active; })
+      .find(function(f) { return byFert[f.id] && byFert[f.id].values.length > 0; });
+    if (firstWithData) filterEl.value = String(firstWithData.id);
   }
   var selectedId = filterEl ? filterEl.value : '';
 
@@ -641,9 +644,7 @@ function renderLandFertChart() {
   if (noDataEl) {
     var hasData = Object.keys(byFert).some(function(id) { return byFert[id].values.length > 0; });
     noDataEl.style.display = hasData ? 'none' : 'flex';
-    noDataEl.textContent   = selectedId
-      ? 'No cost data logged for this fertilizer' + (periodDays ? ' in this period.' : '.')
-      : 'No cost data logged yet.';
+    noDataEl.textContent   = 'No cost data logged for this fertilizer' + (periodDays ? ' in this period.' : '.');
   }
 
   // Sort each series oldest-first (purchases are fetched date desc — reverse)
@@ -667,9 +668,7 @@ function renderLandFertChart() {
       if (vals.length) latestVal = vals[vals.length - 1];
     });
     if (!allVals.length) {
-      statsBody.innerHTML = selectedId
-        ? '<span style="color:var(--faint)">No cost data for this fertilizer' + (periodDays ? ' in this period.' : '.') + '</span>'
-        : '<span style="color:var(--faint)">Select a fertilizer to see statistics.</span>';
+      statsBody.innerHTML = '<span style="color:var(--faint)">No cost data for this fertilizer' + (periodDays ? ' in this period.' : '.') + '</span>';
     } else {
       var sorted = allVals.slice().sort(function(a, b) { return a - b; });
       var n      = sorted.length;
