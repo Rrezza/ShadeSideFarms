@@ -1,4 +1,4 @@
-// fd_ration_plans.js v21
+// fd_ration_plans.js v22
 // Ration plans setup page with integrated modeller
 // Replaces: fd_ration_plans.js v20 + Ration Setup tab (fd_feed.js rationsetup section)
 // Depends on: shared.js
@@ -125,7 +125,7 @@ async function rpOpenForm(planId) {
   wrap.innerHTML = '<div class="loading" style="padding:16px 22px">Loading...</div>';
   var plan = null; var version = null;
   if (planId) {
-    var rows = await sbGet('ration_plans', 'id=eq.' + planId + '&select=id,name,notes&limit=1');
+    var rows = await sbGet('ration_plans', 'id=eq.' + planId + '&select=id,name,notes,species_id&limit=1');
     plan = rows.length ? rows[0] : null;
     var vers = await sbGet('ration_plan_versions',
       'ration_plan_id=eq.' + planId +
@@ -153,6 +153,13 @@ async function rpOpenForm(planId) {
         '<div class="hf-grid">' +
           '<div class="hf-field" style="grid-column:span 2"><label>Plan name</label>' +
             '<input type="text" id="rp-name" value="' + (plan ? plan.name : '') + '" placeholder="e.g. Beetal Early Cycle"></div>' +
+          '<div class="hf-field"><label>Species</label>' +
+            '<select id="rp-species">' +
+              '<option value="">-- select --</option>' +
+              (typeof anSharedSpecies !== 'undefined' ? anSharedSpecies.map(function(s) {
+                return '<option value="' + s.id + '"' + (plan && plan.species_id === s.id ? ' selected' : '') + '>' + s.common_name + '</option>';
+              }).join('') : '') +
+            '</select></div>' +
           '<div class="hf-field"><label>Concentrate recipe</label>' +
             '<select id="rp-recipe" onchange="rpRunModeller()">' + recipeOpts + '</select></div>' +
           '<div class="hf-field"><label>Hay source</label>' +
@@ -420,6 +427,7 @@ async function rpSubmitForm() {
   st.textContent = 'Saving...'; st.style.color = 'var(--muted)';
   try {
     var name      = document.getElementById('rp-name').value.trim();
+    var speciesId = document.getElementById('rp-species').value;
     var dmi       = parseFloat(document.getElementById('rp-dmi').value);
     var concPct   = parseFloat(document.getElementById('rp-conc-pct').value);
     var hayPct    = parseFloat(document.getElementById('rp-hay-pct').value);
@@ -431,15 +439,16 @@ async function rpSubmitForm() {
     var reason    = reasonEl ? reasonEl.value.trim() : '';
     var notes     = document.getElementById('rp-notes').value.trim();
     if (!name)      throw new Error('Name required.');
+    if (!speciesId) throw new Error('Species required.');
     if (isNaN(dmi) || dmi <= 0) throw new Error('DMI% required.');
     if (isNaN(concPct) || isNaN(hayPct) || isNaN(fodPct)) throw new Error('All three split percentages required.');
     if (Math.abs(concPct + hayPct + fodPct - 100) >= 0.1) throw new Error('Split percentages must sum to 100%.');
     var planId = rpEditPlanId;
     if (!planId) {
-      var planRow = await sbInsert('ration_plans', [{ name: name, active: true, notes: notes || null }]);
+      var planRow = await sbInsert('ration_plans', [{ name: name, species_id: parseInt(speciesId), active: true, notes: notes || null }]);
       planId = planRow[0].id;
     } else {
-      await sbPatch('ration_plans', planId, { name: name, notes: notes || null });
+      await sbPatch('ration_plans', planId, { name: name, species_id: parseInt(speciesId), notes: notes || null });
     }
     var existingVers = await sbGet('ration_plan_versions',
       'ration_plan_id=eq.' + planId + '&select=version_number&order=version_number.desc&limit=1');
