@@ -1452,20 +1452,23 @@ function buildGroupHarvestForm(g, workers) {
 // Shows all harvest events that haven't been fully routed to a
 // destination yet, so nothing falls through the cracks.
 function renderUnallocatedPanel(allocMap) {
-  var panel = document.getElementById('land-unalloc-panel');
+  var panel   = document.getElementById('land-unalloc-panel');
+  var section = document.getElementById('land-alloc-section');
+  var metaEl  = document.getElementById('land-alloc-meta');
   if (!panel) return;
 
   // Find every harvest that is not yet marked fully allocated
   var pending = landHarvests.filter(function(h) { return !h.allocated; });
 
+  // Show or hide the entire pane — nothing pending means nothing to display
+  if (section) section.style.display = pending.length ? 'block' : 'none';
+
   if (!pending.length) {
-    panel.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;padding:12px 18px;' +
-      'background:var(--green-lt,#edfbf0);border:1px solid var(--green-bdr,#b4e8c2);' +
-      'border-radius:8px;font-size:13px;color:var(--green)">' +
-      '<span>✓</span><span>All harvests allocated — nothing pending.</span></div>';
+    panel.innerHTML = '';
     return;
   }
+
+  if (metaEl) metaEl.textContent = pending.length + ' harvest' + (pending.length !== 1 ? 's' : '') + ' awaiting allocation';
 
   // Group pending harvests by crop group
   var byGroup = {};
@@ -1476,12 +1479,7 @@ function renderUnallocatedPanel(allocMap) {
   });
 
   var html = '<div style="border:1px solid var(--amber-bdr,#f5d78a);border-radius:8px;overflow:hidden">';
-  html += '<div style="padding:10px 18px;background:var(--amber-lt,#fdf8ec);display:flex;align-items:center;gap:8px">';
-  html += '<span style="font-weight:500;font-size:13px">Pending allocations</span>';
-  html += '<span class="badge badge-amber" style="font-size:11px">' + pending.length + '</span>';
-  html += '<span style="font-size:12px;color:var(--muted);margin-left:4px">— tap Allocate to route each harvest to its destination</span>';
-  html += '</div>';
-  html += '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-top:1px solid var(--border)">';
+  html += '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="background:var(--amber-lt,#fdf8ec)">';
   html += '<th style="padding:8px 18px;text-align:left">Group / Crop</th>';
   html += '<th style="padding:8px 12px;text-align:left">Plot</th>';
   html += '<th style="padding:8px 12px">Date</th>';
@@ -1616,24 +1614,45 @@ function renderLandCrops() {
     if (isMulti) {
       html += '<div style="padding:8px 18px 2px;border-top:1px solid var(--border)">';
       if (totalKg > 0) html += '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Total harvested: <strong>' + totalKg.toFixed(1) + ' kg</strong></div>';
-      members.forEach(function(c) {
-        var cObs    = landObservations.filter(function(o) { return o.plot_crop_id === c.id; });
-        var cFeed   = getCropFeedingNotes(c);
-        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--border-lt,#f0ece2)">';
-        html += '<span style="font-size:12px;font-weight:500;min-width:120px">' + getCropDisplayName(c) + '</span>';
+      members.forEach(function(c, ci) {
+        var cObs  = landObservations.filter(function(o) { return o.plot_crop_id === c.id; });
+        var cFeed = getCropFeedingNotes(c);
+        // Stronger separator between crops (dashed) vs the card header border (solid) —
+        // first item has no top border since the section header already provides one
+        var sepStyle = ci === 0
+          ? 'padding:6px 0 4px'
+          : 'padding:10px 0 4px;border-top:1px dashed var(--border)';
+
+        // Two-column layout: left grows freely (name + badges + safety note),
+        // right stays fixed (action buttons). Safety note wraps in left column
+        // and never bleeds into the button area.
+        html += '<div style="' + sepStyle + '">';
+        html += '<div style="display:flex;align-items:flex-start;gap:8px">';
+
+        // Left column — name, badges, sow date, feed safety note
+        html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">';
+        html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+        html += '<span style="font-size:12px;font-weight:500">' + getCropDisplayName(c) + '</span>';
         if (c.role) html += '<span class="badge badge-gray" style="font-size:10px">' + (CROP_ROLE_LABELS[c.role] || c.role) + '</span>';
         if (c.health_status && c.health_status !== 'unknown') html += '<span class="badge ' + (HEALTH_BADGE[c.health_status] || 'badge-gray') + '" style="font-size:10px">' + c.health_status + '</span>';
         if (c.pest_disease_flag) html += '<span style="color:var(--red);font-size:11px">⚠</span>' +
           '<button class="btn btn-sm" style="font-size:10px;padding:1px 6px;color:var(--muted)" onclick="resolvePestFlag(' + c.id + ')">Resolve</button>';
         if (c.sow_date) html += '<span class="muted-cell" style="font-size:11px">Sown: ' + fmtDate(c.sow_date) + '</span>';
-        html += '<div style="flex:1"></div>';
+        html += '</div>';
+        if (cFeed) html += '<div style="font-size:11px;color:var(--amber)">⚠ ' + cFeed + '</div>';
+        html += '</div>';
+
+        // Right column — action buttons, no-wrap
+        html += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">';
         html += '<button id="obs-btn-' + c.id + '" class="btn btn-sm" style="font-size:10px" onclick="toggleCropObs(' + c.id + ')">Obs (' + cObs.length + ')</button>';
         if (c.status === 'growing') {
-          html += '<button class="btn btn-sm" style="font-size:10px;margin-left:4px" onclick="openObsForm(' + c.id + ')">+ Obs</button>';
-          html += '<button class="btn btn-sm" style="font-size:10px;margin-left:4px;color:var(--muted)" onclick="terminateCrop(' + c.id + ')">End</button>';
+          html += '<button class="btn btn-sm" style="font-size:10px" onclick="openObsForm(' + c.id + ')">+ Obs</button>';
+          html += '<button class="btn btn-sm" style="font-size:10px;color:var(--muted)" onclick="terminateCrop(' + c.id + ')">End</button>';
         }
         html += '</div>';
-        if (cFeed) html += '<div style="font-size:11px;color:var(--amber);padding:2px 0 4px 0">⚠ ' + cFeed + '</div>';
+
+        html += '</div>'; // end two-column row
+        html += '</div>'; // end crop separator wrapper
         html += buildObsPanel(c, cObs);
         html += buildObsForm(c, workers);
       });
@@ -1680,7 +1699,7 @@ function renderLandCrops() {
         var allocBadge  = fullyAlloc
           ? '<span class="badge badge-green" style="font-size:10px">Allocated</span>'
           : (partAlloc
-              ? '<span class="badge badge-amber" style="font-size:10px">Partial ' + Math.round(allocatedKg) + '/' + Math.round(hKg) + ' kg</span>'
+              ? '<span class="badge badge-amber" style="font-size:10px">Partial ' + allocatedKg.toFixed(1) + '/' + hKg.toFixed(1) + ' kg</span>'
               : '<span class="badge badge-gray" style="font-size:10px">Unallocated</span>');
         var gNameSafe = (g.name || 'Group').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         var allocBtn = !fullyAlloc
@@ -2256,7 +2275,7 @@ function openHarvestAllocModal(hid, groupId, totalKg, groupName) {
   if (el) el.textContent = 'Allocate harvest — ' + groupName;
 
   var sumEl = document.getElementById('ha-total-kg');
-  if (sumEl) sumEl.textContent = Math.round(totalKg).toLocaleString() + ' kg total';
+  if (sumEl) sumEl.textContent = totalKg.toFixed(1) + ' kg total';
 
   document.getElementById('ha-status').textContent = '';
   p2AddAllocRow();
@@ -2359,7 +2378,7 @@ function p2UpdateRemaining() {
   var rem  = p2AllocTotalKg - used;
   var el   = document.getElementById('ha-remaining');
   if (el) {
-    el.textContent = Math.round(rem).toLocaleString() + ' kg remaining';
+    el.textContent = rem.toFixed(1) + ' kg remaining';
     el.style.color = rem < 0 ? 'var(--red)' : rem === 0 ? 'var(--green)' : 'var(--muted)';
   }
 }
@@ -2389,7 +2408,7 @@ async function submitHarvestAlloc() {
       totalUsed += kg;
     });
     if (totalUsed > p2AllocTotalKg + 0.01)
-      throw new Error('Total allocated (' + Math.round(totalUsed) + ' kg) exceeds harvest total (' + Math.round(p2AllocTotalKg) + ' kg).');
+      throw new Error('Total allocated (' + totalUsed.toFixed(1) + ' kg) exceeds harvest total (' + p2AllocTotalKg.toFixed(1) + ' kg).');
 
     // Find primary crop for seed allocations
     var primaryCrop = landCrops.find(function(c) {
