@@ -1533,9 +1533,6 @@
             <button class="btn btn-sm" onclick="toggleLandCropForm()">+ Add crop record</button>
             <label style="font-size:13px;color:var(--muted)">Plot</label>
             <select id="lc-plot-filter" onchange="renderLandCrops()"><option value="">All plots</option></select>
-            <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer">
-              <input type="checkbox" id="lc-show-all" onchange="renderLandCrops()"> Show terminated
-            </label>
           </div>
         </div>
 
@@ -1552,6 +1549,9 @@
         <div class="land-section">
           <div class="land-section-hdr">
             <h2>Crop Tracking</h2>
+            <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer">
+              <input type="checkbox" id="lc-show-all" onchange="renderLandCrops()"> Show terminated
+            </label>
           </div>
           <div id="land-crop-table" style="padding:16px 18px"></div>
         </div>
