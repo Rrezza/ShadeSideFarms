@@ -32,6 +32,7 @@ var landWorkers       = [];
 var landLocations     = [];
 var landLoaded        = false;
 var landActiveTab     = 'crops';
+var obsExpandedCrops  = {};   // cropId → true when showing all observations (not truncated)
 var landFertChart     = null;
 var landTrendChart    = null;
 
@@ -1343,46 +1344,68 @@ function getCropFeedingNotes(cropRecord) {
 
 // ---- Render helpers ----
 
-function buildObsPanel(c, observations) {
-  var html = '<div id="crop-obs-' + c.id + '" style="display:none;padding:10px 18px;background:var(--bg);border-top:1px solid var(--border)">';
-  if (!observations.length) {
-    html += '<div class="muted-cell" style="font-size:12px">No observations logged yet.</div>';
-  } else {
-    html += '<table style="width:100%;font-size:12px"><thead><tr>' +
-      '<th>Date</th><th>Health</th><th>Flag</th><th>Note</th><th>Worker</th><th></th>' +
-      '</tr></thead><tbody>';
-    observations.slice(0, 10).forEach(function(o) {
-      var oid = o.id;
-      html += '<tr>' +
-        '<td class="mono" style="white-space:nowrap">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
-        '<td><select id="oe-health-' + oid + '" style="font-size:11px;width:100%">' +
-          ['unknown','good','stressed','failing'].map(function(v) {
-            return '<option value="' + v + '"' + (o.health_status === v ? ' selected' : '') + '>' + v + '</option>';
-          }).join('') + '</select></td>' +
-        '<td><select id="oe-flag-' + oid + '" style="font-size:11px;width:100%">' +
-          '<option value="false"' + (!o.pest_disease_flag ? ' selected' : '') + '>No</option>' +
-          '<option value="true"'  + ( o.pest_disease_flag ? ' selected' : '') + '>Yes ⚠</option>' +
-        '</select></td>' +
-        '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.notes || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
-        '<td class="muted-cell" style="white-space:nowrap">' + (o.workers ? o.workers.name : '—') + '</td>' +
-        '<td style="white-space:nowrap">' +
-          '<button class="btn btn-sm" style="font-size:11px" onclick="patchObservation(' + oid + ',' + c.id + ')">Save</button>' +
-          '<button class="btn btn-sm" style="font-size:11px;color:var(--red);margin-left:4px" onclick="deleteObservation(' + oid + ',' + c.id + ')">Delete</button>' +
-          '<span id="oe-status-' + oid + '" style="font-size:10px;color:var(--muted);margin-left:4px"></span>' +
-        '</td></tr>';
-    });
-    html += '</tbody></table>';
+// Returns the inner HTML of the observations panel — used both on initial render
+// and by refreshCropObs / toggleObsShowAll for in-place DOM updates.
+function buildObsPanelContent(c, observations, showAll) {
+  var TRUNCATE = 10;
+  var total    = observations.length;
+  if (!total) {
+    return '<div class="muted-cell" style="font-size:12px">No observations logged yet.</div>';
   }
-  html += '</div>';
+  var displayed = showAll ? observations : observations.slice(0, TRUNCATE);
+  var html = '<table style="width:100%;font-size:12px"><thead><tr>' +
+    '<th>Date</th><th>Health</th><th>Flag</th><th>Note</th><th>Worker</th><th></th>' +
+    '</tr></thead><tbody>';
+  displayed.forEach(function(o) {
+    var oid = o.id;
+    html += '<tr>' +
+      '<td class="mono" style="white-space:nowrap">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
+      '<td><select id="oe-health-' + oid + '" style="font-size:11px;width:100%">' +
+        ['unknown','good','stressed','failing'].map(function(v) {
+          return '<option value="' + v + '"' + (o.health_status === v ? ' selected' : '') + '>' + v + '</option>';
+        }).join('') + '</select></td>' +
+      '<td><select id="oe-flag-' + oid + '" style="font-size:11px;width:100%">' +
+        '<option value="false"' + (!o.pest_disease_flag ? ' selected' : '') + '>No</option>' +
+        '<option value="true"'  + ( o.pest_disease_flag ? ' selected' : '') + '>Yes ⚠</option>' +
+      '</select></td>' +
+      '<td><input type="text" id="oe-note-' + oid + '" value="' + (o.notes || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:160px"></td>' +
+      '<td class="muted-cell" style="white-space:nowrap">' + (o.workers ? o.workers.name : '—') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" style="font-size:11px" onclick="patchObservation(' + oid + ',' + c.id + ')">Save</button>' +
+        '<button class="btn btn-sm" style="font-size:11px;color:var(--red);margin-left:4px" onclick="deleteObservation(' + oid + ',' + c.id + ')">Delete</button>' +
+        '<span id="oe-status-' + oid + '" style="font-size:10px;color:var(--muted);margin-left:4px"></span>' +
+      '</td></tr>';
+  });
+  html += '</tbody></table>';
+  // Show a toggle when there are more rows than the truncation limit
+  if (total > TRUNCATE) {
+    html += '<div style="padding:6px 0">' +
+      '<button class="btn btn-sm" style="font-size:11px" onclick="toggleObsShowAll(' + c.id + ')">' +
+      (showAll ? 'Show fewer' : 'Show all ' + total + ' observations') +
+      '</button></div>';
+  }
   return html;
+}
+
+function buildObsPanel(c, observations) {
+  // Wrapper div uses obs-panel-{id} so toggleCropObs / refreshCropObs can target it
+  return '<div id="obs-panel-' + c.id + '" style="display:none;padding:10px 18px;background:var(--bg);border-top:1px solid var(--border)">' +
+    buildObsPanelContent(c, observations, false) +
+    '</div>';
 }
 
 function buildObsForm(c, workers) {
   var html = '<div id="obs-form-' + c.id + '" style="display:none;padding:14px 18px;background:var(--bg);border-top:1px solid var(--border)">';
   html += '<div style="font-size:12px;font-weight:500;margin-bottom:8px">Log observation — ' + getCropDisplayName(c) + '</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">';
-  html += '<div><label style="font-size:11px;color:var(--muted)">Health status</label><select id="of-health-' + c.id + '" style="width:100%">' +
-    ['unknown','good','stressed','failing'].map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('') + '</select></div>';
+  // 4-column grid: date, health (required), pest flag, worker
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Date</label>' +
+    '<input type="date" id="of-date-' + c.id + '" value="' + todayISO() + '" style="width:100%"></div>';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Health status <span style="color:var(--red)">*</span></label>' +
+    '<select id="of-health-' + c.id + '" style="width:100%">' +
+    '<option value="">— select —</option>' +
+    ['unknown','good','stressed','failing'].map(function(v) { return '<option value="' + v + '">' + v + '</option>'; }).join('') +
+    '</select></div>';
   html += '<div><label style="font-size:11px;color:var(--muted)">Pest / disease flag</label><select id="of-flag-' + c.id + '" style="width:100%"><option value="false">No</option><option value="true">Yes ⚠</option></select></div>';
   html += '<div><label style="font-size:11px;color:var(--muted)">Worker</label><select id="of-worker-' + c.id + '" style="width:100%">' +
     '<option value="">—</option>' +
@@ -1392,7 +1415,7 @@ function buildObsForm(c, workers) {
   html += '<div><label style="font-size:11px;color:var(--muted)">Note</label><input type="text" id="of-note-' + c.id + '" style="width:100%" placeholder="observations, growth stage, issues…"></div>';
   html += '<div style="display:flex;gap:8px;margin-top:8px">';
   html += '<button class="btn btn-primary btn-sm" onclick="submitObservation(' + c.id + ')">Save observation</button>';
-  html += '<button class="btn btn-sm" onclick="document.getElementById(\'obs-form-' + c.id + '\').style.display=\'none\'">Cancel</button>';
+  html += '<button class="btn btn-sm" onclick="closeObsForm(' + c.id + ')">Cancel</button>';
   html += '<span id="of-status-' + c.id + '" style="font-size:12px;color:var(--muted);align-self:center"></span>';
   html += '</div></div>';
   return html;
@@ -1604,7 +1627,7 @@ function renderLandCrops() {
           '<button class="btn btn-sm" style="font-size:10px;padding:1px 6px;color:var(--muted)" onclick="resolvePestFlag(' + c.id + ')">Resolve</button>';
         if (c.sow_date) html += '<span class="muted-cell" style="font-size:11px">Sown: ' + fmtDate(c.sow_date) + '</span>';
         html += '<div style="flex:1"></div>';
-        html += '<button class="btn btn-sm" style="font-size:10px" onclick="toggleCropObs(' + c.id + ')">Obs (' + cObs.length + ')</button>';
+        html += '<button id="obs-btn-' + c.id + '" class="btn btn-sm" style="font-size:10px" onclick="toggleCropObs(' + c.id + ')">Obs (' + cObs.length + ')</button>';
         if (c.status === 'growing') {
           html += '<button class="btn btn-sm" style="font-size:10px;margin-left:4px" onclick="openObsForm(' + c.id + ')">+ Obs</button>';
           html += '<button class="btn btn-sm" style="font-size:10px;margin-left:4px;color:var(--muted)" onclick="terminateCrop(' + c.id + ')">End</button>';
@@ -1617,12 +1640,16 @@ function renderLandCrops() {
       html += '</div>';
     }
 
+    // Pre-compute single-member obs once — used in both the actions bar button and the panel below
+    var mObs = (!isMulti && members.length === 1)
+      ? landObservations.filter(function(o) { return o.plot_crop_id === members[0].id; })
+      : [];
+
     // ── ACTIONS BAR ──
     html += '<div class="crop-events-wrap">';
     html += '<button class="btn btn-sm" style="font-size:11px" onclick="toggleGroupHarvests(' + g.id + ')">Harvests (' + harvests.length + ')</button>';
     if (!isMulti && members.length === 1) {
-      var mObs = landObservations.filter(function(o) { return o.plot_crop_id === members[0].id; });
-      html += '<button class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="toggleCropObs(' + members[0].id + ')">Observations (' + mObs.length + ')</button>';
+      html += '<button id="obs-btn-' + members[0].id + '" class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="toggleCropObs(' + members[0].id + ')">Observations (' + mObs.length + ')</button>';
     }
     if (anyGrowing) {
       html += '<button class="btn btn-sm btn-primary" style="font-size:11px;margin-left:6px" onclick="openGroupHarvestForm(' + g.id + ')">+ Log harvest</button>';
@@ -1695,9 +1722,8 @@ function renderLandCrops() {
     html += '<span id="ing-status-' + g.id + '" style="font-size:11px;color:var(--muted)"></span>';
     html += '</div></div>';
 
-    // ── OBS PANELS / FORMS for single-member ──
+    // ── OBS PANELS / FORMS for single-member (mObs already computed above) ──
     if (!isMulti && members.length === 1) {
-      var mObs = landObservations.filter(function(o) { return o.plot_crop_id === members[0].id; });
       html += buildObsPanel(members[0], mObs);
       html += buildObsForm(members[0], workers);
     }
@@ -1737,12 +1763,74 @@ function openGroupHarvestForm(groupId) {
   if (el) { el.style.display = 'block'; el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
 }
 function toggleCropObs(cropId) {
-  var el = document.getElementById('crop-obs-' + cropId);
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  var panelEl = document.getElementById('obs-panel-' + cropId);
+  var formEl  = document.getElementById('obs-form-'  + cropId);
+  if (!panelEl) return;
+  var opening = panelEl.style.display === 'none';
+  panelEl.style.display = opening ? 'block' : 'none';
+  // Close the log form whenever the panel opens, to avoid both showing at once
+  if (opening && formEl) formEl.style.display = 'none';
 }
 function openObsForm(cropId) {
-  var el = document.getElementById('obs-form-' + cropId);
-  if (el) { el.style.display = 'block'; el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  var formEl  = document.getElementById('obs-form-'  + cropId);
+  var panelEl = document.getElementById('obs-panel-' + cropId);
+  if (!formEl) return;
+  // Close the obs panel when opening the log form
+  if (panelEl) panelEl.style.display = 'none';
+  formEl.style.display = 'block';
+  formEl.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+function closeObsForm(cropId) {
+  var formEl = document.getElementById('obs-form-' + cropId);
+  if (formEl) formEl.style.display = 'none';
+}
+
+// Re-fetches observations and the plot_crops record for a single crop and rebuilds
+// the obs panel in-place, avoiding a full page reload for every obs action.
+async function refreshCropObs(cropId, keepOpen) {
+  try {
+    var freshObs = await sbGet('crop_observations',
+      'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,notes,recorded_by,' +
+      'workers!recorded_by(name)&plot_crop_id=eq.' + cropId + '&order=observed_at.desc');
+    // Splice fresh data into module state
+    landObservations = landObservations
+      .filter(function(o) { return o.plot_crop_id !== cropId; })
+      .concat(freshObs);
+
+    var freshCropRows = await sbGet('plot_crops',
+      'select=id,field_plot_id,crop_id,crop_name,role,status,health_status,germination_outcome,' +
+      'pest_disease_flag,sow_date,expected_termination_date,termination_date,notes,harvest_type,crop_group_id' +
+      '&id=eq.' + cropId);
+    if (freshCropRows && freshCropRows.length) {
+      var idx = landCrops.findIndex(function(c) { return c.id === cropId; });
+      if (idx >= 0) landCrops[idx] = freshCropRows[0];
+    }
+
+    // Rebuild panel content in-place
+    var panelEl = document.getElementById('obs-panel-' + cropId);
+    var c       = landCrops.find(function(x) { return x.id === cropId; });
+    if (panelEl && c) {
+      panelEl.innerHTML = buildObsPanelContent(c, freshObs, !!obsExpandedCrops[cropId]);
+      if (keepOpen) panelEl.style.display = 'block';
+    }
+
+    // Update the count on the "Obs (N)" button if it is in the DOM
+    var btnEl = document.getElementById('obs-btn-' + cropId);
+    if (btnEl) btnEl.textContent = 'Observations (' + freshObs.length + ')';
+  } catch (err) {
+    console.error('refreshCropObs failed, falling back to full reload:', err);
+    await loadLandPage();
+  }
+}
+
+// Toggle between truncated (10) and full observation list without a network round-trip.
+function toggleObsShowAll(cropId) {
+  obsExpandedCrops[cropId] = !obsExpandedCrops[cropId];
+  var panelEl = document.getElementById('obs-panel-' + cropId);
+  if (!panelEl) return;
+  var c   = landCrops.find(function(x) { return x.id === cropId; });
+  var obs = landObservations.filter(function(o) { return o.plot_crop_id === cropId; });
+  if (c) panelEl.innerHTML = buildObsPanelContent(c, obs, !!obsExpandedCrops[cropId]);
 }
 
 async function terminateCrop(cropId) {
@@ -1848,18 +1936,22 @@ async function submitObservation(cropId) {
   var statusEl = document.getElementById('of-status-' + cropId);
   statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
   try {
+    var date   = document.getElementById('of-date-'   + cropId).value;
     var health = document.getElementById('of-health-' + cropId).value;
-    var flag   = document.getElementById('of-flag-' + cropId).value === 'true';
+    var flag   = document.getElementById('of-flag-'   + cropId).value === 'true';
     var wId    = document.getElementById('of-worker-' + cropId).value;
-    var note   = (document.getElementById('of-note-' + cropId).value || '').trim();
-    var d = { plot_crop_id: cropId, pest_disease_flag: flag, observed_at: new Date().toISOString() };
-    if (health) d.health_status = health;
-    if (note)   d.notes         = note;
-    if (wId)    d.recorded_by   = parseInt(wId);
+    var note   = (document.getElementById('of-note-'  + cropId).value || '').trim();
+    if (!date)   throw new Error('Date is required.');
+    if (!health) throw new Error('Health status is required.');
+    var d = { plot_crop_id: cropId, health_status: health, pest_disease_flag: flag,
+              observed_at: date + 'T00:00:00.000Z' };
+    if (note) d.notes       = note;
+    if (wId)  d.recorded_by = parseInt(wId);
     await sbInsert('crop_observations', [d]);
     await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
-    await loadLandPage();
+    closeObsForm(cropId);
+    await refreshCropObs(cropId, true);
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
@@ -1873,13 +1965,10 @@ async function patchObservation(obsId, cropId) {
     var flag   = document.getElementById('oe-flag-'   + obsId).value === 'true';
     var note   = (document.getElementById('oe-note-'  + obsId).value || '').trim();
     await sbPatch('crop_observations', obsId, { health_status: health, pest_disease_flag: flag, notes: note || null });
-    var cropObs = landObservations.filter(function(o) { return o.plot_crop_id === cropId; });
-    cropObs.sort(function(a, b) { return (b.observed_at || '').localeCompare(a.observed_at || ''); });
-    if (cropObs.length && cropObs[0].id === obsId) {
-      await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
-    }
+    // Always sync plot_crops — the saved health/flag reflects current crop reality
+    await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
     statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
-    await loadLandPage();
+    await refreshCropObs(cropId, true);
   } catch (err) {
     statusEl.textContent = 'Error'; statusEl.style.color = 'var(--red)';
     console.error('patchObservation:', err);
@@ -1897,7 +1986,16 @@ async function deleteObservation(obsId, cropId) {
   if (!confirm('Delete this observation? This cannot be undone.')) return;
   try {
     await sbDelete('crop_observations', obsId);
-    await loadLandPage();
+    // Roll plot_crops back to the next most-recent obs so health badge stays accurate
+    var remaining = landObservations
+      .filter(function(o) { return o.plot_crop_id === cropId && o.id !== obsId; })
+      .sort(function(a, b) { return (b.observed_at || '').localeCompare(a.observed_at || ''); });
+    var next = remaining[0];
+    await sbPatch('plot_crops', cropId, {
+      health_status:     next ? next.health_status    : 'unknown',
+      pest_disease_flag: next ? next.pest_disease_flag : false
+    });
+    await refreshCropObs(cropId, true);
   } catch (err) { alert('Delete failed: ' + err.message); }
 }
 

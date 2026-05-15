@@ -45,3 +45,18 @@ UPDATE ingredients
 SET feed_eligible = true
 WHERE source_type IN ('produced', 'dual')
   AND active = true;
+
+-- 4. RLS policies for harvest_destinations
+--    SELECT: anon can read (allocation modal uses anon key)
+--    INSERT/UPDATE: authenticated only (dashboard login required)
+CREATE POLICY "anon_select_harvest_destinations"
+  ON harvest_destinations FOR SELECT TO anon USING (true);
+
+CREATE POLICY "auth_select_harvest_destinations"
+  ON harvest_destinations FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "auth_insert_harvest_destinations"
+  ON harvest_destinations FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "auth_update_harvest_destinations"
+  ON harvest_destinations FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
