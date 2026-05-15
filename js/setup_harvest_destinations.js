@@ -54,7 +54,10 @@ function renderHarvestDestinationsTable() {
       'onchange="patchHd(' + d.id + ',\'sort_order\',parseInt(this.value)||0)"></td>';
     html += '<td style="text-align:center"><input type="checkbox" ' + (d.active ? 'checked' : '') +
       ' onchange="patchHd(' + d.id + ',\'active\',this.checked)"></td>';
-    html += '<td><span id="hd-status-' + d.id + '" style="font-size:11px;color:var(--muted)"></span></td>';
+    html += '<td style="white-space:nowrap">' +
+      '<span id="hd-status-' + d.id + '" style="font-size:11px;color:var(--muted);margin-right:6px"></span>' +
+      '<button class="btn btn-sm del-btn" onclick="deleteHd(' + d.id + ',\'' + d.key.replace(/'/g,"\\'") + '\')">Delete</button>' +
+      '</td>';
     html += '</tr>';
   });
 
@@ -95,6 +98,30 @@ async function patchHd(id, field, value) {
     if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = 'var(--red)'; }
     alert('Update failed: ' + err.message);
     loadHarvestDestinationsPage();
+  }
+}
+
+async function deleteHd(id, key) {
+  // Check whether any allocations already use this destination key —
+  // deleting it won't break the DB (no FK), but those allocations would
+  // show an unrecognised destination label in the UI.
+  try {
+    var refs = await sbGet('harvest_allocations', 'select=id&destination=eq.' + key + '&limit=1');
+    if (refs && refs.length) {
+      var ok = confirm(
+        'This destination ("' + key + '") is referenced by at least one harvest allocation.\n\n' +
+        'Deleting it will leave those allocation records with an unrecognised destination label.\n\n' +
+        'Deactivating (unchecking Active) is safer — the label is preserved but the destination ' +
+        'won\'t appear in future allocation dropdowns.\n\nDelete anyway?'
+      );
+      if (!ok) return;
+    } else {
+      if (!confirm('Delete destination "' + key + '"? This cannot be undone.')) return;
+    }
+    await sbDelete('harvest_destinations', id);
+    await loadHarvestDestinationsPage();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
   }
 }
 
