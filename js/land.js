@@ -33,6 +33,7 @@ var landLocations     = [];
 var landLoaded        = false;
 var landActiveTab     = 'crops';
 var obsExpandedCrops  = {};   // cropId → true when showing all observations (not truncated)
+var landPlotObservations = []; // rows from plot_observations (plot-level, not crop-level)
 var landFertChart     = null;
 var landTrendChart    = null;
 
@@ -154,7 +155,9 @@ async function loadLandPage() {
       safeFetch('harvest_allocations',
         'select=id,harvest_event_id,destination,quantity_kg,ingredient_id,crop_id'),
       safeFetch('harvest_destinations',
-        'select=id,key,label,sort_order&active=eq.true&order=sort_order,label')
+        'select=id,key,label,sort_order&active=eq.true&order=sort_order,label'),
+      safeFetch('plot_observations',
+        'select=id,field_plot_id,observed_at,notes,recorded_by,workers!recorded_by(name)&order=observed_at.desc')
     ]);
 
     landPlots         = r[0];
@@ -172,8 +175,9 @@ async function loadLandPage() {
     landCropGroups    = r[12];
     landIngredients   = r[13];
     landWorkers       = r[14];
-    landAllocations   = r[15] || [];
-    landDestinations  = r[16] || [];
+    landAllocations      = r[15] || [];
+    landDestinations     = r[16] || [];
+    landPlotObservations = r[17] || [];
     landLoaded        = true;
 
     if (loadingEl) loadingEl.innerHTML = '';
@@ -1663,17 +1667,22 @@ function renderLandCrops() {
     var mObs = (!isMulti && members.length === 1)
       ? landObservations.filter(function(o) { return o.plot_crop_id === members[0].id; })
       : [];
+    // Plot-level observations for this group's field plot
+    var pObs = landPlotObservations.filter(function(o) { return o.field_plot_id === g.field_plot_id; });
 
     // ── ACTIONS BAR ──
     html += '<div class="crop-events-wrap">';
     html += '<button class="btn btn-sm" style="font-size:11px" onclick="toggleGroupHarvests(' + g.id + ')">Harvests (' + harvests.length + ')</button>';
     if (!isMulti && members.length === 1) {
-      html += '<button id="obs-btn-' + members[0].id + '" class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="toggleCropObs(' + members[0].id + ')">Observations (' + mObs.length + ')</button>';
+      html += '<button id="obs-btn-' + members[0].id + '" class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="toggleCropObs(' + members[0].id + ')">Crop Obs (' + mObs.length + ')</button>';
     }
+    // Plot-level obs button — always shown; these are whole-plot notes (emergence, conditions, etc.)
+    html += '<button id="plot-obs-btn-' + g.id + '" class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="togglePlotObs(' + g.id + ',' + g.field_plot_id + ')">Plot Obs (' + pObs.length + ')</button>';
     if (anyGrowing) {
       html += '<button class="btn btn-sm btn-primary" style="font-size:11px;margin-left:6px" onclick="openGroupHarvestForm(' + g.id + ')">+ Log harvest</button>';
+      html += '<button class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="openPlotObsForm(' + g.id + ')">+ Plot Obs</button>';
       if (!isMulti && members.length === 1) {
-        html += '<button class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="openObsForm(' + members[0].id + ')">+ Log observation</button>';
+        html += '<button class="btn btn-sm" style="font-size:11px;margin-left:6px" onclick="openObsForm(' + members[0].id + ')">+ Crop Obs</button>';
         html += '<button class="btn btn-sm" style="font-size:11px;margin-left:6px;color:var(--muted)" onclick="terminateCrop(' + members[0].id + ')">End crop</button>';
       } else if (isMulti) {
         html += '<button class="btn btn-sm" style="font-size:11px;margin-left:6px;color:var(--muted)" onclick="terminateGroup(' + g.id + ')">End group</button>';
@@ -1746,6 +1755,10 @@ function renderLandCrops() {
       html += buildObsPanel(members[0], mObs);
       html += buildObsForm(members[0], workers);
     }
+
+    // ── PLOT-LEVEL OBS PANEL / FORM (pObs already computed above) ──
+    html += buildPlotObsPanel(g, pObs);
+    html += buildPlotObsForm(g, workers);
 
     html += '</div>'; // end crop-card
   });
@@ -1850,6 +1863,165 @@ function toggleObsShowAll(cropId) {
   var c   = landCrops.find(function(x) { return x.id === cropId; });
   var obs = landObservations.filter(function(o) { return o.plot_crop_id === cropId; });
   if (c) panelEl.innerHTML = buildObsPanelContent(c, obs, !!obsExpandedCrops[cropId]);
+}
+
+// ============================================================
+// PLOT-LEVEL OBSERVATIONS
+// ============================================================
+// These are whole-plot notes independent of any specific crop:
+// seed emergence events, general condition snapshots, pest
+// sightings at the plot scale, irrigation observations, etc.
+// Stored in plot_observations (field_plot_id, not plot_crop_id).
+
+function buildPlotObsPanelContent(pObs, gId, plotId) {
+  if (!pObs.length) {
+    return '<div class="muted-cell" style="font-size:12px">No plot observations logged yet.</div>';
+  }
+  var html = '<table style="width:100%;font-size:12px"><thead><tr>' +
+    '<th>Date</th><th>Notes</th><th>Worker</th><th></th>' +
+    '</tr></thead><tbody>';
+  pObs.forEach(function(o) {
+    var oid = o.id;
+    html += '<tr>' +
+      '<td class="mono" style="white-space:nowrap">' + fmtDate((o.observed_at || '').slice(0, 10)) + '</td>' +
+      '<td><input type="text" id="poe-note-' + oid + '" value="' + (o.notes || '').replace(/"/g, '&quot;') +
+        '" style="font-size:11px;width:100%;min-width:200px"></td>' +
+      '<td class="muted-cell" style="white-space:nowrap">' + (o.workers ? o.workers.name : '—') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" style="font-size:11px" onclick="patchPlotObs(' + oid + ',' + gId + ',' + plotId + ')">Save</button>' +
+        '<button class="btn btn-sm" style="font-size:11px;color:var(--red);margin-left:4px" onclick="deletePlotObs(' + oid + ',' + gId + ',' + plotId + ')">Delete</button>' +
+        '<span id="poe-status-' + oid + '" style="font-size:10px;color:var(--muted);margin-left:4px"></span>' +
+      '</td></tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function buildPlotObsPanel(g, pObs) {
+  return '<div id="plot-obs-panel-' + g.id + '" style="display:none;padding:10px 18px;background:var(--bg);border-top:1px solid var(--border)">' +
+    buildPlotObsPanelContent(pObs, g.id, g.field_plot_id) +
+    '</div>';
+}
+
+function buildPlotObsForm(g, workers) {
+  var gid    = g.id;
+  var plotId = g.field_plot_id;
+  var html   = '<div id="plot-obs-form-' + gid + '" style="display:none;padding:14px 18px;background:var(--bg);border-top:1px solid var(--border)">';
+  html += '<div style="font-size:12px;font-weight:500;margin-bottom:8px">Log plot observation — ' + plotName(plotId) + '</div>';
+  html += '<div style="display:grid;grid-template-columns:140px 1fr 140px;gap:8px;margin-bottom:8px">';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Date</label>' +
+    '<input type="date" id="pof-date-' + gid + '" value="' + todayISO() + '" style="width:100%"></div>';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Notes <span style="color:var(--red)">*</span></label>' +
+    '<input type="text" id="pof-note-' + gid + '" style="width:100%" placeholder="emergence, dry conditions, pest sighting, soil moisture…"></div>';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Worker</label>' +
+    '<select id="pof-worker-' + gid + '" style="width:100%">' +
+    '<option value="">—</option>' +
+    workers.map(function(w) { return '<option value="' + w.id + '">' + w.name + '</option>'; }).join('') +
+    '</select></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:4px">';
+  html += '<button class="btn btn-primary btn-sm" onclick="submitPlotObservation(' + gid + ',' + plotId + ')">Save observation</button>';
+  html += '<button class="btn btn-sm" onclick="closePlotObsForm(' + gid + ')">Cancel</button>';
+  html += '<span id="pof-status-' + gid + '" style="font-size:12px;color:var(--muted);align-self:center"></span>';
+  html += '</div></div>';
+  return html;
+}
+
+function togglePlotObs(gId, plotId) {
+  var panelEl = document.getElementById('plot-obs-panel-' + gId);
+  var formEl  = document.getElementById('plot-obs-form-'  + gId);
+  if (!panelEl) return;
+  var opening = panelEl.style.display === 'none';
+  panelEl.style.display = opening ? 'block' : 'none';
+  // Close the log form when the panel opens
+  if (opening && formEl) formEl.style.display = 'none';
+}
+
+function openPlotObsForm(gId) {
+  var formEl  = document.getElementById('plot-obs-form-'  + gId);
+  var panelEl = document.getElementById('plot-obs-panel-' + gId);
+  if (!formEl) return;
+  if (panelEl) panelEl.style.display = 'none';
+  formEl.style.display = 'block';
+  formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closePlotObsForm(gId) {
+  var formEl = document.getElementById('plot-obs-form-' + gId);
+  if (formEl) formEl.style.display = 'none';
+}
+
+// Re-fetches plot observations for a single plot and rebuilds the panel in-place.
+async function refreshPlotObs(gId, plotId, keepOpen) {
+  try {
+    var freshObs = await sbGet('plot_observations',
+      'select=id,field_plot_id,observed_at,notes,recorded_by,workers!recorded_by(name)' +
+      '&field_plot_id=eq.' + plotId + '&order=observed_at.desc');
+    // Splice fresh data into module state
+    landPlotObservations = landPlotObservations
+      .filter(function(o) { return o.field_plot_id !== plotId; })
+      .concat(freshObs);
+    // Rebuild panel
+    var panelEl = document.getElementById('plot-obs-panel-' + gId);
+    if (panelEl) {
+      panelEl.innerHTML = buildPlotObsPanelContent(freshObs, gId, plotId);
+      if (keepOpen) panelEl.style.display = 'block';
+    }
+    // Update button count
+    var btnEl = document.getElementById('plot-obs-btn-' + gId);
+    if (btnEl) btnEl.textContent = 'Plot Obs (' + freshObs.length + ')';
+  } catch (err) {
+    console.error('refreshPlotObs failed, falling back to full reload:', err);
+    await loadLandPage();
+  }
+}
+
+async function patchPlotObs(obsId, gId, plotId) {
+  var statusEl = document.getElementById('poe-status-' + obsId);
+  statusEl.textContent = '…'; statusEl.style.color = 'var(--muted)';
+  try {
+    var note = (document.getElementById('poe-note-' + obsId).value || '').trim();
+    if (!note) throw new Error('Note cannot be empty.');
+    await sbPatch('plot_observations', obsId, { notes: note });
+    // Update module state in-place so a re-read is not needed
+    var obs = landPlotObservations.find(function(o) { return o.id === obsId; });
+    if (obs) obs.notes = note;
+    statusEl.textContent = '✓'; statusEl.style.color = 'var(--green)';
+    setTimeout(function() { if (statusEl) statusEl.textContent = ''; }, 1500);
+  } catch (err) {
+    statusEl.textContent = 'Error'; statusEl.style.color = 'var(--red)';
+    alert('Update failed: ' + err.message);
+  }
+}
+
+async function deletePlotObs(obsId, gId, plotId) {
+  if (!confirm('Delete this plot observation? This cannot be undone.')) return;
+  try {
+    await sbDelete('plot_observations', obsId);
+    await refreshPlotObs(gId, plotId, true);
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+async function submitPlotObservation(gId, plotId) {
+  var statusEl = document.getElementById('pof-status-' + gId);
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
+  try {
+    var date = document.getElementById('pof-date-'   + gId).value;
+    var note = (document.getElementById('pof-note-'  + gId).value || '').trim();
+    var wId  = document.getElementById('pof-worker-' + gId).value;
+    if (!date) throw new Error('Date is required.');
+    if (!note) throw new Error('Notes are required.');
+    var d = { field_plot_id: plotId, observed_at: date, notes: note };
+    if (wId) d.recorded_by = parseInt(wId);
+    await sbInsert('plot_observations', [d]);
+    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
+    closePlotObsForm(gId);
+    await refreshPlotObs(gId, plotId, true);
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
+  }
 }
 
 async function terminateCrop(cropId) {

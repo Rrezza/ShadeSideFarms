@@ -19,16 +19,21 @@ var OV_INCLUDE_USE_CASES = [
 ];
 
 // State
-var ovPlots         = [];
-var ovCrops         = [];
-var ovCropGroups    = [];
-var ovHarvests      = [];
-var ovObservations  = [];
-var ovFertApps      = [];
-var ovWatering      = [];
-var ovSoilTests     = [];
-var ovFerts         = [];
-var ovCropRegistry  = [];
+var ovPlots              = [];
+var ovCrops              = [];
+var ovCropGroups         = [];
+var ovHarvests           = [];
+var ovObservations       = [];
+var ovFertApps           = [];
+var ovWatering           = [];
+var ovSoilTests          = [];
+var ovFerts              = [];
+var ovCropRegistry       = [];
+var ovPlotObservations   = [];
+
+// Collapse state — resets to expanded on every page load (intentional)
+var ovPlotsCollapsed   = false;
+var ovAnimalsCollapsed = false;
 
 function safeFetchOv(table, query) {
   return sbGet(table, query).catch(function(err) {
@@ -61,7 +66,9 @@ async function loadOverviewPage() {
       safeFetchOv('soil_tests',
         'select=id,date,field_plot_id,is_baseline,ec_ms_cm,ph,organic_matter_pct,sar&order=date.desc'),
       safeFetchOv('fertilizers', 'select=id,name,type&order=name'),
-      safeFetchOv('crops', 'select=id,name,local_name&active=eq.true&order=name')
+      safeFetchOv('crops', 'select=id,name,local_name&active=eq.true&order=name'),
+      safeFetchOv('plot_observations',
+        'select=id,field_plot_id,observed_at,notes,recorded_by,workers!recorded_by(name)&order=observed_at.desc')
     ]);
 
     ovPlots         = r[0];
@@ -72,8 +79,9 @@ async function loadOverviewPage() {
     ovFertApps      = r[5];
     ovWatering      = r[6];
     ovSoilTests     = r[7];
-    ovFerts         = r[8];
-    ovCropRegistry  = r[9];
+    ovFerts              = r[8];
+    ovCropRegistry       = r[9];
+    ovPlotObservations   = r[10] || [];
 
     // Load animal group data (cached after first load; safe-fail so plots still render)
     if (!anSharedLoaded) {
@@ -137,7 +145,7 @@ function renderOverview() {
     return (a.plot_code || '').localeCompare(b.plot_code || '');
   });
 
-  // Group plots by location name for rendering with headers
+  // Group plots by location name for rendering with location headers
   var locGroups = {};
   var locOrder  = [];
   plots.forEach(function(p) {
@@ -153,21 +161,26 @@ function renderOverview() {
   var multiLoc = locOrder.length > 1 || (locOrder.length === 1 && locOrder[0] !== '');
 
   // ── Animal groups ──────────────────────────────────────────────
-  var PRODUCTIVE_PURPOSES = ['meat', 'breeder', 'dual_purpose'];
+  // Include all purposeful groups: commercial and learning — both are worth tracking.
+  var SHOW_PURPOSES = ['meat', 'breeder', 'dual_purpose', 'learning'];
   var anGroups = anSharedLoaded
     ? anSharedGroups.filter(function(g) {
         return g.status === 'active' &&
-               PRODUCTIVE_PURPOSES.indexOf(g.primary_purpose) !== -1;
+               SHOW_PURPOSES.indexOf(g.primary_purpose) !== -1;
       })
     : [];
 
   var html = '';
 
-  // Plots section
+  // ── PLOTS SECTION (collapsible) ───────────────────────────────
   if (plots.length) {
-    html += '<div class="ov-page-section"><h2>Plots</h2>' +
-      '<span class="ov-page-section-meta">' + plots.length + ' active</span></div>' +
-      '<div class="ov-grid">';
+    html += '<div class="ov-page-section">' +
+      '<h2>Plots</h2>' +
+      '<span class="ov-page-section-meta">' + plots.length + ' active</span>' +
+      '<button id="ov-plots-toggle" class="btn btn-sm" style="margin-left:auto;font-size:11px" ' +
+        'onclick="toggleOvSection(\'plots\')">' + (ovPlotsCollapsed ? '▶' : '▼') + '</button>' +
+      '</div>';
+    html += '<div id="ov-plots-grid" class="ov-grid"' + (ovPlotsCollapsed ? ' style="display:none"' : '') + '>';
     locOrder.forEach(function(locKey) {
       if (multiLoc) {
         html += '<div class="ov-loc-hdr">' + (locKey || 'No location assigned') + '</div>';
@@ -181,17 +194,38 @@ function renderOverview() {
       '</div>';
   }
 
-  // Animal groups section
+  // ── ANIMAL GROUPS SECTION (collapsible) ──────────────────────
   if (anGroups.length) {
-    html += '<div class="ov-page-section" style="margin-top:32px"><h2>Animal Groups</h2>' +
+    html += '<div class="ov-page-section" style="margin-top:32px">' +
+      '<h2>Animal Groups</h2>' +
       '<span class="ov-page-section-meta">' + anGroups.length +
-      ' active productive group' + (anGroups.length !== 1 ? 's' : '') + '</span></div>' +
-      '<div class="ov-grid">';
+        ' active group' + (anGroups.length !== 1 ? 's' : '') + '</span>' +
+      '<button id="ov-animals-toggle" class="btn btn-sm" style="margin-left:auto;font-size:11px" ' +
+        'onclick="toggleOvSection(\'animals\')">' + (ovAnimalsCollapsed ? '▶' : '▼') + '</button>' +
+      '</div>';
+    html += '<div id="ov-animals-grid" class="ov-grid"' + (ovAnimalsCollapsed ? ' style="display:none"' : '') + '>';
     anGroups.forEach(function(g) { html += renderOvAnimalCard(g); });
     html += '</div>';
   }
 
   content.innerHTML = html;
+}
+
+// Toggle collapse state for a named overview section without re-rendering the whole page.
+function toggleOvSection(section) {
+  if (section === 'plots') {
+    ovPlotsCollapsed = !ovPlotsCollapsed;
+    var gridEl = document.getElementById('ov-plots-grid');
+    var btnEl  = document.getElementById('ov-plots-toggle');
+    if (gridEl) gridEl.style.display = ovPlotsCollapsed ? 'none' : '';
+    if (btnEl)  btnEl.textContent = ovPlotsCollapsed ? '▶' : '▼';
+  } else if (section === 'animals') {
+    ovAnimalsCollapsed = !ovAnimalsCollapsed;
+    var gridEl = document.getElementById('ov-animals-grid');
+    var btnEl  = document.getElementById('ov-animals-toggle');
+    if (gridEl) gridEl.style.display = ovAnimalsCollapsed ? 'none' : '';
+    if (btnEl)  btnEl.textContent = ovAnimalsCollapsed ? '▶' : '▼';
+  }
 }
 
 function renderOvCard(p) {
@@ -284,6 +318,9 @@ function renderOvCard(p) {
     lastTestHtml = parts.join(' · ');
   }
 
+  // Last plot-level observation
+  var lastPlotObs = ovPlotObservations.find(function(o) { return o.field_plot_id === p.id; });
+
   // Last harvest from any group on this plot
   var groupIds = groupsOnPlot.map(function(g) { return g.id; });
   var lastHarvest = ovHarvests.find(function(h) { return groupIds.indexOf(h.crop_group_id) !== -1; });
@@ -349,6 +386,11 @@ function renderOvCard(p) {
       '<div class="ov-row"><span class="ov-row-label">Watering</span><span class="ov-row-val">' + lastWaterHtml + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Soil test</span><span class="ov-row-val">' + lastTestHtml + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Harvest</span><span class="ov-row-val">' + lastHarvestHtml + '</span></div>' +
+      '<div class="ov-row"><span class="ov-row-label">Plot obs</span><span class="ov-row-val">' +
+        (lastPlotObs
+          ? fmtDate(lastPlotObs.observed_at) + ' · ' + lastPlotObs.notes
+          : '—') +
+      '</span></div>' +
     '</div>' +
 
     // Totals
