@@ -177,9 +177,10 @@ var PAGE_MAP = {
   ingredients:    { module: 'setup_ingredients', init: 'loadIngredients' },
   species:        { module: 'setup_species',     init: 'loadSpeciesPage' },
   crops:          { module: 'setup_crops',       init: 'loadCropsPage' },
-  fertilizers:    { module: 'setup_fertilizers', init: 'loadFertilizersPage' },
-  tools:          { module: 'setup_tools',       init: 'loadToolsPage' },
-  inventory:      { module: 'setup_inventory',   init: 'loadInventoryPage' }
+  fertilizers:    { module: 'setup_fertilizers',         init: 'loadFertilizersPage' },
+  tools:          { module: 'setup_tools',               init: 'loadToolsPage' },
+  inventory:      { module: 'setup_inventory',           init: 'loadInventoryPage' },
+  harvestdest:    { module: 'setup_harvest_destinations', init: 'loadHarvestDestinationsPage' }
 };
 
 async function showPage(name, btn) {

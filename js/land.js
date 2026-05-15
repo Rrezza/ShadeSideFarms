@@ -23,6 +23,7 @@ var landTests         = [];
 var landCrops         = [];
 var landHarvests      = [];
 var landAllocations   = [];   // harvest_allocations — for badge/button on harvest rows
+var landDestinations  = [];   // harvest_destinations — DB-managed, replaces hardcoded arrays
 var landObservations  = [];
 var landWatering      = [];
 var landWaterTests    = [];
@@ -131,26 +132,28 @@ async function loadLandPage() {
         '&order=sow_date.desc'),
       // New tables — safe fallback to [] on error
       safeFetch('crop_harvest_events',
-        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,destination,logged_by,' +
-        'workers(name)&order=date.desc'),
+        'select=id,crop_group_id,cut_number,date,quantity_kg,quality_notes,allocated,recorded_by,' +
+        'workers!recorded_by(name)&order=date.desc'),
       safeFetch('crop_observations',
-        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,notes,logged_by,' +
-        'workers(name)&order=observed_at.desc'),
+        'select=id,plot_crop_id,observed_at,health_status,pest_disease_flag,notes,recorded_by,' +
+        'workers!recorded_by(name)&order=observed_at.desc'),
       safeFetch('watering_events',
         'select=id,date,field_plot_id,method,duration_hours,estimated_volume_litres,' +
-        'water_source,logged_by,notes,workers(name)&order=date.desc'),
+        'water_source,recorded_by,notes,workers!recorded_by(name)&order=date.desc'),
       safeFetch('water_tests',
         'select=id,date,source,test_type,is_baseline,lab_name,ec_us_cm,ph,sar,rsc_meq_l,' +
         'bicarbonate_meq_l,sodium_meq_l,calcium_meq_l,magnesium_meq_l,notes&order=date.desc'),
       safeFetch('crops',
         'select=id,name,local_name,category,salt_tolerance,salt_tolerance_ec_threshold,' +
-        'nitrogen_fixer,feeding_notes,notes,active&order=name'),
+        'nitrogen_fixer,feeding_notes,notes,active,permitted_destinations&order=name'),
       sbGet('locations', 'select=id,name,location_type,active&order=name'),
       safeFetch('crop_groups', 'select=id,field_plot_id,name,is_stand,harvest_type,notes,ingredient_id,ingredients(id,name)&order=field_plot_id,name'),
-      safeFetch('ingredients', 'select=id,name,category,source_type&active=eq.true&order=name'),
+      safeFetch('ingredients', 'select=id,name,category,source_type,feed_eligible&active=eq.true&order=name'),
       workers,
       safeFetch('harvest_allocations',
-        'select=id,harvest_event_id,destination,quantity_kg,ingredient_id,crop_id')
+        'select=id,harvest_event_id,destination,quantity_kg,ingredient_id,crop_id'),
+      safeFetch('harvest_destinations',
+        'select=id,key,label,sort_order&active=eq.true&order=sort_order,label')
     ]);
 
     landPlots         = r[0];
@@ -169,6 +172,7 @@ async function loadLandPage() {
     landIngredients   = r[13];
     landWorkers       = r[14];
     landAllocations   = r[15] || [];
+    landDestinations  = r[16] || [];
     landLoaded        = true;
 
     if (loadingEl) loadingEl.innerHTML = '';
@@ -1394,34 +1398,104 @@ function buildObsForm(c, workers) {
   return html;
 }
 
-function buildGroupHarvestForm(g, feedNotes, workers) {
-  var gid = g.id;
-  var fnStr = feedNotes.join('; ');
+function buildGroupHarvestForm(g, workers) {
+  // Simple log form — no destination. Routing happens via the Allocate flow.
+  var gid  = g.id;
   var html = '<div id="harvest-form-g' + gid + '" style="display:none;padding:14px 18px;background:var(--bg);border-top:1px solid var(--border)">';
   html += '<div style="font-size:12px;font-weight:500;margin-bottom:8px">Log harvest</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr) 1fr;gap:8px;margin-bottom:8px">';
-  html += '<div><label style="font-size:11px;color:var(--muted)">Date</label><input type="date" id="hf-date-g' + gid + '" value="' + todayISO() + '" style="width:100%"></div>';
-  html += '<div><label style="font-size:11px;color:var(--muted)">Quantity (kg)</label><input type="number" id="hf-kg-g' + gid + '" min="0" step="0.5" style="width:100%" placeholder="kg"></div>';
-  html += '<div><label style="font-size:11px;color:var(--muted)">Destination</label><select id="hf-dest-g' + gid + '" style="width:100%" onchange="checkGroupFodderWarn(' + gid + ')">' +
-    ['','goat_fodder','compost','bsf_feedstock','sale','soil_incorporation','other'].map(function(d) {
-      return '<option value="' + d + '">' + (d || '— select —') + '</option>';
-    }).join('') + '</select></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Date</label>' +
+    '<input type="date" id="hf-date-g' + gid + '" value="' + todayISO() + '" style="width:100%"></div>';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Quantity (kg)</label>' +
+    '<input type="number" id="hf-kg-g' + gid + '" min="0" step="0.5" style="width:100%" placeholder="kg"></div>';
+  html += '<div><label style="font-size:11px;color:var(--muted)">Quality notes</label>' +
+    '<input type="text" id="hf-qual-g' + gid + '" style="width:100%" placeholder="optional"></div>';
   html += '<div><label style="font-size:11px;color:var(--muted)">Worker</label><select id="hf-worker-g' + gid + '" style="width:100%">' +
     '<option value="">—</option>' +
     workers.map(function(w) { return '<option value="' + w.id + '">' + w.name + '</option>'; }).join('') +
     '</select></div>';
   html += '</div>';
-  if (fnStr) {
-    html += '<div id="fodder-warn-g' + gid + '" style="display:none;margin-bottom:8px;padding:8px 10px;' +
-      'background:var(--amber-lt);border:1px solid var(--amber-bdr);border-radius:6px;font-size:12px;color:var(--amber)">⚠ ' + fnStr + '</div>';
-  }
-  html += '<div><label style="font-size:11px;color:var(--muted)">Quality notes</label><input type="text" id="hf-qual-g' + gid + '" style="width:100%" placeholder="optional"></div>';
-  html += '<div style="display:flex;gap:8px;margin-top:8px">';
+  html += '<div style="display:flex;gap:8px;margin-top:4px">';
   html += '<button class="btn btn-primary btn-sm" onclick="submitHarvestEvent(' + gid + ')">Save harvest</button>';
   html += '<button class="btn btn-sm" onclick="document.getElementById(\'harvest-form-g' + gid + '\').style.display=\'none\'">Cancel</button>';
   html += '<span id="hf-status-g' + gid + '" style="font-size:12px;color:var(--muted);align-self:center"></span>';
   html += '</div></div>';
   return html;
+}
+
+// ============================================================
+// UNALLOCATED HARVEST PANEL
+// ============================================================
+// Shows all harvest events that haven't been fully routed to a
+// destination yet, so nothing falls through the cracks.
+function renderUnallocatedPanel(allocMap) {
+  var panel = document.getElementById('land-unalloc-panel');
+  if (!panel) return;
+
+  // Find every harvest that is not yet marked fully allocated
+  var pending = landHarvests.filter(function(h) { return !h.allocated; });
+
+  if (!pending.length) {
+    panel.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;padding:12px 18px;' +
+      'background:var(--green-lt,#edfbf0);border:1px solid var(--green-bdr,#b4e8c2);' +
+      'border-radius:8px;font-size:13px;color:var(--green)">' +
+      '<span>✓</span><span>All harvests allocated — nothing pending.</span></div>';
+    return;
+  }
+
+  // Group pending harvests by crop group
+  var byGroup = {};
+  pending.forEach(function(h) {
+    var gid = h.crop_group_id;
+    if (!byGroup[gid]) byGroup[gid] = [];
+    byGroup[gid].push(h);
+  });
+
+  var html = '<div style="border:1px solid var(--amber-bdr,#f5d78a);border-radius:8px;overflow:hidden">';
+  html += '<div style="padding:10px 18px;background:var(--amber-lt,#fdf8ec);display:flex;align-items:center;gap:8px">';
+  html += '<span style="font-weight:500;font-size:13px">Pending allocations</span>';
+  html += '<span class="badge badge-amber" style="font-size:11px">' + pending.length + '</span>';
+  html += '<span style="font-size:12px;color:var(--muted);margin-left:4px">— tap Allocate to route each harvest to its destination</span>';
+  html += '</div>';
+  html += '<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="border-top:1px solid var(--border)">';
+  html += '<th style="padding:8px 18px;text-align:left">Group / Crop</th>';
+  html += '<th style="padding:8px 12px;text-align:left">Plot</th>';
+  html += '<th style="padding:8px 12px">Date</th>';
+  html += '<th style="padding:8px 12px;text-align:right">kg</th>';
+  html += '<th style="padding:8px 12px;text-align:left">Allocated</th>';
+  html += '<th style="padding:8px 18px"></th>';
+  html += '</tr></thead><tbody>';
+
+  Object.keys(byGroup).forEach(function(gid) {
+    var g       = landCropGroups.find(function(x) { return x.id === parseInt(gid); });
+    var gName   = g ? (g.name || plotName(g.field_plot_id)) : 'Group ' + gid;
+    var gPlot   = g ? plotName(g.field_plot_id) : '—';
+    var rows    = byGroup[gid];
+    rows.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+    rows.forEach(function(h) {
+      var hKg       = parseFloat(h.quantity_kg) || 0;
+      var allocKg   = allocMap[h.id] || 0;
+      var remKg     = hKg - allocKg;
+      var gNameSafe = gName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var badge     = allocKg > 0
+        ? '<span class="badge badge-amber" style="font-size:10px">' + allocKg.toFixed(1) + '/' + hKg.toFixed(1) + ' kg</span>'
+        : '<span class="badge badge-gray" style="font-size:10px">None</span>';
+      html += '<tr style="border-top:1px solid var(--border-lt,#f0ece2)">';
+      html += '<td style="padding:8px 18px;font-weight:500">' + gName + '</td>';
+      html += '<td style="padding:8px 12px;color:var(--muted)">' + gPlot + '</td>';
+      html += '<td style="padding:8px 12px;text-align:center">' + (h.date ? fmtDate(h.date) : '—') + '</td>';
+      html += '<td style="padding:8px 12px;text-align:right">' + hKg.toFixed(1) + '</td>';
+      html += '<td style="padding:8px 12px">' + badge + '</td>';
+      html += '<td style="padding:8px 18px;text-align:right">';
+      html += '<button class="btn btn-sm btn-primary" style="font-size:11px" ' +
+        'onclick="openHarvestAllocModal(' + h.id + ',' + gid + ',' + hKg + ',\'' + gNameSafe + '\')">Allocate</button>';
+      html += '</td></tr>';
+    });
+  });
+
+  html += '</tbody></table></div>';
+  panel.innerHTML = html;
 }
 
 function renderLandCrops() {
@@ -1451,6 +1525,9 @@ function renderLandCrops() {
   }).length;
   document.getElementById('land-crop-count').textContent =
     activeGroupCount + ' active · ' + landCropGroups.length + ' total groups';
+
+  // ── UNALLOCATED HARVEST PANEL — always rendered above the group cards ──
+  renderUnallocatedPanel(allocMap);
 
   var tbl = document.getElementById('land-crop-table');
   if (!groups.length) { tbl.innerHTML = '<div class="empty">No crop records match current filter.</div>'; return; }
@@ -1564,34 +1641,28 @@ function renderLandCrops() {
       html += '<div class="muted-cell" style="font-size:12px">No harvests logged yet.</div>';
     } else {
       html += '<table style="width:100%;font-size:12px"><thead><tr>' +
-        '<th>Cut</th><th>Date</th><th class="right">kg</th><th>Destination</th><th>Quality</th><th>Allocation</th><th>Worker</th><th></th>' +
+        '<th>Cut</th><th>Date</th><th class="right">kg</th><th>Quality</th><th>Allocation</th><th>Worker</th><th></th>' +
         '</tr></thead><tbody>';
       harvests.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
       harvests.forEach(function(h) {
         var hid         = h.id;
-        var totalKg     = parseFloat(h.quantity_kg) || 0;
+        var hKg         = parseFloat(h.quantity_kg) || 0;
         var allocatedKg = allocMap[hid] || 0;
-        var isFodder    = (h.destination || '') === 'goat_fodder';
-        var fn = isFodder && fnStr ? ' <span style="color:var(--amber);font-size:10px" title="' + fnStr.replace(/"/g,'') + '">⚠</span>' : '';
         var fullyAlloc  = h.allocated === true;
         var partAlloc   = !fullyAlloc && allocatedKg > 0;
         var allocBadge  = fullyAlloc
           ? '<span class="badge badge-green" style="font-size:10px">Allocated</span>'
           : (partAlloc
-              ? '<span class="badge badge-amber" style="font-size:10px">Partial ' + Math.round(allocatedKg) + '/' + Math.round(totalKg) + 'kg</span>'
+              ? '<span class="badge badge-amber" style="font-size:10px">Partial ' + Math.round(allocatedKg) + '/' + Math.round(hKg) + ' kg</span>'
               : '<span class="badge badge-gray" style="font-size:10px">Unallocated</span>');
+        var gNameSafe = (g.name || 'Group').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
         var allocBtn = !fullyAlloc
-          ? '<button class="btn btn-sm" style="font-size:10px;margin-left:4px" onclick="openHarvestAllocModal(' + hid + ',' + g.id + ',' + totalKg + ',\'' + (g.name || 'Group').replace(/'/g,"\\'") + '\')">Allocate</button>'
+          ? '<button class="btn btn-sm" style="font-size:10px;margin-left:4px" onclick="openHarvestAllocModal(' + hid + ',' + g.id + ',' + hKg + ',\'' + gNameSafe + '\')">Allocate</button>'
           : '';
         html += '<tr>' +
           '<td class="muted-cell">' + (h.cut_number || '—') + '</td>' +
           '<td><input type="date" id="he-date-' + hid + '" value="' + (h.date || '') + '" style="font-size:11px;width:100%"></td>' +
-          '<td><input type="number" id="he-kg-' + hid + '" value="' + (h.quantity_kg != null ? parseFloat(h.quantity_kg).toFixed(1) : '') + '" min="0" step="0.5" style="font-size:11px;width:80px" placeholder="kg"></td>' +
-          '<td><select id="he-dest-' + hid + '" style="font-size:11px;width:100%">' +
-            ['','goat_fodder','compost','bsf_feedstock','sale','soil_incorporation','other'].map(function(d) {
-              return '<option value="' + d + '"' + (h.destination === d ? ' selected' : '') + '>' + (d || '— select —') + '</option>';
-            }).join('') +
-          '</select>' + fn + '</td>' +
+          '<td><input type="number" id="he-kg-' + hid + '" value="' + (hKg > 0 ? hKg.toFixed(1) : '') + '" min="0" step="0.5" style="font-size:11px;width:80px" placeholder="kg"></td>' +
           '<td><input type="text" id="he-qual-' + hid + '" value="' + (h.quality_notes || '').replace(/"/g,'&quot;') + '" style="font-size:11px;width:100%;min-width:120px" placeholder="—"></td>' +
           '<td style="white-space:nowrap">' + allocBadge + allocBtn + '</td>' +
           '<td class="muted-cell" style="white-space:nowrap">' + (h.workers ? h.workers.name : '—') + '</td>' +
@@ -1606,7 +1677,7 @@ function renderLandCrops() {
     html += '</div>';
 
     // ── HARVEST FORM (group-level) ──
-    html += buildGroupHarvestForm(g, feedNotes, workers);
+    html += buildGroupHarvestForm(g, workers);
 
     // ── SET INGREDIENT PANEL (hidden, shown via "Link ingredient" button) ──
     var ingOpts = '<option value="">None</option>' +
@@ -1672,11 +1743,6 @@ function toggleCropObs(cropId) {
 function openObsForm(cropId) {
   var el = document.getElementById('obs-form-' + cropId);
   if (el) { el.style.display = 'block'; el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
-}
-function checkGroupFodderWarn(groupId) {
-  var dest = (document.getElementById('hf-dest-g' + groupId) || {}).value || '';
-  var warn = document.getElementById('fodder-warn-g' + groupId);
-  if (warn) warn.style.display = dest === 'goat_fodder' ? 'block' : 'none';
 }
 
 async function terminateCrop(cropId) {
@@ -1761,18 +1827,16 @@ async function submitHarvestEvent(groupId) {
   try {
     var date = document.getElementById('hf-date-g' + groupId).value;
     var kg   = document.getElementById('hf-kg-g'   + groupId).value;
-    var dest = document.getElementById('hf-dest-g' + groupId).value;
     var wId  = document.getElementById('hf-worker-g' + groupId).value;
     var qual = (document.getElementById('hf-qual-g' + groupId).value || '').trim();
     if (!date) throw new Error('Date required.');
+    if (!kg || parseFloat(kg) <= 0) throw new Error('Quantity (kg) is required.');
     var prevCuts = landHarvests.filter(function(h) { return h.crop_group_id === groupId; }).length;
-    var d = { crop_group_id: groupId, date: date, cut_number: prevCuts + 1 };
-    if (kg)   d.quantity_kg   = parseFloat(kg);
-    if (dest) d.destination   = dest;
-    if (wId)  d.logged_by     = parseInt(wId);
+    var d = { crop_group_id: groupId, date: date, cut_number: prevCuts + 1, quantity_kg: parseFloat(kg) };
+    if (wId)  d.recorded_by   = parseInt(wId);
     if (qual) d.quality_notes = qual;
-    var rows = await sbInsert('crop_harvest_events', [d]);
-    statusEl.textContent = 'Saved. Use Allocate to route this harvest.';
+    await sbInsert('crop_harvest_events', [d]);
+    statusEl.textContent = 'Saved. Tap Allocate to route this harvest.';
     statusEl.style.color = 'var(--green)';
     await loadLandPage();
   } catch (err) {
@@ -1791,7 +1855,7 @@ async function submitObservation(cropId) {
     var d = { plot_crop_id: cropId, pest_disease_flag: flag, observed_at: new Date().toISOString() };
     if (health) d.health_status = health;
     if (note)   d.notes         = note;
-    if (wId)    d.logged_by     = parseInt(wId);
+    if (wId)    d.recorded_by   = parseInt(wId);
     await sbInsert('crop_observations', [d]);
     await sbPatch('plot_crops', cropId, { health_status: health, pest_disease_flag: flag });
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
@@ -1843,13 +1907,11 @@ async function patchHarvest(hid) {
   try {
     var date = document.getElementById('he-date-' + hid).value;
     var kg   = document.getElementById('he-kg-'   + hid).value;
-    var dest = document.getElementById('he-dest-' + hid).value;
     var qual = (document.getElementById('he-qual-' + hid).value || '').trim();
     if (!date) throw new Error('Date is required.');
     await sbPatch('crop_harvest_events', hid, {
       date:          date,
-      quantity_kg:   kg   ? parseFloat(kg) : null,
-      destination:   dest || null,
+      quantity_kg:   kg ? parseFloat(kg) : null,
       quality_notes: qual || null
     });
     // Sync linked acquisition if one exists
@@ -1953,7 +2015,7 @@ async function submitWatering() {
       if (!vol) d.estimated_volume_litres = Math.round(parseFloat(dur) * TUBEWELL_LPH);
     }
     if (vol)   d.estimated_volume_litres = parseFloat(vol);
-    if (wId)   d.logged_by = parseInt(wId);
+    if (wId)   d.recorded_by = parseInt(wId);
     if (notes) d.notes = notes;
     await sbInsert('watering_events', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
@@ -2064,11 +2126,12 @@ async function submitWaterTest() {
 // PHASE 2: HARVEST ALLOCATION MODAL
 // ============================================================
 // State
-var p2AllocHid      = null;   // harvest event id
-var p2AllocGroupId  = null;   // crop group id
-var p2AllocTotalKg  = 0;
-var p2AllocRows     = [];     // [{destination, kg, ingredientId, notes}]
-var p2NextRowId     = 0;
+var p2AllocHid            = null;   // harvest event id
+var p2AllocGroupId        = null;   // crop group id
+var p2AllocTotalKg        = 0;
+var p2AllocRows           = [];     // [{id, destination, kg, ingredientId}]
+var p2NextRowId           = 0;
+var p2AllocPermittedDests = null;   // null = show all; array = filtered keys
 
 function openHarvestAllocModal(hid, groupId, totalKg, groupName) {
   p2AllocHid     = hid;
@@ -2077,6 +2140,20 @@ function openHarvestAllocModal(hid, groupId, totalKg, groupName) {
   p2AllocRows    = [];
   p2NextRowId    = 0;
 
+  // Derive permitted destinations from the crops in this group.
+  // Union of permitted_destinations across all crops; null means show all.
+  var groupCrops = landCrops.filter(function(c) { return c.crop_group_id === groupId; });
+  var permitted  = {};
+  var anySet     = false;
+  groupCrops.forEach(function(c) {
+    var reg = landCropRegistry.find(function(r) { return r.id === c.crop_id; });
+    if (reg && reg.permitted_destinations && reg.permitted_destinations.length) {
+      anySet = true;
+      reg.permitted_destinations.forEach(function(k) { permitted[k] = true; });
+    }
+  });
+  p2AllocPermittedDests = anySet ? Object.keys(permitted) : null;
+
   var el = document.getElementById('ha-modal-title');
   if (el) el.textContent = 'Allocate harvest — ' + groupName;
 
@@ -2084,7 +2161,7 @@ function openHarvestAllocModal(hid, groupId, totalKg, groupName) {
   if (sumEl) sumEl.textContent = Math.round(totalKg).toLocaleString() + ' kg total';
 
   document.getElementById('ha-status').textContent = '';
-  p2AddAllocRow();          // start with one empty row
+  p2AddAllocRow();
   p2UpdateRemaining();
   document.getElementById('harvest-alloc-modal').style.display = 'flex';
 }
@@ -2095,7 +2172,7 @@ function closeHarvestAllocModal() {
 
 function p2AddAllocRow() {
   var rid = p2NextRowId++;
-  p2AllocRows.push({ id: rid, destination: '', kg: '', ingredientId: '', notes: '' });
+  p2AllocRows.push({ id: rid, destination: '', kg: '', ingredientId: '' });
   p2RenderAllocRows();
 }
 
@@ -2105,22 +2182,25 @@ function p2RemoveAllocRow(rid) {
   p2UpdateRemaining();
 }
 
-var P2_DEST_LABELS = {
-  feed_inventory:       'Feed inventory',
-  sold:                 'Sold',
-  seed_stock:           'Seed stock',
-  compost_mulch:        'Compost / mulch',
-  external_processing:  'External processing (e.g. oil pressing)'
-};
-var P2_DEST_KEYS = Object.keys(P2_DEST_LABELS);
+// Returns the destinations list to show in the modal — filtered by permitted
+// destinations if the crop has them set, otherwise all active destinations.
+function p2GetVisibleDests() {
+  if (!p2AllocPermittedDests) return landDestinations;
+  return landDestinations.filter(function(d) {
+    return p2AllocPermittedDests.indexOf(d.key) >= 0;
+  });
+}
 
 function p2RenderAllocRows() {
   var container = document.getElementById('ha-rows');
   if (!container) return;
 
-  // Build ingredient options for feed_inventory rows
-  var ingOpts = '<option value="">Select ingredient</option>' +
-    landIngredients.map(function(i) {
+  var visibleDests = p2GetVisibleDests();
+
+  // Only feed-eligible ingredients in the ingredient picker
+  var feedIngs = landIngredients.filter(function(i) { return i.feed_eligible; });
+  var ingOpts  = '<option value="">Select ingredient</option>' +
+    feedIngs.map(function(i) {
       return '<option value="' + i.id + '">' + i.name +
         (i.category ? ' (' + i.category + ')' : '') + '</option>';
     }).join('');
@@ -2128,8 +2208,8 @@ function p2RenderAllocRows() {
   var html = '';
   p2AllocRows.forEach(function(row) {
     var destOpts = '<option value="">Select destination</option>' +
-      P2_DEST_KEYS.map(function(k) {
-        return '<option value="' + k + '"' + (row.destination === k ? ' selected' : '') + '>' + P2_DEST_LABELS[k] + '</option>';
+      visibleDests.map(function(d) {
+        return '<option value="' + d.key + '"' + (row.destination === d.key ? ' selected' : '') + '>' + d.label + '</option>';
       }).join('');
 
     html += '<div class="ha-row" id="ha-row-' + row.id + '" style="display:grid;grid-template-columns:1fr 100px 1fr 80px;gap:8px;align-items:end;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border-lt,#ede9de)">';
@@ -2143,7 +2223,7 @@ function p2RenderAllocRows() {
       '<input type="number" value="' + row.kg + '" min="0.01" step="0.5" style="width:100%" placeholder="kg" ' +
       'oninput="p2RowKgChange(' + row.id + ',this.value)"></div>';
 
-    // Ingredient (shown for feed_inventory, hidden otherwise)
+    // Ingredient (shown only for feed_inventory destination)
     var ingStyle = row.destination === 'feed_inventory' ? '' : 'visibility:hidden';
     html += '<div style="' + ingStyle + '"><label style="font-size:11px;color:var(--muted)">Ingredient</label>' +
       '<select id="ha-ing-' + row.id + '" style="width:100%">' + ingOpts + '</select></div>';
@@ -2155,7 +2235,7 @@ function p2RenderAllocRows() {
 
   container.innerHTML = html;
 
-  // Restore ingredient selections
+  // Restore ingredient selections after re-render
   p2AllocRows.forEach(function(row) {
     var sel = document.getElementById('ha-ing-' + row.id);
     if (sel && row.ingredientId) sel.value = row.ingredientId;
@@ -2165,7 +2245,7 @@ function p2RenderAllocRows() {
 function p2RowDestChange(rid, dest) {
   var row = p2AllocRows.find(function(r) { return r.id === rid; });
   if (row) row.destination = dest;
-  // Show/hide ingredient field
+  // Show/hide ingredient field — only relevant for feed inventory allocations
   var ingDiv = (document.getElementById('ha-ing-' + rid) || {}).parentElement;
   if (ingDiv) ingDiv.style.visibility = dest === 'feed_inventory' ? '' : 'hidden';
 }

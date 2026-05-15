@@ -74,7 +74,7 @@ Health events, breeding, births, cost, and sales tracking. Includes scheduled ev
 ## Land Module
 
 ### `land.js`
-Land management hub with 7 sub-tabs: plots, fertilizer inventory, amendment application log, soil tests, crop tracking, watering, and water tests. Key globals: `landPlots`, `landFerts`, `landCrops`, `landWatering`, `landTests`, `landActiveTab`. Key function: `loadLandPage()`. Reads: plots, fertilizers, crops, harvest events, soil/water tests tables.
+Land management hub with 7 sub-tabs: plots, fertilizer inventory, amendment application log, soil tests, crop tracking, watering, and water tests. Harvest flow is two-step: farmhands log the event (quantity only), managers allocate via modal to DB-driven destinations. Key globals: `landPlots`, `landFerts`, `landCrops`, `landHarvests`, `landAllocations`, `landDestinations`, `landWatering`, `landTests`, `landActiveTab`. Key functions: `loadLandPage()`, `renderLandCrops()`, `renderUnallocatedPanel()`, `submitHarvestEvent()`, `openHarvestAllocModal()`, `submitHarvestAlloc()`. Reads: plots, fertilizers, crops, crop_groups, crop_harvest_events, harvest_allocations, harvest_destinations, soil/water tests tables.
 
 ### `overview.js`
 Dashboard landing page. Read-only cards per active plot showing current crops, recent activity, cumulative metrics, and quick links. Key globals: `ovPlots`, `ovCrops`, `ovHarvests`, `ovFertApps`, `ovWatering`, `ovSoilTests`. Key functions: `loadOverviewPage()`, `safeFetchOv()`. Reads: `plots`, `plot_crops`, `harvests`, `observations`.
@@ -97,7 +97,7 @@ Shared delete helpers for all setup pages. Handles foreign-key constraint errors
 Species registry (common name, notes). Inline editable. Key globals: `speciesData`, `speciesEditId`. Key functions: `loadSpeciesPage()`, `renderSpeciesTable()`, `submitSpecies()`. Reads/writes: `species`.
 
 ### `setup_ingredients.js`
-Feed ingredients registry with category, nutrient fields (DM%, CP%, ME, fat, NDF), and inline edit. Key globals: `ingData`, `ingSortCol`, `ingSortDir`, `selectedIngId`. Key functions: `loadIngredients()`, `renderIngredientsTable()`. Reads/writes: `ingredients`.
+Feed ingredients registry with category, nutrient fields (DM%, CP%, ME, fat, NDF), inline edit, and `feed_eligible` toggle. `feed_eligible` controls whether an ingredient appears in feed-related dropdowns (ration plans, harvest allocation modal). Key globals: `ingData`, `ingSortCol`, `ingSortDir`, `selectedIngId`. Key functions: `loadIngredients()`, `renderIngredientsTable()`. Reads/writes: `ingredients`.
 
 ### `setup_locations.js`
 Locations registry (pens, quarantine, field plots, storage, ponds, etc.). Inline edit, active filtering. Key global: `locationsData`. Key functions: `loadLocationsPage()`, `renderLocationsTable()`. Reads/writes: `locations`.
@@ -106,7 +106,10 @@ Locations registry (pens, quarantine, field plots, storage, ponds, etc.). Inline
 Plot registry. Fields: code, name, type, area (acres/kanals), irrigation, location, notes. Inline edit, soft-retire. Key globals: `spPlots`, `spLocations`, `spCrops`, `spCropRegistry`, `spTests`. Key function: `loadPlotsPage()`. Reads: `plots`, `plot_crops`, `soil_tests`. Depends on `setup_shared.js`.
 
 ### `setup_crops.js`
-Crops registry. Fields: name, local name, category, salt tolerance, nitrogen fixer, feeding notes, typical duration, active flag. Key global: `cropRegData`. Key functions: `loadCropsPage()`, `renderCropsTable()`. Reads/writes: `crops`.
+Crops registry. Fields: name, local name, category, salt tolerance, nitrogen fixer, feeding notes, typical duration, active flag, and `permitted_destinations` (checkboxes from `harvest_destinations` table — controls which allocation destinations appear for this crop). Key globals: `cropRegData`, `cropDestData`. Key functions: `loadCropsPage()`, `renderCropsTable()`, `toggleCropDest()`. Reads/writes: `crops`. Also reads: `harvest_destinations`.
+
+### `setup_harvest_destinations.js`
+Harvest destinations registry. Rows here drive the destination dropdown in the harvest allocation modal. Users can add new destinations without code changes. Key column `key` is immutable after creation (stored in `harvest_allocations.destination`). Key global: `hdData`. Key functions: `loadHarvestDestinationsPage()`, `submitNewHd()`, `patchHd()`. Reads/writes: `harvest_destinations`.
 
 ### `setup_fertilizers.js`
 Three-layer fertilizer model: registry (nutrient profile, purchase unit, reorder threshold), purchases (qty, date, cost), and derived inventory. Liquid fertilizers track L/container; solids track kg/bag. Key globals: `fertData`, `fertPurchaseData`, `fertNutrientsId`. Key functions: `fertStockUnit()`, `fertPurchUnitLabel()`, `loadFertilizersPage()`. Reads: `fertilizers`, `fertilizer_purchases`.

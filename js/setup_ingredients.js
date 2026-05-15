@@ -107,6 +107,9 @@ function renderIngredientsTable() {
       '<td><select onchange="patchIng(' + ing.id + ',\'source_type\',this.value)">' + so + '</select></td>' +
       '<td style="text-align:center"><input type="checkbox" ' + (ing.active ? 'checked' : '') +
         ' onchange="patchIng(' + ing.id + ',\'active\',this.checked)"></td>' +
+      '<td style="text-align:center" title="Appears in feed-related dropdowns (ration plans, harvest allocation)">' +
+        '<input type="checkbox" ' + (ing.feed_eligible ? 'checked' : '') +
+        ' onchange="patchIng(' + ing.id + ',\'feed_eligible\',this.checked)"></td>' +
       nc + notesCell +
       '<td><button class="btn btn-sm del-btn" onclick="deleteIngredient(' + ing.id + ',\'' + ing.name.replace(/'/g,"\\'") + '\')">Delete</button></td>' +
       '</tr>';
@@ -114,7 +117,9 @@ function renderIngredientsTable() {
   document.getElementById('ingredients-table').innerHTML =
     '<div style="overflow-x:auto"><table><thead><tr>' +
       thS('name', 'Ingredient name') + thS('category', 'Category') + thS('source_type', 'Source type') +
-      '<th>Active</th>' + nutH + '<th>Notes</th><th></th></tr></thead><tbody>' + tbody + '</tbody></table></div>';
+      '<th>Active</th>' +
+      '<th title="Show in feed-related dropdowns">Feed eligible</th>' +
+      nutH + '<th>Notes</th><th></th></tr></thead><tbody>' + tbody + '</tbody></table></div>';
 
   // Re-focus and select the name input if in edit mode
   if (ingEditNameId !== null) {
@@ -291,7 +296,7 @@ async function submitIngredient() {
 
   if (statusEl) statusEl.textContent = 'Saving…';
   try {
-    await sbInsert('ingredients', { name: name, category: cat, source_type: src, unit: unit, notes: notes, active: true });
+    await sbInsert('ingredients', { name: name, category: cat, source_type: src, unit: unit, notes: notes, active: true, feed_eligible: false });
     if (statusEl) statusEl.textContent = 'Saved ✓';
     document.getElementById('ing-add-form').style.display = 'none';
     loadIngredients();

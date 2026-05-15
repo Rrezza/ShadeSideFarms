@@ -4,7 +4,8 @@
 
 // CROPS REGISTRY
 // ============================================================
-var cropRegData = [];
+var cropRegData  = [];
+var cropDestData = [];   // harvest_destinations — loaded alongside crops
 
 var CROP_CAT_LABELS = {
   fodder:'Fodder', vegetable:'Vegetable', cover_crop:'Cover crop',
@@ -15,9 +16,16 @@ async function loadCropsPage() {
   var tbl = document.getElementById('crops-table');
   if (tbl) tbl.innerHTML = '<div class="loading">Loading…</div>';
   try {
-    cropRegData = await sbGet('crops',
-      'select=id,name,local_name,category,salt_tolerance,salt_tolerance_ec_threshold,' +
-      'nitrogen_fixer,feeding_notes,typical_duration_days,notes,active&order=name');
+    var results = await Promise.all([
+      sbGet('crops',
+        'select=id,name,local_name,category,salt_tolerance,salt_tolerance_ec_threshold,' +
+        'nitrogen_fixer,feeding_notes,typical_duration_days,notes,active,permitted_destinations&order=name'),
+      sbGet('harvest_destinations',
+        'select=id,key,label,sort_order&active=eq.true&order=sort_order,label')
+        .catch(function() { return []; })
+    ]);
+    cropRegData  = results[0];
+    cropDestData = results[1];
     document.getElementById('crops-count').textContent =
       cropRegData.length + ' crop' + (cropRegData.length !== 1 ? 's' : '') +
       ' · ' + cropRegData.filter(function(c) { return c.active; }).length + ' active';
@@ -45,7 +53,8 @@ function renderCropsTable() {
     '<th style="min-width:80px">EC threshold</th>' +
     '<th>N-fixer</th>' +
     '<th style="min-width:80px">Days</th>' +
-    '<th style="min-width:260px">Feeding safety notes <span style="color:var(--amber);font-size:10px;font-weight:400">⚠ shown when dest = goat fodder</span></th>' +
+    '<th style="min-width:220px">Feeding safety notes</th>' +
+    '<th style="min-width:180px">Permitted destinations <span style="font-size:10px;font-weight:400;color:var(--muted)">(leave blank = all)</span></th>' +
     '<th style="min-width:180px">Notes</th>' +
     '<th>Active</th>' +
     '<th></th>' +
@@ -74,6 +83,19 @@ function renderCropsTable() {
       '" style="width:100%" min="0" placeholder="—" onchange="patchCrop(' + c.id + ',\'typical_duration_days\',this.value===\'\'?null:parseInt(this.value))"></td>';
     html += '<td><textarea style="width:100%;min-height:52px;font-size:12px;resize:vertical" placeholder="e.g. Wilt 24–48 hrs before feeding…"' +
       ' onchange="patchCrop(' + c.id + ',\'feeding_notes\',this.value.trim()||null)">' + esc(c.feeding_notes) + '</textarea></td>';
+    // Permitted destinations — checkboxes driven by the harvest_destinations table
+    var permitted = c.permitted_destinations || [];
+    var destChecks = cropDestData.map(function(d) {
+      var checked = permitted.indexOf(d.key) >= 0;
+      return '<label style="display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap;cursor:pointer">' +
+        '<input type="checkbox" ' + (checked ? 'checked' : '') +
+        ' onchange="toggleCropDest(' + c.id + ',\'' + d.key + '\',this.checked)"> ' +
+        d.label + '</label>';
+    }).join('');
+    html += '<td style="vertical-align:top;min-width:180px">' +
+      '<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px">' +
+      (destChecks || '<span style="font-size:11px;color:var(--muted)">No destinations set</span>') +
+      '</div></td>';
     html += '<td><textarea style="width:100%;min-height:52px;font-size:12px;resize:vertical" placeholder="—"' +
       ' onchange="patchCrop(' + c.id + ',\'notes\',this.value.trim()||null)">' + esc(c.notes) + '</textarea></td>';
     html += '<td style="text-align:center;padding-top:10px"><input type="checkbox" ' + (c.active ? 'checked' : '') +
@@ -128,6 +150,18 @@ async function patchCrop(id, field, value) {
     alert('Update failed: ' + err.message);
     loadCropsPage();
   }
+}
+
+// Toggle a single destination key in the crop's permitted_destinations array.
+// Reads the current array from local state, modifies it, then patches.
+async function toggleCropDest(cropId, destKey, checked) {
+  var c = cropRegData.find(function(x) { return x.id === cropId; });
+  if (!c) return;
+  var current = (c.permitted_destinations || []).slice();
+  var idx = current.indexOf(destKey);
+  if (checked && idx < 0)  current.push(destKey);
+  if (!checked && idx >= 0) current.splice(idx, 1);
+  await patchCrop(cropId, 'permitted_destinations', current);
 }
 
 async function submitNewCrop() {
