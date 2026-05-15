@@ -423,7 +423,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-15 · r63</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-05-15 · r64</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -1537,22 +1537,21 @@
             </label>
           </div>
         </div>
-      </div>
 
-      <!-- Pending Allocations pane — its own section above crop tracking cards -->
-      <div id="land-alloc-section" class="land-section" style="display:none">
-        <div class="land-section-hdr">
-          <h2>Pending Allocations</h2>
-          <span class="land-section-meta" id="land-alloc-meta"></span>
+        <!-- Pending Allocations pane — its own section, shown only when harvests are unallocated -->
+        <div id="land-alloc-section" class="land-section" style="display:none">
+          <div class="land-section-hdr">
+            <h2>Pending Allocations</h2>
+            <span class="land-section-meta" id="land-alloc-meta"></span>
+          </div>
+          <div id="land-unalloc-panel" style="padding:16px 18px"></div>
         </div>
-        <div id="land-unalloc-panel" style="padding:16px 18px"></div>
-      </div>
 
-      <!-- Crop cards -->
-      <div class="land-section">
-        <div id="land-crop-table" style="padding:16px 18px"></div>
+        <!-- Crop group cards -->
+        <div class="land-section">
+          <div id="land-crop-table" style="padding:16px 18px"></div>
+        </div>
       </div>
-
 
       <!-- ===== TAB 6: WATERING ===== -->
       <div id="land-panel-water" class="land-panel" style="display:none">

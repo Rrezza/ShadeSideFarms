@@ -1624,13 +1624,13 @@ function renderLandCrops() {
           : 'padding:10px 0 4px;border-top:1px dashed var(--border)';
 
         // Two-column layout: left grows freely (name + badges + safety note),
-        // right stays fixed (action buttons). Safety note wraps in left column
-        // and never bleeds into the button area.
+        // right stays fixed (action buttons). min-width:0 + overflow-wrap on the
+        // left column ensures long safety notes wrap before reaching the buttons.
         html += '<div style="' + sepStyle + '">';
-        html += '<div style="display:flex;align-items:flex-start;gap:8px">';
+        html += '<div style="display:flex;align-items:' + (cFeed ? 'flex-start' : 'center') + ';gap:8px">';
 
         // Left column — name, badges, sow date, feed safety note
-        html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">';
+        html += '<div style="flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;display:flex;flex-direction:column;gap:3px">';
         html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
         html += '<span style="font-size:12px;font-weight:500">' + getCropDisplayName(c) + '</span>';
         if (c.role) html += '<span class="badge badge-gray" style="font-size:10px">' + (CROP_ROLE_LABELS[c.role] || c.role) + '</span>';
@@ -1639,11 +1639,11 @@ function renderLandCrops() {
           '<button class="btn btn-sm" style="font-size:10px;padding:1px 6px;color:var(--muted)" onclick="resolvePestFlag(' + c.id + ')">Resolve</button>';
         if (c.sow_date) html += '<span class="muted-cell" style="font-size:11px">Sown: ' + fmtDate(c.sow_date) + '</span>';
         html += '</div>';
-        if (cFeed) html += '<div style="font-size:11px;color:var(--amber)">⚠ ' + cFeed + '</div>';
+        if (cFeed) html += '<div style="font-size:11px;color:var(--amber);overflow-wrap:break-word">⚠ ' + cFeed + '</div>';
         html += '</div>';
 
-        // Right column — action buttons, no-wrap
-        html += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">';
+        // Right column — action buttons, no-wrap, always top-aligned when feed note present
+        html += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding-top:' + (cFeed ? '2px' : '0') + '">';
         html += '<button id="obs-btn-' + c.id + '" class="btn btn-sm" style="font-size:10px" onclick="toggleCropObs(' + c.id + ')">Obs (' + cObs.length + ')</button>';
         if (c.status === 'growing') {
           html += '<button class="btn btn-sm" style="font-size:10px" onclick="openObsForm(' + c.id + ')">+ Obs</button>';
