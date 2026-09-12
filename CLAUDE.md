@@ -2,6 +2,7 @@
 
 @CODEBASE.md
 @FARMDOMAIN.md
+@BUILD_BACKLOG.md
 
 ## File editing
 Always edit files in the main project directory: `/Users/Core/Documents/Jodhu/ShadeSideFarmsApp/`
@@ -35,3 +36,6 @@ If something worth fixing is noticed in a nearby file or function while working 
 
 ## Farm domain knowledge
 `FARMDOMAIN.md` contains background on how the farm operates — animals, feed systems, land, financials. Consult it when designing features to avoid naive assumptions.
+
+## Build backlog
+`BUILD_BACKLOG.md` tracks confirmed pending, resolved, and archived items from ongoing codebase review. Check it before starting new work — it may already contain a verified decision or scope note relevant to the task. Update it (add/remove/check off items) as work completes or new gaps are confirmed.
