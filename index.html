@@ -2145,18 +2145,55 @@
 <!-- Auth / Login modal -->
 <div class="modal-overlay" id="auth-login-modal" style="display:none">
   <div class="modal-box" style="max-width:360px">
-    <h3>Sign in</h3>
-    <p style="font-size:13px;color:var(--muted);margin:8px 0 18px">Sign in to enable full read/write access.</p>
-    <div class="modal-fields">
-      <label>Email</label>
-      <input type="email" id="auth-email" placeholder="your@email.com" autocomplete="email">
-      <label>Password</label>
-      <input type="password" id="auth-password" autocomplete="current-password">
+    <!-- ---- Sign-in form ---- -->
+    <div id="auth-signin-view">
+      <h3>Sign in</h3>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 18px">Sign in to enable full read/write access.</p>
+      <div class="modal-fields">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="your@email.com" autocomplete="email">
+        <label>Password</label>
+        <input type="password" id="auth-password" autocomplete="current-password">
+        <div style="text-align:right;margin-top:-4px">
+          <a href="#" onclick="authShowForgotView();return false;" style="font-size:12px;color:var(--muted)">Forgot password?</a>
+        </div>
+      </div>
+      <div class="modal-btns" style="margin-top:16px">
+        <button class="btn" onclick="authCloseLoginModal()">Cancel</button>
+        <button class="btn btn-primary" id="auth-submit-btn" onclick="authSubmitLogin()">Sign in</button>
+        <span id="auth-login-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+      </div>
     </div>
-    <div class="modal-btns" style="margin-top:16px">
-      <button class="btn" onclick="authCloseLoginModal()">Cancel</button>
-      <button class="btn btn-primary" id="auth-submit-btn" onclick="authSubmitLogin()">Sign in</button>
-      <span id="auth-login-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+
+    <!-- ---- Forgot-password form (request a reset email) ---- -->
+    <div id="auth-forgot-view" style="display:none">
+      <h3>Reset password</h3>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 18px">Enter your email and we'll send a reset link.</p>
+      <div class="modal-fields">
+        <label>Email</label>
+        <input type="email" id="auth-forgot-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="modal-btns" style="margin-top:16px">
+        <button class="btn" onclick="authShowSigninView()">Back</button>
+        <button class="btn btn-primary" id="auth-forgot-btn" onclick="authRequestPasswordReset()">Send reset link</button>
+        <span id="auth-forgot-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+      </div>
+    </div>
+
+    <!-- ---- Set-new-password form (landed here from the emailed reset link) ---- -->
+    <div id="auth-newpw-view" style="display:none">
+      <h3>Set a new password</h3>
+      <p style="font-size:13px;color:var(--muted);margin:8px 0 18px">Choose a new password for your account.</p>
+      <div class="modal-fields">
+        <label>New password</label>
+        <input type="password" id="auth-newpw-1" autocomplete="new-password">
+        <label>Confirm new password</label>
+        <input type="password" id="auth-newpw-2" autocomplete="new-password">
+      </div>
+      <div class="modal-btns" style="margin-top:16px">
+        <button class="btn btn-primary" id="auth-newpw-btn" onclick="authSubmitNewPassword()">Set password</button>
+        <span id="auth-newpw-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+      </div>
     </div>
   </div>
 </div>
@@ -2473,13 +2510,13 @@
   </div>
 </div>
 
-<script src="js/shared.js?v=22"></script>
+<script src="js/shared.js?v=23"></script>
 <script src="js/an_helpers.js?v=22"></script>
 <script src="js/fd_shared.js?v=22"></script>
 <script src="js/setup_shared.js?v=22"></script>
 <script src="js/setup_harvest_destinations.js?v=1"></script>
 <script src="js/health.js?v=22"></script>
-<script src="js/auth.js?v=18"></script>
+<script src="js/auth.js?v=19"></script>
 <script>document.addEventListener("DOMContentLoaded", function() { authInit(); });</script>
 </body>
 </html>

@@ -1,5 +1,7 @@
 // ============================================================
-// auth.js v18 — Supabase email/password authentication
+// auth.js v19 — Supabase email/password authentication
+// v19: added forgot-password flow (request reset email, recovery-redirect
+//      handling, set-new-password screen in the login modal).
 // ============================================================
 //
 // How it works:
@@ -24,6 +26,11 @@ var AUTH_SESSION_KEY = 'sf_auth_session';
 // INIT — called on DOMContentLoaded
 // ============================================================
 async function authInit() {
+  // A recovery-email link lands back here with the session in the URL hash
+  // (Supabase's implicit flow) — handle that before falling back to any
+  // saved session, since the recovery token takes priority.
+  if (_authHandleRecoveryRedirect()) return;
+
   var saved = _authLoadSession();
   if (saved) {
     // Check expiry (Supabase expires_at is Unix timestamp in seconds)
@@ -50,6 +57,7 @@ function authShowLoginModal() {
   document.getElementById('auth-email').value    = '';
   document.getElementById('auth-password').value = '';
   document.getElementById('auth-login-status').textContent = '';
+  authShowSigninView();
   document.getElementById('auth-login-modal').style.display = 'flex';
   setTimeout(function() { document.getElementById('auth-email').focus(); }, 50);
 
@@ -61,6 +69,155 @@ function authShowLoginModal() {
 
 function authCloseLoginModal() {
   document.getElementById('auth-login-modal').style.display = 'none';
+}
+
+// ============================================================
+// MODAL — view switching (sign in / forgot password / set new password)
+// ============================================================
+function _authShowView(viewId) {
+  ['auth-signin-view', 'auth-forgot-view', 'auth-newpw-view'].forEach(function(id) {
+    document.getElementById(id).style.display = (id === viewId) ? 'block' : 'none';
+  });
+}
+
+function authShowSigninView() {
+  _authShowView('auth-signin-view');
+}
+
+function authShowForgotView() {
+  document.getElementById('auth-forgot-email').value = document.getElementById('auth-email').value;
+  document.getElementById('auth-forgot-status').textContent = '';
+  _authShowView('auth-forgot-view');
+}
+
+// ============================================================
+// FORGOT PASSWORD — request a reset email
+// ============================================================
+async function authRequestPasswordReset() {
+  var statusEl = document.getElementById('auth-forgot-status');
+  var btn      = document.getElementById('auth-forgot-btn');
+  var email    = document.getElementById('auth-forgot-email').value.trim();
+
+  if (!email) {
+    statusEl.textContent = 'Enter your email.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Sending…';
+  statusEl.style.color = 'var(--muted)';
+
+  try {
+    var res = await fetch(SB_URL + '/auth/v1/recover', {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, options: { redirect_to: window.location.origin + window.location.pathname } })
+    });
+    if (!res.ok) {
+      var data = await res.json().catch(function() { return {}; });
+      throw new Error(data.error_description || data.msg || 'Could not send reset email.');
+    }
+    statusEl.textContent = 'Check your email for a reset link.';
+    statusEl.style.color = 'var(--green)';
+  } catch (err) {
+    statusEl.textContent = err.message;
+    statusEl.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+// RECOVERY REDIRECT — land here from the emailed reset link
+// ============================================================
+var _authRecoverySession = null; // holds the one-time recovery tokens until the new password is set
+
+function _authHandleRecoveryRedirect() {
+  var hash = window.location.hash;
+  if (!hash || hash.indexOf('type=recovery') === -1) return false;
+
+  var params = new URLSearchParams(hash.substring(1));
+  var accessToken  = params.get('access_token');
+  var refreshToken = params.get('refresh_token');
+  var expiresIn    = parseInt(params.get('expires_in'), 10) || 3600;
+  if (!accessToken) return false;
+
+  _authRecoverySession = {
+    access_token:  accessToken,
+    refresh_token: refreshToken,
+    expires_at:    Math.floor(Date.now() / 1000) + expiresIn
+  };
+
+  // Strip the token out of the URL bar so it's not left sitting in history.
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+
+  _authSetReadOnly(); // headers stay on the anon key until the new password is actually saved
+  document.getElementById('auth-newpw-1').value = '';
+  document.getElementById('auth-newpw-2').value = '';
+  document.getElementById('auth-newpw-status').textContent = '';
+  _authShowView('auth-newpw-view');
+  document.getElementById('auth-login-modal').style.display = 'flex';
+  return true;
+}
+
+async function authSubmitNewPassword() {
+  var statusEl = document.getElementById('auth-newpw-status');
+  var btn      = document.getElementById('auth-newpw-btn');
+  var pw1      = document.getElementById('auth-newpw-1').value;
+  var pw2      = document.getElementById('auth-newpw-2').value;
+
+  if (!pw1 || pw1.length < 6) {
+    statusEl.textContent = 'Password must be at least 6 characters.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  if (pw1 !== pw2) {
+    statusEl.textContent = 'Passwords do not match.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  if (!_authRecoverySession) {
+    statusEl.textContent = 'Reset link expired. Request a new one.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Saving…';
+  statusEl.style.color = 'var(--muted)';
+
+  try {
+    var res = await fetch(SB_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: {
+        'apikey':        SB_KEY,
+        'Authorization': 'Bearer ' + _authRecoverySession.access_token,
+        'Content-Type':  'application/json'
+      },
+      body: JSON.stringify({ password: pw1 })
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error_description || data.msg || 'Could not set password.');
+    }
+
+    var session = {
+      access_token:  _authRecoverySession.access_token,
+      refresh_token: _authRecoverySession.refresh_token,
+      expires_at:    _authRecoverySession.expires_at,
+      user_email:    data.email || ''
+    };
+    _authRecoverySession = null;
+    _authSaveSession(session);
+    _authApplySession(session);
+    authCloseLoginModal();
+  } catch (err) {
+    statusEl.textContent = err.message;
+    statusEl.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ============================================================
