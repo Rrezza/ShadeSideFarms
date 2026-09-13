@@ -137,7 +137,7 @@ function loadModule(name) {
   if (!loadModule._inflight) loadModule._inflight = {};
   loadModule._inflight[name] = new Promise(function(resolve, reject) {
     var s = document.createElement('script');
-    s.src = 'js/' + name + '.js?v=22';
+    s.src = 'js/' + name + '.js?v=23';
     s.onload = function() { moduleLoaded[name] = true; resolve(); };
     s.onerror = function() { reject(new Error('Failed to load js/' + name + '.js')); };
     document.head.appendChild(s);
