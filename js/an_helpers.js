@@ -6,11 +6,6 @@
 // ---- Module state ----
 var grpExpanded       = null;   // expanded group id on Groups page
 var intakeTab         = 'single';
-var wtChart1          = null;
-var wtChart2          = null;
-var wtAxis1           = 'weeks';
-var wtAxis2           = 'weeks';
-var wtAllWeights      = {};     // animal_id -> [{date,weight_kg}] sorted asc
 var anFeedGroupId     = null;   // selected group on Feeding page
 var alFilterTab       = 'all';     // Animals list active tab: all|active|quarantine|unassigned|sick
 var alEditId          = null;      // animal id currently being inline-edited

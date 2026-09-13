@@ -56,7 +56,7 @@ function renderAnimalsList() {
 
   if (!animals.length) {
     wrapper.innerHTML = '<div class="empty">' +
-      (alFilterUnassigned ? 'No unassigned animals with the current filter.' : 'No animals match the current filter.') +
+      (alFilterTab === 'unassigned' ? 'No unassigned animals with the current filter.' : 'No animals match the current filter.') +
       '</div>';
     return;
   }

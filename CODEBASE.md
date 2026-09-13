@@ -20,7 +20,7 @@ Standalone single-page mobile app for farmhands, separate from `Index.html` — 
 ## Animal Module (`an_*`)
 
 ### `an_helpers.js`
-Shared state and utility functions used by all animal pages. Declares module-level state including `grpExpanded`, weight/feeding tracking vars, and chart references (`wtChart1`, `wtChart2`). Key functions: `computeGroupStats()`, `getGroupAnimals()`, `speciesComposition()`. No direct Supabase calls — purely internal helpers consumed by other `an_*` files.
+Shared state and utility functions used by all animal pages. Declares module-level state including `grpExpanded`, `intakeTab`, `anFeedGroupId`, `alFilterTab`. Key functions: `computeGroupStats()`, `getGroupAnimals()`, `speciesComposition()`, `speciesPrefix()`/`nextFarmIdForPrefix()` (auto farm-ID generation). No direct Supabase calls — purely internal helpers consumed by other `an_*` files. (2026-09-13: removed dead `wtChart1`/`wtChart2`/`wtAxis1`/`wtAxis2` and a shadowed duplicate `wtAllWeights` — all superseded by `an_weights.js`'s own `wtChart`/`wtChartMode`/`wtYAxis`/`wtAllWeights`, which is where that state actually lives now.)
 
 ### `an_animals.js`
 Animals registry list page. Renders filterable tabs (all / active / quarantine / unassigned / sick) and a tabular view of animals with breed, species, group, and location. Key globals: `alFilterTab`, `alEditId`, `alAssignAnimalId`. Key functions: `loadAnimalsListPage()`, `renderAnimalsList()`. Reads: `animals`, `animal_groups`, `locations`.
