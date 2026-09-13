@@ -234,6 +234,7 @@ async function navLandTab(tab, btn) {
 var anSharedAnimals       = [];
 var anSharedWeights       = {};  // animal_id -> most-recent weight record
 var anSharedPens          = [];  // kept for feed module compatibility
+var anSharedLocations     = [];  // all active locations (pens, quarantine, storage, etc.) — for getLocationName()
 var anSharedSpecies       = [];
 var anSharedWorkers       = [];
 var anSharedGroups        = [];  // all animal_groups records
@@ -256,7 +257,8 @@ async function loadSharedAnimalData() {
       'select=id,name,primary_purpose,is_multi_species,target_weight_kg,status,closed_at,notes,' +
       'weigh_in_reminder_days,created_at&order=created_at.desc'),
     sbGet('group_members', 'left_date=is.null&select=id,group_id,animal_id,joined_date'),
-    sbGet('group_location_history', 'to_date=is.null&select=id,group_id,location_id,from_date,locations(name)')
+    sbGet('group_location_history', 'to_date=is.null&select=id,group_id,location_id,from_date,locations(name)'),
+    sbGet('locations', 'active=eq.true&select=id,name&order=name')
   ]);
   anSharedAnimals = r[0];
   var wm = {};
@@ -268,6 +270,7 @@ async function loadSharedAnimalData() {
   anSharedGroups        = r[5];
   anSharedMembers       = r[6];
   anSharedGroupLocations = r[7];
+  anSharedLocations      = r[8];
   anSharedLoaded        = true;
 }
 
@@ -277,7 +280,7 @@ function getPenName(penId)          { var p = anSharedPens.find(function(x) { re
 function getSpeciesName(speciesId)  { var s = anSharedSpecies.find(function(x) { return x.id === speciesId; }); return s ? s.common_name : '\u2014'; }
 function getGroupName(groupId)      { var g = anSharedGroups.find(function(x) { return x.id === groupId; }); return g ? g.name : '\u2014'; }
 function getLocationName(locId)     {
-  var l = anSharedPens.find(function(x) { return x.id === locId; });
+  var l = anSharedLocations.find(function(x) { return x.id === locId; });
   return l ? l.name : '\u2014';
 }
 

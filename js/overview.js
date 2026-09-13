@@ -388,7 +388,7 @@ function renderOvCard(p) {
       '<div class="ov-row"><span class="ov-row-label">Harvest</span><span class="ov-row-val">' + lastHarvestHtml + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Plot obs</span><span class="ov-row-val">' +
         (lastPlotObs
-          ? fmtDate(lastPlotObs.observed_at) + ' · ' + lastPlotObs.notes
+          ? fmtDate((lastPlotObs.observed_at || '').slice(0, 10)) + ' · ' + lastPlotObs.notes
           : '—') +
       '</span></div>' +
     '</div>' +
