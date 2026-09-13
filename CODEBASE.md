@@ -7,10 +7,13 @@ Live reference for all JS modules. Update this file when modules are added, rena
 ## Foundation
 
 ### `shared.js`
-The global foundation that every other module depends on. Defines the Supabase connection (URL + API key), all DB helper functions (`sbGet`, `sbInsert`, `sbPatch`, `sbDelete`), common formatters (`fmtDate`, `pkr`, `todayISO`, `r1`), the page router, and shared animal state (`anSharedAnimals`, `anSharedSpecies`, `anSharedGroups`). Also renders the abbreviation key footer. No other JS file is independent of this one.
+The global foundation that every other module depends on. Defines the Supabase connection (URL + API key), all DB helper functions (`sbGet`, `sbInsert`, `sbPatch`, `sbDelete`), common formatters (`fmtDate`, `pkr`, `todayISO`, `r1`), the page router (`showPage()`, `navLandTab()`), and shared animal state (`anSharedAnimals`, `anSharedSpecies`, `anSharedGroups`). Also renders the abbreviation key footer, and holds the mobile off-canvas sidebar (`toggleSidebar()`, `closeSidebar()` — toggled by `.shell.sidebar-open`, wired into `showPage()`/`navLandTab()` so picking a page auto-closes the drawer). No other JS file is independent of this one.
 
 ### `auth.js`
 Handles Supabase email/password authentication. Restores sessions from localStorage on load, manages sign-in/sign-out, and schedules JWT refresh. Key global: `AUTH_SESSION_KEY`. Depends on the Supabase config in `shared.js`.
+
+### `Farmhand.html`
+Standalone single-page mobile app for farmhands, separate from `Index.html` — its own inline CSS/JS, own Supabase config (`SUPABASE_URL`, `SUPABASE_KEY`), not routed through `shared.js`. Home screen offers five quick-entry flows: feeding, watering, amendment (fertilizer application), purchase, and harvest. Uses a numpad-style input UI (`npTap`, `npDel`, `npClear`) and a worker-select step (`selectWorker`) before each flow. Key functions: `init()`, `startFlow()`, `showScreen()`, `populateAllForms()`. Reads: `workers`, `ingredients`, `suppliers`, `locations`, `species`, `animal_groups`, `field_plots`, `crop_groups`, `plot_crops`, `fertilizers`. Amendment flow (`aConfirm()`) writes to `fertilizer_applications` via a live fertilizer picker sourced from the `fertilizers` registry (matching `land.js`'s design — no free-text amendment types). Watering flow (`wConfirm()`) writes to `watering_events` with a Method dropdown (flood/furrow/drip) and a fixed `water_source: 'tubewell'` default, matching `land.js`'s own fallback. Has an offline queue (`pendingQueue`, `submitEntry()`, `drainQueue()`) that retries failed submissions — note that a submission queued with a bad/incomplete payload will keep failing on every retry until manually cleared, since the payload itself doesn't change.
 
 ---
 

@@ -32,6 +32,16 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Decision needed:** add a `group_id` FK to `farm_expenses` (or a subset of categories, e.g. day_labor/veterinary), or build a separate allocation mechanism (e.g. manual split entry) — before any labor cost can appear in group P&L.
 - Source: breakdown doc §6 items 7 and 8 (batch-level costing + labor allocation log), combined since they're the same underlying gap.
 
+### 5. Overview page — `plot_observations` table doesn't exist
+- **Status:** Confirmed gap, not yet fixed. Console: `Could not find the table 'public.plot_observations' in the schema cache. Perhaps you meant 'public.crop_observations'`.
+- **What's needed:** find what `overview.js` was trying to read and either point it at `crop_observations`/`plot_observations`-equivalent data or confirm the feature it backs is no longer wanted.
+- Source: found 2026-09-12 while testing the anon-key rotation and the Farmhand.html fix.
+
+### 6. Farmhand.html harvest flow — `plot_crops.active` column doesn't exist
+- **Status:** Confirmed gap, not yet fixed. `init()`'s `plot_crops` fetch (`?...&active=eq.true&...`) 400s with `column plot_crops.active does not exist`, so `appData.plotCrops` stays empty and the Log Harvest screen's crop-group dropdown shows nothing.
+- **What's needed:** check `plot_crops`'s real schema for the correct "is this planting active" column/condition (likely `status=eq.growing` alone, matching the pattern already used in the same query) and drop the bad `active=eq.true` clause.
+- Source: found 2026-09-12 while testing the Farmhand.html fix below.
+
 ---
 
 ## Resolved — no code change needed
@@ -42,12 +52,11 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Not verified (live data, not code):** you believe "Gypsum" and "Farmyard Manure" rows already exist in the live `fertilizers` table; if not, will be added going forward. No further action needed here.
 - **Cleanup flagged:** `land.js` lines 41-48 define `AMEND_LABELS`/`AMEND_BADGE` (gypsum/compost/bsf_frass/biochar/lime/farmyard_manure/other) but neither constant is referenced anywhere else in the file — dead code, likely a leftover from an earlier separate-amendment-table design. Remove during a cleanup pass to avoid a future session assuming amendments are tracked separately from fertilizers.
 
-### 5. Rotate the Supabase anon key (public repo exposure)
-- **Status:** Confirmed action item, not just a design decision — repo `github.com/Rrezza/ShadeSideFarms` is public.
-- **Verified:** `.gitignore` only protects `config.js`; `config.js` doesn't exist in the repo (README's setup pattern was never actually implemented); the anon key lives directly in `js/shared.js`, which has no gitignore protection.
-- **Not directly verified:** exact live committed bytes of `js/shared.js` on GitHub (tooling couldn't browse the tree or fetch the raw file directly) — check it yourself on the GitHub web UI, and also check the "Old Index Files" folder for older committed copies of the key.
-- **Action:** generate a new anon key in Supabase project settings, update `shared.js`, treat the old key as burned regardless of RLS status.
-- **Separate, still open:** whether RLS policies correctly restrict what the anon role can read/write — that's live Supabase config, not visible from code, needs checking in the Supabase dashboard.
+### 5. Rotate the Supabase anon key (public repo exposure) — DONE (2026-09-12)
+- **Status:** Fully done. Legacy JWT-based API keys disabled in the Supabase dashboard and confirmed via `get_publishable_keys` (`disabled: true` on the legacy anon key). Live app re-verified working against the publishable key after disabling.
+- **Done:** `js/shared.js` and `Farmhand.html` (a second hardcoded copy, not previously tracked in `CODEBASE.md` — found and fixed same session) both switched from the legacy anon JWT to the modern `sb_publishable_...` key. Verified live against Supabase via a local static server for both files. Confirmed no `service_role` key is referenced anywhere in the repo, so disabling legacy JWT keys won't break anything else here.
+- **Not verified:** whether an older committed copy of the leaked JWT still sits in the "Old Index Files" folder or elsewhere in git history — history isn't rewritten by this fix, only the live code. The dashboard step (disabling legacy keys) is what actually invalidates the leaked key regardless of where else it's committed.
+- **Separate, still open:** whether RLS policies correctly restrict what the anon role can read/write — see the 8 `rls_enabled_no_policy` findings from `get_advisors` (tables: `animal_purpose_history`, `bsf_harvest_destinations`, `bsf_harvests`, `ingredient_substitutes`, `production_event_inputs`, `production_event_labor`, `production_events`, `rainfall_events`) plus 6 `security_definer_view` findings on views `v_animals_current`, `v_latest_ingredient_prices`, `v_concentrate_cost_current`, `v_concentrate_cost_summary`, `v_pen_summary`, `v_health_due_soon`. Not addressed this session — flagging for a future pass.
 - Source: breakdown doc §6 item 9, escalated after direct repo check.
 
 ### 6. Concentrate Information dead route — archived, not removed yet
@@ -61,6 +70,13 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Caveat (can't verify from code):** safe to drop only if nothing outside this codebase depends on them — a manual SQL editor query, a BI tool, another script. Confirm you don't have anything else pointed at these before dropping.
 - **Action:** `DROP VIEW` in Supabase SQL editor — not an app-code change.
 - Source: breakdown doc §6 item 11, scope corrected after direct code check (doc implied live risk; there is none currently).
+
+### 8. Farmhand.html — fixed the syntax error and a deeper broken flow (2026-09-12)
+- **Symptom found:** `Uncaught SyntaxError: Unexpected token ')'` — the whole inline `<script>` block failed to parse, so nothing on the page worked (no worker select, no flows). Localized via `node --check` on the extracted script to line 1727 — `wConfirm()` (watering) was missing its `await submitEntry('watering_events', payload, (queued) => {...})` opening call entirely, leaving a stray `});` with no matching call.
+- **Deeper issue found while fixing:** `aConfirm()` (soil amendment) had the identical missing-wrapper bug, and its whole payload was built against a table (`amendment_applications`) and shape (`amendment_type`/`description` free text) that don't exist live — the real table is `fertilizer_applications`, which needs a `fertilizer_id` FK into the `fertilizers` registry (matching the design decision already made for `land.js`, see the resolved gypsum/manure item above) plus `worker_id` (not `recorded_by`). The UI's "Amendment type" dropdown was a hardcoded enum (gypsum/compost/bsf_frass/biogas_digestate/elemental_sulfur/other) that never matched any live schema.
+- **Fixed:** watering flow now submits correctly with the required `method` (added a Method dropdown — flood/furrow/drip, matching `land.js`'s `lw-method` options — this table also turned out to require it, a second latent bug caught during testing) and `water_source` (defaulted to `'tubewell'`, same fallback `land.js` uses). Amendment flow now fetches the live `fertilizers` registry in `init()` and presents a real fertilizer picker instead of the dead enum; submits to `fertilizer_applications` with the correct columns. Both flows tested end-to-end against live Supabase (row inserted, verified by column values, then deleted as test data).
+- **Verified NOT broken:** the other five `submitEntry()` calls (purchase, harvest ×2, crop observation, eggs) — checked each payload's fields against the live schema directly; all matched, no changes needed there.
+- Source: found and fixed 2026-09-12 while making Farmhand.html usable for mobile field-testing. See items 5 and 6 above for two more schema mismatches found in the same pass (not yet fixed).
 
 ---
 

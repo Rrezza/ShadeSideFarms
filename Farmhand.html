@@ -674,6 +674,15 @@
     </div>
 
     <div class="field">
+      <label>Method</label>
+      <select id="wMethod">
+        <option value="flood">Flood</option>
+        <option value="furrow">Furrow</option>
+        <option value="drip">Drip</option>
+      </select>
+    </div>
+
+    <div class="field">
       <label>Duration (minutes)</label>
       <input type="number" id="wDuration" placeholder="e.g. 45" min="1">
     </div>
@@ -702,21 +711,10 @@
     </div>
 
     <div class="field">
-      <label>Amendment type</label>
-      <select id="aType" onchange="aTypeChange()">
-        <option value="">Select type...</option>
-        <option value="gypsum">Gypsum</option>
-        <option value="compost">Compost</option>
-        <option value="bsf_frass">BSF Frass</option>
-        <option value="biogas_digestate">Biogas Digestate</option>
-        <option value="elemental_sulfur">Elemental Sulfur</option>
-        <option value="other">Other</option>
+      <label>Fertilizer</label>
+      <select id="aFertilizer">
+        <option value="">Select fertilizer...</option>
       </select>
-    </div>
-
-    <div class="field" id="aOtherField" style="display:none">
-      <label>Describe amendment</label>
-      <input type="text" id="aOtherDesc" placeholder="What was applied?">
     </div>
 
     <div class="field">
@@ -1005,9 +1003,7 @@
 // CONFIG
 // ============================================================
 const SUPABASE_URL = 'https://soxbgbpuzcpvkqvdufno.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveGJnYnB1emNwdmtxdmR1Zm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzE2MDksImV4cCI6MjA5MjQ0NzYwOX0.v9eOX4xPkCE_4aSr0gxWfKh3_2jkwlks6sDCw1thw5k';
-// TODO: Replace SUPABASE_KEY with your actual anon key from
-// Supabase → Project Settings → API
+const SUPABASE_KEY = 'sb_publishable_AerWSuvW1R1kFckry81KCw_LC2nltIg';
 
 const db = {
   async get(table, params = '') {
@@ -1049,7 +1045,8 @@ let appData = {
   animalGroups: [],
   fieldPlots: [],
   cropGroups: [],
-  plotCrops: []
+  plotCrops: [],
+  fertilizers: []
 };
 
 let activeWorkerId = null;  // set on worker selection screen, used by all flows
@@ -1079,7 +1076,7 @@ async function init() {
 
   try {
     const ef = (p, label) => p.catch(e => { console.warn(label + ' failed:', e.message); return []; });
-    const [workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops] = await Promise.all([
+    const [workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops, fertilizers] = await Promise.all([
       db.get('workers',        '?active=eq.true&order=name'),
       db.get('ingredients',    '?active=eq.true&order=name'),
       db.get('suppliers',      '?active=eq.true&order=name'),
@@ -1088,9 +1085,10 @@ async function init() {
       ef(db.get('animal_groups', '?status=eq.active&select=id,name&order=name'), 'animal_groups'),
       ef(db.get('field_plots', '?status=eq.active&select=id,plot_code,plot_name&order=plot_code'), 'field_plots'),
       ef(db.get('crop_groups', '?select=id,name,field_plot_id,field_plots(plot_code,plot_name)&order=name'), 'crop_groups'),
-      ef(db.get('plot_crops',  '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name'), 'plot_crops')
+      ef(db.get('plot_crops',  '?select=id,crop_name,crop_group_id,field_plot_id&status=eq.growing&active=eq.true&order=crop_name'), 'plot_crops'),
+      ef(db.get('fertilizers', '?active=eq.true&order=name'), 'fertilizers')
     ]);
-    appData = { workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops };
+    appData = { workers, ingredients, suppliers, locations, species, animalGroups, fieldPlots, cropGroups, plotCrops, fertilizers };
     populateAllForms();
     applyLang();
     document.getElementById('headerSub').textContent = t('ready');
@@ -1162,6 +1160,13 @@ function populateAllForms() {
     const el = document.getElementById(id);
     if (el) el.innerHTML = plotOpts;
   });
+
+  // Fertilizers — amendment (sourced from the fertilizer registry, same as the desktop app)
+  const aFert = document.getElementById('aFertilizer');
+  if (aFert) {
+    aFert.innerHTML = '<option value="">Select fertilizer...</option>' +
+      (appData.fertilizers || []).map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+  }
 
   // Crop groups — harvest
   // plot_crops is already filtered to status=growing by the DB query,
@@ -1708,6 +1713,7 @@ async function fConfirm() {
 // ============================================================
 async function wConfirm() {
   const plotId   = parseInt(document.getElementById('wPlot').value);
+  const method   = document.getElementById('wMethod').value;
   const duration = parseInt(document.getElementById('wDuration').value) || null;
   const date     = document.getElementById('wDate').value;
   const notes    = document.getElementById('wNotes').value.trim() || null;
@@ -1719,51 +1725,51 @@ async function wConfirm() {
   const payload = {
     date,
     field_plot_id:           plotId,
+    method:                  method,
+    water_source:            'tubewell',  // Farmhand doesn't expose water source; matches land.js's own default
     duration_hours:          duration / 60,  // DB stores hours; form collects minutes
     notes
   };
   if (workerId) payload.recorded_by = workerId;
+
+  await submitEntry('watering_events', payload, (queued) => {
     const p = (appData.fieldPlots || []).find(p => p.id === plotId);
     const label = p ? (p.plot_code ? p.plot_code + (p.plot_name ? ' — ' + p.plot_name : '') : p.plot_name) : 'Plot';
-    showSuccess('💧', 'Irrigation Logged', `${label} — ${duration} min`);
+    const sub = `${label} — ${duration} min` + (queued ? '\n⚠️ Saved offline — will sync when connected' : '');
+    showSuccess('💧', 'Irrigation Logged', sub);
   });
 }
 
 // ============================================================
 // AMENDMENT FLOW
 // ============================================================
-function aTypeChange() {
-  const val = document.getElementById('aType').value;
-  document.getElementById('aOtherField').style.display = val === 'other' ? '' : 'none';
-}
-
 async function aConfirm() {
-  const amendType = document.getElementById('aType').value;
-  const otherDesc = document.getElementById('aOtherDesc').value.trim();
-  const plotId    = parseInt(document.getElementById('aPlot').value);
-  const qty       = parseFloat(numpadValues.aQty);
-  const date      = document.getElementById('aDate').value;
-  const notes     = document.getElementById('aNotes').value.trim() || null;
-  const workerId  = activeWorkerId;
+  const fertId   = parseInt(document.getElementById('aFertilizer').value);
+  const plotId   = parseInt(document.getElementById('aPlot').value);
+  const qty      = parseFloat(numpadValues.aQty);
+  const date     = document.getElementById('aDate').value;
+  const notes    = document.getElementById('aNotes').value.trim() || null;
+  const workerId = activeWorkerId;
 
-  if (!amendType)       { alert('Select amendment type.'); return; }
+  if (!fertId)          { alert('Select a fertilizer.'); return; }
   if (!plotId)          { alert('Select a plot.'); return; }
   if (!qty || qty <= 0) { alert('Enter a quantity.'); return; }
 
-  const finalDesc = amendType === 'other' ? (otherDesc || 'Other') : amendType;
-
   const payload = {
     date,
-    field_plot_id:  plotId,
-    amendment_type: amendType === 'other' ? 'other' : amendType,
-    description:    finalDesc,
-    kg_applied:     qty,
+    field_plot_id: plotId,
+    fertilizer_id: fertId,
+    kg_applied:    qty,
     notes
   };
-  if (workerId) payload.recorded_by = workerId;
+  if (workerId) payload.worker_id = workerId;
+
+  await submitEntry('fertilizer_applications', payload, (queued) => {
+    const f = (appData.fertilizers || []).find(f => f.id === fertId);
     const p = (appData.fieldPlots || []).find(p => p.id === plotId);
     const label = p ? (p.plot_code ? p.plot_code + (p.plot_name ? ' — ' + p.plot_name : '') : p.plot_name) : 'Plot';
-    showSuccess('🌱', 'Amendment Logged', `${qty} kg ${finalDesc}\n${label}`);
+    const sub = `${qty} kg ${f ? f.name : 'fertilizer'}\n${label}` + (queued ? '\n⚠️ Saved offline — will sync when connected' : '');
+    showSuccess('🌱', 'Amendment Logged', sub);
   });
 }
 
@@ -1803,7 +1809,7 @@ async function eConfirm() {
 const TABLE_LABELS = {
   feeding_events:         '🐐 Feeding',
   watering_events:        '💧 Irrigation',
-  amendment_applications: '🧂 Amendment',
+  fertilizer_applications:'🧂 Amendment',
   crop_harvest_events:    '🌾 Harvest',
   ingredient_purchases:   '🛒 Purchase',
   ingredient_acquisitions:'🛒 Purchase'

@@ -8,7 +8,7 @@
 
 // ---- Supabase config ----
 var SB_URL = 'https://soxbgbpuzcpvkqvdufno.supabase.co';
-var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveGJnYnB1emNwdmtxdmR1Zm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NzE2MDksImV4cCI6MjA5MjQ0NzYwOX0.v9eOX4xPkCE_4aSr0gxWfKh3_2jkwlks6sDCw1thw5k';
+var SB_KEY = 'sb_publishable_AerWSuvW1R1kFckry81KCw_LC2nltIg';
 var H  = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 var JH = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
 
@@ -184,6 +184,7 @@ var PAGE_MAP = {
 };
 
 async function showPage(name, btn) {
+  closeSidebar();
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   var pageEl = document.getElementById('page-' + name);
@@ -212,6 +213,7 @@ function goToPage(name) {
 }
 
 async function navLandTab(tab, btn) {
+  closeSidebar();
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   var pageEl = document.getElementById('page-land');
@@ -325,6 +327,18 @@ async function loadAll() {
   }
 }
 
+
+// ============================================================
+// SIDEBAR — Mobile off-canvas open / close
+// ============================================================
+function toggleSidebar() {
+  var shell = document.querySelector('.shell');
+  if (shell) shell.classList.toggle('sidebar-open');
+}
+function closeSidebar() {
+  var shell = document.querySelector('.shell');
+  if (shell) shell.classList.remove('sidebar-open');
+}
 
 // ============================================================
 // SIDEBAR — Section collapse / expand
