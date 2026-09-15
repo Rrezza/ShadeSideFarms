@@ -513,12 +513,11 @@ async function submitFiAcq() {
     if (!date)             throw new Error('Date required.');
     if (!ingId)            throw new Error('Select an ingredient.');
     if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be greater than zero.');
-    var cpk = (!isNaN(total) && total > 0 && qty > 0) ? total / qty : null;
+    // cost_per_kg is a DB-generated column (total_cost_pkr / quantity_kg) — never send it, Postgres computes it.
     var d = {
       date: date, ingredient_id: parseInt(ingId),
       acquisition_type: type, quantity_kg: qty,
       total_cost_pkr:  isNaN(total) ? null : total,
-      cost_per_kg:     cpk,
       recorded_by: worker ? parseInt(worker) : null,
       notes: notes
     };
@@ -759,15 +758,14 @@ async function submitFiBatch() {
     if (coveredKg > 0 && recipe.output_ingredient_id) {
       // Scale up proportionally if partial coverage
       var scaledCost = coveredKg < qty * 0.99 ? estTotalCost * (qty / coveredKg) : estTotalCost;
-      var cpkCalc    = scaledCost / qty;
       var costNote   = 'Batch #' + batchId +
         (missingPrices.length ? ' — partial estimate (no price for: ' + missingPrices.join(', ') + ')' : ' — full cost calculation');
+      // cost_per_kg is a DB-generated column (total_cost_pkr / quantity_kg) — never send it, Postgres computes it.
       await sbInsert('ingredient_acquisitions', [{
         ingredient_id:    recipe.output_ingredient_id,
         acquisition_type: 'produced',
         date:             date,
         quantity_kg:      qty,
-        cost_per_kg:      Math.round(cpkCalc * 100) / 100,
         total_cost_pkr:   Math.round(scaledCost),
         notes:            costNote
       }]);
