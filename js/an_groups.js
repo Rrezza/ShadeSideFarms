@@ -82,7 +82,7 @@ function renderGroupDetail(g, animals, stats) {
   var memberRows = animals.length
     ? animals.map(function(a) {
         var lw = getLatestWeight(a.id);
-        var curW = lw ? parseFloat(lw.weight_kg) : (a.entry_weight_kg ? parseFloat(a.entry_weight_kg) : null);
+        var curW = lw ? parseFloat(lw.weight_kg) : (a.entry_weight_kg != null ? parseFloat(a.entry_weight_kg) : null);
         var mem  = anSharedMembers.find(function(m) { return m.animal_id === a.id && m.group_id === g.id; });
         var daysInGrp = mem ? Math.round((new Date() - new Date(mem.joined_date + 'T00:00:00')) / 864e5) : '\u2014';
         var statusCls = a.status === 'active' ? 'badge-green' : a.status === 'quarantine' ? 'badge-amber' : 'badge-gray';

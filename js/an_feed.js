@@ -385,7 +385,10 @@ function afRenderSummaryTable(periodData, projData, period) {
     '</tr></thead><tbody>';
 
   periodData.forEach(function(row) {
-    var cVar = (hasProj && projData.concentrate && row.concentrate)
+    // row.concentrate can legitimately be 0 (e.g. every event that period was
+    // logged as "not offered") — that's exactly the shortfall this variance
+    // column exists to flag, so check for missing data with != null, not truthiness.
+    var cVar = (hasProj && projData.concentrate && row.concentrate != null)
       ? ((row.concentrate - projData.concentrate) / projData.concentrate * 100) : null;
     var varStyle = function(v) {
       if (v == null) return '';

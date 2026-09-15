@@ -166,6 +166,7 @@ async function submitSingleAnimal() {
     var src   = document.getElementById('si-source').value.trim(); if (src)  d.source = src;
     var notes = document.getElementById('si-notes').value.trim(); if (notes) d.notes = notes;
     var created = await sbInsert('animals', [d]);
+    if (!created || !created.length) throw new Error('Animal was not saved — the database did not return a row. Check permissions and verify before retrying.');
     var animalId = created[0].id;
 
     // Quarantine record
@@ -255,15 +256,12 @@ async function submitBatchIntake() {
     if (perHead)   batchRec.per_head_cost_pkr = perHead;
     if (groupId)   batchRec.group_id = parseInt(groupId);
     var batchRes = await sbInsert('intake_batches', [batchRec]);
+    if (!batchRes || !batchRes.length) throw new Error('Intake batch was not saved — the database did not return a row. Check permissions and verify before retrying.');
     var batchId  = batchRes[0].id;
 
-    // Auto-generate farm IDs
-    var sn = getSpeciesName(parseInt(species));
-    var prefix = 'A-';
-    if (sn === 'Goat')    prefix = 'G-';
-    else if (sn === 'Chicken') prefix = 'C-';
-    else if (sn === 'Duck')    prefix = 'D-';
-    else if (sn === 'Sheep')   prefix = 'S-';
+    // Auto-generate farm IDs — use the same prefix map single-animal intake uses
+    // (speciesPrefix in an_helpers.js), so batch and single intake never disagree.
+    var prefix = speciesPrefix(species);
     var existingNums = anSharedAnimals
       .filter(function(a) { return a.farm_id.startsWith(prefix); })
       .map(function(a) { return parseInt(a.farm_id.replace(prefix,'')); })
@@ -295,6 +293,10 @@ async function submitBatchIntake() {
     console.log('[intake] first animal payload:', JSON.stringify(inserts[0]));
     var created = await sbInsert('animals', inserts);
     console.log('[intake] first created record back:', JSON.stringify(created[0]));
+    if (!created || created.length !== count) {
+      throw new Error('Expected ' + count + ' animals to be saved but the database returned ' +
+        (created ? created.length : 0) + '. Nothing further (quarantine/group records) was written — check the Animals list and database permissions before retrying.');
+    }
 
     // Quarantine records
     if (quar && created.length) {

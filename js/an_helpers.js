@@ -23,7 +23,7 @@ function computeGroupStats(animals) {
   animals.forEach(function(a) {
     if (a.entry_weight_kg != null) entryW.push(parseFloat(a.entry_weight_kg));
     var lw = getLatestWeight(a.id);
-    var w = lw ? parseFloat(lw.weight_kg) : (a.entry_weight_kg ? parseFloat(a.entry_weight_kg) : null);
+    var w = lw ? parseFloat(lw.weight_kg) : (a.entry_weight_kg != null ? parseFloat(a.entry_weight_kg) : null);
     if (w != null) curW.push(w);
     if (lw && lw.date) {
       if (!latestWeightDate || lw.date > latestWeightDate) latestWeightDate = lw.date;
@@ -39,9 +39,10 @@ function computeGroupStats(animals) {
   var avgDays  = avg(days) || 0;
   var adg = null, adgInsufficient = false;
   if (avgEntry != null && avgCur != null && avgDays >= 7) {
+    // A negative ADG (weight loss) is a real, urgent signal — always surface it
+    // rather than folding it into "insufficient data" alongside the too-few-days case.
     var gk = avgCur - avgEntry;
-    if (gk > 0) adg = gk / avgDays * 1000;
-    else adgInsufficient = true;
+    adg = gk / avgDays * 1000;
   } else if (avgDays > 0 && avgDays < 7) {
     adgInsufficient = true;
   }
