@@ -122,6 +122,10 @@ async function submitSpecies() {
     if (statusEl) statusEl.textContent = 'Saved ✓';
     document.getElementById('species-add-form').style.display = 'none';
     loadSpeciesPage();
+    // Refresh the shared species cache so recipe and animal dropdowns reflect the new species
+    if (typeof loadSharedAnimalData === 'function' && anSharedLoaded) {
+      sbGet('species', 'select=id,common_name&order=common_name').then(function(r) { anSharedSpecies = r; });
+    }
   } catch (err) {
     if (statusEl) statusEl.textContent = 'Error: ' + err.message;
   }

@@ -13,23 +13,14 @@
 //   Reorder warning shown when stock < reorder_point.
 // ============================================================
 
-var invIngStock   = {};   // ingredient_id  → { purchased, adjusted }
 var invFertStock  = {};   // fertilizer_id  → { purchased, applied }
-var invIngList    = [];
 var invFertList   = [];
-var stockAdjIngId = null;
 
 async function loadInventoryPage() {
   document.getElementById('inv-ing-table').innerHTML  = '<div class="loading">Loading…</div>';
   document.getElementById('inv-fert-table').innerHTML = '<div class="loading">Loading…</div>';
   try {
     var r = await Promise.all([
-      sbGet('ingredients',
-        'active=eq.true&select=id,name,category&order=category,name'),
-      sbGet('ingredient_acquisitions',
-        'select=ingredient_id,quantity_kg'),
-      sbGet('ingredient_stock_adjustments',
-        'select=ingredient_id,delta_kg'),
       sbGet('fertilizers',
         'active=eq.true&select=id,name,type,quantity_per_purchase_unit,reorder_point&order=name'),
       sbGet('fertilizer_purchases',
@@ -38,35 +29,20 @@ async function loadInventoryPage() {
         'select=fertilizer_id,kg_applied')
     ]);
 
-    invIngList  = r[0];
-    invFertList = r[3];
-
-    // ── Ingredient stock ──────────────────────────────────────
-    invIngStock = {};
-    invIngList.forEach(function(i) {
-      invIngStock[i.id] = { purchased: 0, adjusted: 0 };
-    });
-    r[1].forEach(function(a) {
-      if (invIngStock[a.ingredient_id] && a.quantity_kg != null)
-        invIngStock[a.ingredient_id].purchased += parseFloat(a.quantity_kg);
-    });
-    r[2].forEach(function(a) {
-      if (invIngStock[a.ingredient_id] && a.delta_kg != null)
-        invIngStock[a.ingredient_id].adjusted += parseFloat(a.delta_kg);
-    });
+    invFertList = r[0];
 
     // ── Fertilizer stock ──────────────────────────────────────
     // Build a lookup of quantity_per_purchase_unit by fertilizer_id
     var qpuMap = {};
     invFertList.forEach(function(f) {
       invFertStock[f.id] = { purchased: 0, applied: 0 };
-      qpuMap[f.id] = f.quantity_per_purchase_unit
+      qpuMap[f.id] = f.quantity_per_purchase_unit != null
         ? parseFloat(f.quantity_per_purchase_unit) : null;
     });
 
     // Purchases: qty is in purchase units (bags / containers)
     // Multiply by quantity_per_purchase_unit to get kg or L
-    r[4].forEach(function(p) {
+    r[1].forEach(function(p) {
       if (!invFertStock[p.fertilizer_id] || p.qty == null) return;
       var qpu = qpuMap[p.fertilizer_id];
       if (qpu != null) {
@@ -79,7 +55,7 @@ async function loadInventoryPage() {
     });
 
     // Applications are always recorded in kg / L (no conversion needed)
-    r[5].forEach(function(a) {
+    r[2].forEach(function(a) {
       if (a.fertilizer_id && invFertStock[a.fertilizer_id] && a.kg_applied != null)
         invFertStock[a.fertilizer_id].applied += parseFloat(a.kg_applied);
     });
@@ -161,49 +137,3 @@ function renderInvFert() {
   html += '</tbody></table></div>';
   tbl.innerHTML = html;
 }
-
-// ============================================================
-// STOCK ADJUSTMENT MODAL (ingredients only)
-// ============================================================
-function openStockAdjModal(ingId, ingName) {
-  stockAdjIngId = ingId;
-  document.getElementById('stock-adj-title').textContent = 'Adjust stock — ' + ingName;
-  document.getElementById('stock-adj-desc').textContent  =
-    'Positive delta to add stock (e.g. found extra); negative to remove (spoilage, used for feeding).';
-  document.getElementById('sa-date').value   = todayISO();
-  document.getElementById('sa-delta').value  = '';
-  document.getElementById('sa-reason').value = 'count';
-  document.getElementById('sa-notes').value  = '';
-  document.getElementById('sa-status').textContent = '';
-  document.getElementById('stock-adj-modal').style.display = 'flex';
-}
-function closeStockAdjModal() {
-  document.getElementById('stock-adj-modal').style.display = 'none';
-}
-
-async function submitStockAdj() {
-  var statusEl = document.getElementById('sa-status');
-  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
-  try {
-    var date   = document.getElementById('sa-date').value;
-    var delta  = parseFloat(document.getElementById('sa-delta').value);
-    var reason = document.getElementById('sa-reason').value;
-    var notes  = document.getElementById('sa-notes').value.trim();
-    if (!stockAdjIngId || !date || isNaN(delta) || delta === 0)
-      throw new Error('Date and a non-zero delta are required.');
-    var d = {
-      ingredient_id: stockAdjIngId,
-      date:          date,
-      delta_kg:      delta,
-      reason:        reason
-    };
-    if (notes) d.notes = notes;
-    await sbInsert('ingredient_stock_adjustments', [d]);
-    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
-    setTimeout(function() { closeStockAdjModal(); loadInventoryPage(); }, 800);
-  } catch (err) {
-    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
-  }
-}
-
-// ============================================================

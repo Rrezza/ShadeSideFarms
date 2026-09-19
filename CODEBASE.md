@@ -94,7 +94,7 @@ Farm expenses log with category filtering (feed, vet, labor, fuel, infrastructur
 ## Setup Module (`setup_*`)
 
 ### `setup_shared.js`
-Shared delete helpers for all setup pages. Handles foreign-key constraint errors gracefully by prompting the user to deactivate instead of delete. Key functions: `fkErrMsg()`, `deleteIngredient()`, `deleteFertilizer()`, `deleteFertPurchase()`. Used by all `setup_*.js` files.
+Shared delete helpers for all setup pages. Handles foreign-key constraint errors gracefully by prompting the user to deactivate instead of delete. Key functions: `fkErrMsg()`, `deleteIngredient()`, `deleteFertilizer()`, `deleteFertPurchase()`, `refreshSharedLocationCaches()` (re-fetches `anSharedPens`/`anSharedLocations` after a location retire/reactivate/add, so other modules' location dropdowns stay current). Used by all `setup_*.js` files.
 
 ### `setup_species.js`
 Species registry (common name, notes). Inline editable. Key globals: `speciesData`, `speciesEditId`. Key functions: `loadSpeciesPage()`, `renderSpeciesTable()`, `submitSpecies()`. Reads/writes: `species`.
@@ -115,10 +115,10 @@ Crops registry. Fields: name, local name, category, salt tolerance, nitrogen fix
 Harvest destinations registry. Rows here drive the destination dropdown in the harvest allocation modal. Users can add new destinations without code changes. Key column `key` is immutable after creation (stored in `harvest_allocations.destination`). Key global: `hdData`. Key functions: `loadHarvestDestinationsPage()`, `submitNewHd()`, `patchHd()`. Reads/writes: `harvest_destinations`.
 
 ### `setup_fertilizers.js`
-Three-layer fertilizer model: registry (nutrient profile, purchase unit, reorder threshold), purchases (qty, date, cost), and derived inventory. Liquid fertilizers track L/container; solids track kg/bag. Key globals: `fertData`, `fertPurchaseData`, `fertNutrientsId`. Key functions: `fertStockUnit()`, `fertPurchUnitLabel()`, `loadFertilizersPage()`. Reads: `fertilizers`, `fertilizer_purchases`.
+Registry (nutrient profile, purchase unit, reorder threshold) and derived stock display. Liquid fertilizers track L/container; solids track kg/bag. Key globals: `fertData`, `fertNutrientsId`. Key functions: `fertStockUnit()`, `fertPurchUnitLabel()`, `loadFertilizersPage()`. Reads: `fertilizers`. Purchase logging itself lives in `land.js` (`openLandPurchModal()`) — this file's own purchase modal was dead code, removed 2026-09-19.
 
 ### `setup_inventory.js`
-Inventory page showing fertilizer stock (feed ingredient stock lives in `fd_inventory.js`). Stock = purchases − applications. Key globals: `invFertStock`, `invFertList`, `stockAdjIngId`. Key function: `loadInventoryPage()`. Reads: `fertilizers`, `fertilizer_purchases`, `fertilizer_applications`.
+Inventory page showing fertilizer stock only (feed ingredient stock and its own stock-adjustment modal both live in `fd_inventory.js` — this file's ingredient-stock computation and stock-adjustment modal were dead code, removed 2026-09-19). Stock = purchases − applications. Key globals: `invFertStock`, `invFertList`. Key function: `loadInventoryPage()`. Reads: `fertilizers`, `fertilizer_purchases`, `fertilizer_applications`.
 
 ### `setup_workers.js`
 Workers registry (permanent / part-time / day labour) with daily rates. Inline edit, active filtering. Key global: `workersData`. Key functions: `loadWorkersPage()`, `renderWorkersTable()`. Reads/writes: `workers`.

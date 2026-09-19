@@ -457,7 +457,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-09-15 · r79</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-09-19 · r81</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -2394,35 +2394,6 @@
   </div>
 </div>
 
-<!-- Fertilizer Purchase modal -->
-<div class="modal-overlay" id="fert-purch-modal" style="display:none">
-  <div class="modal-box">
-    <h3>Log fertilizer purchase</h3>
-    <div class="modal-fields">
-      <label>Fertilizer</label>
-      <select id="fp-fert" onchange="updatePurchaseModalLabels()"><option value="">Select fertilizer</option></select>
-      <label>Date</label>
-      <input type="date" id="fp-date">
-      <label id="fp-qty-label">Quantity (bags)</label>
-      <input type="number" id="fp-qty" min="0" step="1" placeholder="e.g. 3" oninput="updatePurchaseDerived()">
-      <label id="fp-cost-label">Cost per bag (PKR)</label>
-      <input type="number" id="fp-cost" min="0" step="1" placeholder="e.g. 3200" oninput="updatePurchaseDerived()">
-      <div id="fp-derived" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:13px;color:var(--muted)">
-        <span id="fp-derived-text"></span>
-      </div>
-      <label>Supplier</label>
-      <input type="text" id="fp-supplier" placeholder="Where did you get it?">
-      <label>Notes (optional)</label>
-      <input type="text" id="fp-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeFertPurchaseModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitFertPurchase()">Save</button>
-      <span id="fp-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
 <!-- Fertilizer Nutrients modal — edit from registry row -->
 <div class="modal-overlay" id="fert-nutrients-modal" style="display:none">
   <div class="modal-box modal-large">
@@ -2482,38 +2453,10 @@
   </div>
 </div>
 
-<!-- Ingredient stock adjustment modal (Inventory page) -->
-<div class="modal-overlay" id="stock-adj-modal" style="display:none">
-  <div class="modal-box">
-    <h3 id="stock-adj-title">Adjust ingredient stock</h3>
-    <p id="stock-adj-desc"></p>
-    <div class="modal-fields">
-      <label>Date</label>
-      <input type="date" id="sa-date">
-      <label>Delta (kg) — positive to add, negative to remove</label>
-      <input type="number" id="sa-delta" step="0.1" placeholder="e.g. 50 or -10">
-      <label>Reason</label>
-      <select id="sa-reason">
-        <option value="count">Manual count / reconciliation</option>
-        <option value="fed">Used for feeding</option>
-        <option value="spoilage">Spoilage / loss</option>
-        <option value="other">Other</option>
-      </select>
-      <label>Notes (optional)</label>
-      <input type="text" id="sa-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeStockAdjModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitStockAdj()">Save adjustment</button>
-      <span id="sa-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
-
-<script src="js/shared.js?v=28"></script>
+<script src="js/shared.js?v=29"></script>
 <script src="js/an_helpers.js?v=22"></script>
 <script src="js/fd_shared.js?v=22"></script>
-<script src="js/setup_shared.js?v=22"></script>
+<script src="js/setup_shared.js?v=23"></script>
 <script src="js/setup_harvest_destinations.js?v=1"></script>
 <script src="js/health.js?v=22"></script>
 <script src="js/auth.js?v=19"></script>

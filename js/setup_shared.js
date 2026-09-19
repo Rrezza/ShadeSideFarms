@@ -60,6 +60,10 @@ async function deleteSpecies(id, name) {
   try {
     await sbDelete('species', id);
     await loadSpeciesPage();
+    // Refresh the shared species cache so recipe and animal dropdowns stop offering the deleted species
+    if (typeof loadSharedAnimalData === 'function' && anSharedLoaded) {
+      sbGet('species', 'select=id,common_name&order=common_name').then(function(r) { anSharedSpecies = r; });
+    }
   } catch (err) {
     alert(err.message.indexOf('foreign') >= 0 || err.message.indexOf('violates') >= 0
       ? fkErrMsg(name) : 'Delete failed: ' + err.message);
@@ -82,9 +86,23 @@ async function deleteWorker(id, name) {
   try {
     await sbDelete('workers', id);
     await loadWorkersPage();
+    // Refresh the shared workers cache so feeding/health/expense dropdowns stop offering the deleted worker
+    if (typeof loadSharedAnimalData === 'function' && anSharedLoaded) {
+      sbGet('workers', 'select=id,name&active=eq.true&order=name').then(function(r) { anSharedWorkers = r; });
+    }
   } catch (err) {
     alert(err.message.indexOf('foreign') >= 0 || err.message.indexOf('violates') >= 0
       ? fkErrMsg(name) : 'Delete failed: ' + err.message);
+  }
+}
+
+async function refreshSharedLocationCaches() {
+  // Both anSharedPens (pen-only) and anSharedLocations (all active) are
+  // derived from the locations table — a retire/reactivate/add can affect
+  // either depending on the location's type, so refresh both together.
+  if (typeof loadSharedAnimalData === 'function' && anSharedLoaded) {
+    sbGet('locations', 'location_type=eq.pen&active=eq.true&select=id,name&order=name').then(function(r) { anSharedPens = r; });
+    sbGet('locations', 'active=eq.true&select=id,name&order=name').then(function(r) { anSharedLocations = r; });
   }
 }
 
@@ -93,6 +111,7 @@ async function retireLocation(id, name) {
   try {
     await sbPatch('locations', id, { active: false });
     await loadLocationsPage();
+    refreshSharedLocationCaches();
   } catch (err) {
     alert('Retire failed: ' + err.message);
   }
@@ -102,6 +121,7 @@ async function reactivateLocation(id) {
   try {
     await sbPatch('locations', id, { active: true });
     await loadLocationsPage();
+    refreshSharedLocationCaches();
   } catch (err) {
     alert('Reactivate failed: ' + err.message);
   }

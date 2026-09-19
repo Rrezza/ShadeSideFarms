@@ -154,14 +154,27 @@ async function patchCrop(id, field, value) {
 
 // Toggle a single destination key in the crop's permitted_destinations array.
 // Reads the current array from local state, modifies it, then patches.
+//
+// Queued per crop: patchCrop only writes the new array back into cropRegData
+// after its DB round trip resolves, so two checkboxes for the same crop
+// toggled before the first save lands would otherwise both read the same
+// stale array and the second write would silently clobber the first. Chaining
+// onto a per-crop promise makes each toggle wait for the previous one to
+// fully finish before it reads the array again.
+var cropDestQueue = {};
 async function toggleCropDest(cropId, destKey, checked) {
-  var c = cropRegData.find(function(x) { return x.id === cropId; });
-  if (!c) return;
-  var current = (c.permitted_destinations || []).slice();
-  var idx = current.indexOf(destKey);
-  if (checked && idx < 0)  current.push(destKey);
-  if (!checked && idx >= 0) current.splice(idx, 1);
-  await patchCrop(cropId, 'permitted_destinations', current);
+  var prev = cropDestQueue[cropId] || Promise.resolve();
+  var next = prev.then(function() {
+    var c = cropRegData.find(function(x) { return x.id === cropId; });
+    if (!c) return;
+    var current = (c.permitted_destinations || []).slice();
+    var idx = current.indexOf(destKey);
+    if (checked && idx < 0)  current.push(destKey);
+    if (!checked && idx >= 0) current.splice(idx, 1);
+    return patchCrop(cropId, 'permitted_destinations', current);
+  });
+  cropDestQueue[cropId] = next;
+  return next;
 }
 
 async function submitNewCrop() {

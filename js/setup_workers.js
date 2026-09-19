@@ -121,6 +121,10 @@ async function submitNewWorker() {
     await sbInsert('workers', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
     await loadWorkersPage();
+    // Refresh the shared workers cache so feeding/health/expense dropdowns include the new worker
+    if (typeof loadSharedAnimalData === 'function' && anSharedLoaded) {
+      sbGet('workers', 'select=id,name&active=eq.true&order=name').then(function(r) { anSharedWorkers = r; });
+    }
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }

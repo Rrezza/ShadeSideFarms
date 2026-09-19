@@ -39,7 +39,7 @@ function renderLocationsTable() {
 
   // Build shed options for parent dropdown
   var shedOpts = '<option value="">— none —</option>' +
-    locationsData.filter(function(l) { return l.location_type === 'shed'; }).map(function(l) {
+    locationsData.filter(function(l) { return l.location_type === 'shed' && l.active; }).map(function(l) {
       return '<option value="' + l.id + '">' + l.name + '</option>';
     }).join('');
 
@@ -165,6 +165,7 @@ async function submitNewLocation() {
     await sbInsert('locations', [d]);
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
     await loadLocationsPage();
+    refreshSharedLocationCaches();
   } catch (err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }

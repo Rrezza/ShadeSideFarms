@@ -24,16 +24,11 @@ function fertStockUnit(type) {
 function fertPurchUnitLabel(type) {
   return type === 'liquid' ? 'container' : 'bag';
 }
-function fertNf(val) {
-  // Format a nullable numeric for display in the nutrient modal
-  return (val != null && val !== '') ? parseFloat(val) : '';
-}
 
 // ============================================================
 // STATE
 // ============================================================
 var fertData         = [];
-var fertPurchaseData = [];
 var fertNutrientsId  = null;  // fertilizer id open in nutrients modal
 
 // ============================================================
@@ -219,103 +214,6 @@ async function saveFertNutrients() {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
 }
-
-// ============================================================
-// PURCHASE MODAL
-// ============================================================
-function updatePurchaseModalLabels() {
-  var fertId   = document.getElementById('fp-fert').value;
-  var fert     = fertData.find(function(f) { return String(f.id) === String(fertId); });
-  var isLiquid = fert && fert.type === 'liquid';
-  var pu = isLiquid ? 'container' : 'bag';
-  document.getElementById('fp-qty-label').textContent  = 'Quantity (' + pu + 's)';
-  document.getElementById('fp-cost-label').textContent = 'Cost per ' + pu + ' (PKR)';
-  updatePurchaseDerived();
-}
-
-function updatePurchaseDerived() {
-  var fertId = document.getElementById('fp-fert').value;
-  var fert   = fertData.find(function(f) { return String(f.id) === String(fertId); });
-  var qty    = parseFloat(document.getElementById('fp-qty').value);
-  var cost   = parseFloat(document.getElementById('fp-cost').value);
-  var divEl  = document.getElementById('fp-derived');
-  var textEl = document.getElementById('fp-derived-text');
-
-  if (!fert || !fert.quantity_per_purchase_unit) { divEl.style.display = 'none'; return; }
-
-  var qpu = parseFloat(fert.quantity_per_purchase_unit);
-  var su  = fertStockUnit(fert.type);
-  var pu  = fertPurchUnitLabel(fert.type);
-  var parts = [];
-
-  if (!isNaN(qty) && qty > 0) {
-    parts.push(r1(qty * qpu) + ' ' + su + ' total');
-  }
-  if (!isNaN(cost) && cost > 0 && qpu > 0) {
-    parts.push(pkr(cost / qpu) + ' / ' + su);
-  }
-  if (parts.length) {
-    divEl.style.display  = 'block';
-    textEl.textContent   = '→  ' + parts.join('   ·   ');
-  } else {
-    divEl.style.display = 'none';
-  }
-}
-
-async function openFertPurchaseModal() {
-  if (!fertData.length) {
-    fertData = await sbGet('fertilizers', 'active=eq.true&select=*&order=name');
-  }
-  var sel = document.getElementById('fp-fert');
-  sel.innerHTML = '<option value="">Select fertilizer</option>' +
-    fertData.filter(function(f) { return f.active; }).map(function(f) {
-      var su  = fertStockUnit(f.type);
-      var pu  = fertPurchUnitLabel(f.type);
-      var qpu = f.quantity_per_purchase_unit
-        ? ' · ' + f.quantity_per_purchase_unit + ' ' + su + '/' + pu
-        : '';
-      return '<option value="' + f.id + '">' + f.name + qpu + '</option>';
-    }).join('');
-  document.getElementById('fp-date').value = todayISO();
-  ['fp-qty','fp-cost','fp-supplier','fp-notes'].forEach(function(id) {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('fp-qty-label').textContent  = 'Quantity (bags)';
-  document.getElementById('fp-cost-label').textContent = 'Cost per bag (PKR)';
-  document.getElementById('fp-derived').style.display  = 'none';
-  document.getElementById('fp-status').textContent     = '';
-  document.getElementById('fert-purch-modal').style.display = 'flex';
-}
-
-function closeFertPurchaseModal() {
-  document.getElementById('fert-purch-modal').style.display = 'none';
-}
-
-async function submitFertPurchase() {
-  var statusEl = document.getElementById('fp-status');
-  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)';
-  try {
-    var fertId = document.getElementById('fp-fert').value;
-    var date   = document.getElementById('fp-date').value;
-    var qty    = parseFloat(document.getElementById('fp-qty').value);
-    if (!fertId || !date || isNaN(qty) || qty <= 0)
-      throw new Error('Fertilizer, date, and quantity required.');
-    var d = { fertilizer_id: parseInt(fertId), date: date, qty: qty };
-    var cost = document.getElementById('fp-cost').value;
-    if (cost) d.cost_per_unit = parseFloat(cost);
-    var sup = document.getElementById('fp-supplier').value.trim();
-    if (sup) d.supplier = sup;
-    var notes = document.getElementById('fp-notes').value.trim();
-    if (notes) d.notes = notes;
-    await sbInsert('fertilizer_purchases', [d]);
-    statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
-    setTimeout(function() { closeFertPurchaseModal(); loadFertilizersPage(); }, 800);
-  } catch (err) {
-    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
-  }
-}
-
-// ============================================================
 
 // ============================================================
 // ADD FERTILIZER MODAL
