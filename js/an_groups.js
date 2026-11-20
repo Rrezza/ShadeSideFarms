@@ -12,7 +12,9 @@ async function loadGroupsPage() {
   try {
     // Always reload — membership changes from Intake or direct DB ops must be reflected.
     anSharedLoaded = false;
-    await loadSharedAnimalData();
+    // Member actions (Move group / Left farm / Delete) reuse the Animals page's
+    // modals and save logic in an_animals.js
+    await Promise.all([loadSharedAnimalData(), loadModule('an_animals')]);
     var activeGrps = anSharedGroups.filter(function(g) { return g.status === 'active'; });
     var closedGrps = anSharedGroups.filter(function(g) { return g.status !== 'active'; });
 
@@ -78,7 +80,8 @@ function renderGroupsTable(activeGrps, closedGrps) {
 }
 
 function renderGroupDetail(g, animals, stats) {
-  // Member table
+  // Member table — each row has the same actions as the Animals page.
+  // Clicks are stopped from bubbling so they don't collapse the group.
   var memberRows = animals.length
     ? animals.map(function(a) {
         var lw = getLatestWeight(a.id);
@@ -86,6 +89,32 @@ function renderGroupDetail(g, animals, stats) {
         var mem  = anSharedMembers.find(function(m) { return m.animal_id === a.id && m.group_id === g.id; });
         var daysInGrp = mem ? Math.round((new Date() - new Date(mem.joined_date + 'T00:00:00')) / 864e5) : '\u2014';
         var statusCls = a.status === 'active' ? 'badge-green' : a.status === 'quarantine' ? 'badge-amber' : 'badge-gray';
+        var stop = 'event.stopPropagation();';
+
+        if (grpMemberEditId === a.id) {
+          // Inline edit: sex, purpose and status — same fields as the Animals page editor
+          var opt = function(val, label, cur) { return '<option value="' + val + '"' + (cur === val ? ' selected' : '') + '>' + label + '</option>'; };
+          return '<tr onclick="event.stopPropagation()"><td class="mono">' + a.farm_id + '</td>' +
+            '<td>' + getSpeciesName(a.species_id) + '</td>' +
+            '<td>' + (a.breed || '\u2014') + '</td>' +
+            '<td><select id="gme-sex" style="font-size:12px;padding:2px 4px">' +
+              opt('', 'Unknown', a.sex || '') + opt('male', 'Male', a.sex) + opt('female', 'Female', a.sex) +
+            '</select></td>' +
+            '<td><select id="gme-status" style="font-size:12px;padding:2px 4px">' +
+              opt('active', 'Active', a.status) + opt('quarantine', 'Quarantine', a.status) +
+            '</select>' +
+            '<select id="gme-purpose" style="font-size:12px;padding:2px 4px;margin-left:4px">' +
+              opt('meat', 'Meat', a.purpose) + opt('breeder', 'Breeder', a.purpose) + opt('layer', 'Layer', a.purpose) +
+              opt('dual_purpose', 'Dual-purpose', a.purpose) + opt('farm_labor', 'Farm labor', a.purpose) + opt('learning', 'Learning', a.purpose) +
+            '</select></td>' +
+            '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
+            '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
+            '<td style="white-space:nowrap">' +
+              '<button class="btn btn-sm btn-primary" onclick="' + stop + 'grpSaveMemberEdit(' + a.id + ')">Save</button> ' +
+              '<button class="btn btn-sm" onclick="' + stop + 'grpCancelMemberEdit()">Cancel</button>' +
+            '</td></tr>';
+        }
+
         return '<tr><td class="mono">' + a.farm_id + '</td>' +
           '<td>' + getSpeciesName(a.species_id) + '</td>' +
           '<td>' + (a.breed || '\u2014') + '</td>' +
@@ -93,9 +122,15 @@ function renderGroupDetail(g, animals, stats) {
           '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span></td>' +
           '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
           '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
-          '</tr>';
+          '<td style="white-space:nowrap">' +
+            '<button class="btn btn-sm" onclick="' + stop + 'grpStartMemberEdit(' + a.id + ')">Edit</button> ' +
+            '<button class="btn btn-sm btn-primary" onclick="' + stop + 'alOpenAssign(' + a.id + ', ' + g.id + ')">Move group</button> ' +
+            '<button class="btn btn-sm" onclick="' + stop + 'alOpenExit(' + a.id + ')">Left farm</button> ' +
+            '<button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" ' +
+              'onclick="' + stop + 'alDeleteAnimal(' + a.id + ', \'' + a.farm_id.replace(/'/g, "\\'") + '\')">Delete</button>' +
+          '</td></tr>';
       }).join('')
-    : '<tr><td colspan="7" class="muted-cell" style="text-align:center">No members</td></tr>';
+    : '<tr><td colspan="8" class="muted-cell" style="text-align:center">No members</td></tr>';
 
   // Stat cards
   var sc = '';
@@ -140,7 +175,7 @@ function renderGroupDetail(g, animals, stats) {
     notesHtml +
     '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:14px 0 8px">Members</div>' +
     '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Farm ID</th><th>Species</th><th>Breed</th><th>Sex</th><th>Status</th><th>Current wt</th><th>Days in group</th>' +
+    '<th>Farm ID</th><th>Species</th><th>Breed</th><th>Sex</th><th>Status</th><th>Current wt</th><th>Days in group</th><th>Actions</th>' +
     '</tr></thead><tbody>' + memberRows + '</tbody></table></div>' +
     '</div>';
 }
@@ -174,9 +209,39 @@ async function deleteGroup(groupId, groupName, headCount) {
 
 function toggleGroupExpand(groupId) {
   grpExpanded = (grpExpanded === groupId) ? null : groupId;
+  grpMemberEditId = null;
+  renderGroupsFromShared();
+}
+
+// Re-renders the groups tables from the already-loaded shared animal data,
+// keeping the open group open. Also called by an_animals.js after a member
+// is moved, marked as left farm, or deleted from this page.
+function renderGroupsFromShared() {
   var activeGrps = anSharedGroups.filter(function(g) { return g.status === 'active'; });
   var closedGrps = anSharedGroups.filter(function(g) { return g.status !== 'active'; });
   renderGroupsTable(activeGrps, closedGrps);
+}
+
+// ---- Inline edit of a group member (sex / status / purpose) ----
+var grpMemberEditId = null;
+
+function grpStartMemberEdit(animalId)  { grpMemberEditId = animalId; renderGroupsFromShared(); }
+function grpCancelMemberEdit()         { grpMemberEditId = null;     renderGroupsFromShared(); }
+
+async function grpSaveMemberEdit(animalId) {
+  try {
+    await sbPatch('animals', animalId, {
+      sex:     document.getElementById('gme-sex').value || null,
+      status:  document.getElementById('gme-status').value,
+      purpose: document.getElementById('gme-purpose').value
+    });
+    grpMemberEditId = null;
+    anSharedLoaded = false;
+    await loadSharedAnimalData();
+    renderGroupsFromShared();
+  } catch(err) {
+    alert('Save failed: ' + err.message);
+  }
 }
 
 function openGroupEditModal(groupId) {

@@ -178,6 +178,17 @@ async function alSaveEdit(animalId) {
   }
 }
 
+// The Move group / Left farm / Delete actions are also offered on the Groups
+// page (an_groups.js). After one saves, refresh whichever page is showing.
+function alAfterChange() {
+  var groupsPage = document.getElementById('page-angroups');
+  if (groupsPage && groupsPage.classList.contains('active') && typeof renderGroupsFromShared === 'function') {
+    renderGroupsFromShared();
+  } else {
+    renderAnimalsList();
+  }
+}
+
 function alOpenAssign(animalId, currentGroupId) {
   alAssignAnimalId = animalId;
   var sel = document.getElementById('al-assign-group');
@@ -227,7 +238,7 @@ async function alSubmitAssign() {
     anSharedLoaded = false;
     await loadSharedAnimalData();
     alCloseAssign();
-    renderAnimalsList();
+    alAfterChange();
   } catch(err) {
     st.textContent = 'Error: ' + err.message; st.style.color = 'var(--red)';
   }
@@ -274,7 +285,7 @@ async function alSubmitExit() {
     anSharedLoaded = false;
     await loadSharedAnimalData();
     alCloseExit();
-    renderAnimalsList();
+    alAfterChange();
   } catch(err) {
     st.textContent = 'Error: ' + err.message; st.style.color = 'var(--red)';
   }
@@ -298,6 +309,17 @@ async function alDeleteAnimal(animalId, farmId) {
     // Null out self-referential FKs on other animals (dam/sire references)
     await sbPatchWhere('animals', 'dam_id=eq.'  + animalId, { dam_id:  null });
     await sbPatchWhere('animals', 'sire_id=eq.' + animalId, { sire_id: null });
+    // Medicine dose records are kept (they're real stock that was used) but
+    // unlinked from this animal. Doses from this animal's own health events are
+    // also detached from those events first, since deleting an event would
+    // otherwise cascade-delete its doses and wrongly put the medicine back in stock.
+    var ownEvents = await sbGet('animal_health_events', 'animal_id=eq.' + animalId + '&select=id');
+    if (ownEvents.length) {
+      await sbPatchWhere('medicine_movements',
+        'health_event_id=in.(' + ownEvents.map(function(e) { return e.id; }).join(',') + ')',
+        { health_event_id: null });
+    }
+    await sbPatchWhere('medicine_movements', 'animal_id=eq.' + animalId, { animal_id: null });
     // Delete all child records
     await sbDeleteWhere('animal_weights',       'animal_id=eq.' + animalId);
     await sbDeleteWhere('animal_health_events', 'animal_id=eq.' + animalId);
@@ -309,7 +331,7 @@ async function alDeleteAnimal(animalId, farmId) {
     await sbDelete('animals', animalId);
     anSharedLoaded = false;
     await loadSharedAnimalData();
-    renderAnimalsList();
+    alAfterChange();
   } catch(err) {
     alert('Delete failed: ' + err.message);
   }
