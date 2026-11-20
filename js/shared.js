@@ -161,6 +161,7 @@ var PAGE_MAP = {
   anfeed:         { module: 'an_feed',         init: 'loadAnimalFeedingPage' },
   rationplans:    { module: 'fd_ration_plans', init: 'loadRationPlansPage' },
   health:         { module: 'health',  init: 'loadHealthPage' },
+  medicines:      { module: 'health_meds', init: 'loadMedicinesPage' },
   breeding:       { module: 'health',  init: 'loadBreedingPage' },
   costsales:      { module: 'health',  init: 'loadCostSalesPage' },
   // Overview (landing page)

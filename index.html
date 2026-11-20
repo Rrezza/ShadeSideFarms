@@ -419,6 +419,7 @@
           <button class="nav-item" data-page="weighttracking" onclick="showPage('weighttracking',this)"><span class="nav-dot"></span>Weight Tracking</button>
           <button class="nav-item" data-page="anfeed"         onclick="showPage('anfeed',this)"><span class="nav-dot"></span>Feeding</button>
           <button class="nav-item" data-page="health"         onclick="showPage('health',this)"><span class="nav-dot"></span>Health</button>
+          <button class="nav-item" data-page="medicines"      onclick="showPage('medicines',this)"><span class="nav-dot"></span>Medicines</button>
           <button class="nav-item" data-page="breeding"       onclick="showPage('breeding',this)"><span class="nav-dot"></span>Breeding</button>
           <button class="nav-item" data-page="costsales"      onclick="showPage('costsales',this)"><span class="nav-dot"></span>Cost &amp; Sales</button>
         </div>
@@ -457,7 +458,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-09-19 · r81</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-11-20 · r82</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -471,6 +472,7 @@
           <button class="refresh-btn" onclick="loadOverviewPage()">↻ Refresh</button>
         </div>
       </div>
+      <div id="ov-med-alerts"></div>
       <div id="ov-content"><div class="loading">Loading…</div></div>
     </div>
 
@@ -1041,10 +1043,10 @@
               </select>
             </div>
             <div class="hf-field" id="hf-animal-wrap" style="display:flex">
-              <label>Animal</label><select id="hf-animal"><option value="">Select animal</option></select>
+              <label>Animal</label><select id="hf-animal" onchange="renderHfDoseGrid()"><option value="">Select animal</option></select>
             </div>
             <div class="hf-field" id="hf-group-wrap" style="display:none">
-              <label>Group</label><select id="hf-group"><option value="">Select group</option></select>
+              <label>Group</label><select id="hf-group" onchange="renderHfDoseGrid()"><option value="">Select group</option></select>
             </div>
           </div>
           <div class="hf-grid">
@@ -1066,11 +1068,16 @@
           <div class="hf-grid">
             <div class="hf-field full"><label>Description</label><input type="text" id="hf-desc" placeholder="Description of event"></div>
           </div>
+          <!-- Medicine: pick from the cabinet (stock is deducted per animal) or "not in cabinet" for free text -->
           <div class="hf-grid">
-            <div class="hf-field"><label>Product used</label><input type="text" id="hf-product" placeholder="Optional"></div>
-            <div class="hf-field"><label>Dose</label><input type="text" id="hf-dose" placeholder="Optional"></div>
-            <div class="hf-field"><label>Cost (PKR)</label><input type="number" id="hf-cost" min="0" step="1" placeholder="Optional"></div>
+            <div class="hf-field"><label>Medicine</label><select id="hf-med" onchange="onHfMedChange()"><option value="">None</option></select></div>
+            <div class="hf-field"><label>Cost (PKR)</label><input type="number" id="hf-cost" min="0" step="1" placeholder="Optional" oninput="hfCostTouched = true"></div>
           </div>
+          <div class="hf-grid" id="hf-free-wrap" style="display:none">
+            <div class="hf-field"><label>Product used</label><input type="text" id="hf-product" placeholder="e.g. vet's own injection"></div>
+            <div class="hf-field"><label>Dose</label><input type="text" id="hf-dose" placeholder="Optional"></div>
+          </div>
+          <div id="hf-dose-grid"></div>
           <div class="hf-grid">
             <div class="hf-field"><label>Follow-up date</label><input type="date" id="hf-followup"></div>
             <div class="hf-field"><label>Link to scheduled protocol</label><select id="hf-sched"></select></div>
@@ -1119,7 +1126,60 @@
         </div>
         <div id="health-log-table"><div class="loading">Loading...</div></div>
       </div>
+      <!-- Schedules: recurring rounds (vaccination, deworming...). Feed the Due panel and the medicine reorder look-ahead. -->
+      <div class="section">
+        <div class="section-hdr">
+          <h2>Schedules</h2>
+          <button class="btn btn-sm btn-primary" onclick="openSchedForm(null)">+ Add schedule</button>
+        </div>
+        <div class="health-form-box" id="sched-form" style="margin:16px 22px">
+          <div style="font-weight:500;margin-bottom:12px" id="sf-title">New schedule</div>
+          <div class="hf-grid">
+            <div class="hf-field"><label>Description *</label><input type="text" id="sf-desc" placeholder="e.g. Deworming round"></div>
+            <div class="hf-field"><label>Event type</label>
+              <select id="sf-event-type">
+                <option value="vaccination">Vaccination</option>
+                <option value="deworming">Deworming</option>
+                <option value="treatment">Treatment</option>
+                <option value="observation">Observation</option>
+              </select>
+            </div>
+            <div class="hf-field"><label>Target type</label>
+              <select id="sf-target-type" onchange="onSfTargetChange()">
+                <option value="group">Group</option>
+                <option value="animal">Individual animal</option>
+              </select>
+            </div>
+          </div>
+          <div class="hf-grid">
+            <div class="hf-field" id="sf-group-wrap"><label>Group *</label><select id="sf-group"></select></div>
+            <div class="hf-field" id="sf-animal-wrap" style="display:none"><label>Animal *</label><select id="sf-animal"></select></div>
+            <div class="hf-field"><label>Medicine</label><select id="sf-med"></select></div>
+            <div class="hf-field"><label>Product (if not in cabinet)</label><input type="text" id="sf-product" placeholder="Optional"></div>
+          </div>
+          <div class="hf-grid">
+            <div class="hf-field"><label>Repeat every (days)</label><input type="number" id="sf-interval" min="1" step="1" placeholder="e.g. 90"></div>
+            <div class="hf-field"><label>Next due *</label><input type="date" id="sf-next"></div>
+            <div class="hf-field"><label>Notes</label><input type="text" id="sf-notes" placeholder="Optional"></div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px">
+            <button class="btn btn-primary" onclick="submitSchedule()">Save schedule</button>
+            <button class="btn" onclick="closeSchedForm()">Cancel</button>
+            <span id="sf-status" style="font-size:13px;color:var(--muted);align-self:center"></span>
+          </div>
+        </div>
+        <div id="health-sched-table"><div class="loading">Loading...</div></div>
+      </div>
       <div id="abbrev-health"></div>
+    </div>
+
+    <!-- Medicines page — content rendered by health_meds.js -->
+    <div class="page" id="page-medicines">
+      <div class="page-hdr">
+        <div><h1>Medicines</h1><div class="last-updated" id="med-updated"></div></div>
+        <button class="refresh-btn" onclick="loadMedicinesPage()">&#x21BB; Refresh</button>
+      </div>
+      <div id="med-content"><div class="loading">Loading...</div></div>
     </div>
 
     <!-- Breeding page -->

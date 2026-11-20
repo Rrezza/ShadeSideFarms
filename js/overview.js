@@ -91,6 +91,8 @@ async function loadOverviewPage() {
     }
 
     renderOverview();
+    // Medicine reorder banner loads on its own so a failure never blocks the plot cards
+    loadOverviewMedAlerts();
 
     var updEl = document.getElementById('ov-updated');
     if (updEl) updEl.textContent =
@@ -99,6 +101,33 @@ async function loadOverviewPage() {
     if (loadingEl) loadingEl.innerHTML =
       '<div style="padding:22px;color:var(--red)"><strong>Error loading overview:</strong> ' + err.message + '</div>';
     console.error('loadOverviewPage failed:', err);
+  }
+}
+
+// ---- Medicine reorder banner ----
+// Shows medicines short for scheduled rounds due soon, or below their minimum
+// stock. Hidden entirely when nothing needs buying. Logic lives in health_meds.js.
+async function loadOverviewMedAlerts() {
+  var el = document.getElementById('ov-med-alerts');
+  if (!el) return;
+  try {
+    await loadModule('health_meds');
+    var r = await Promise.all([
+      sbGet('scheduled_health_events', 'active=eq.true&medicine_id=not.is.null&select=*'),
+      medLoadData()
+    ]);
+    // Group/animal targets need the shared animal data; skip the look-ahead part if it failed
+    var alerts = medComputeAlerts(anSharedLoaded ? r[0] : []);
+    if (!alerts.length) { el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<div class="section">' +
+        '<div class="section-hdr"><h2>Medicines to buy</h2>' +
+        '<button class="btn btn-sm" onclick="goToPage(\'medicines\')">Open cabinet</button></div>' +
+        '<div style="padding:16px 22px">' + medAlertsHtml(alerts) + '</div>' +
+      '</div>';
+  } catch (err) {
+    console.warn('Overview: medicine alerts failed —', err.message);
+    el.innerHTML = '';
   }
 }
 

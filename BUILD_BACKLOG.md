@@ -127,9 +127,28 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Confirmed reuse, not yet fixed:** the same "swallow FK error via string-matching instead of a structured error code" pattern already flagged in `land.js` recurs in `setup_shared.js`'s `fkErrMsg()` — a third module with this gap now. `setup_fertilizers.js`'s `fertStockUnit()`/`fertPurchUnitLabel()` hardcode a single `'liquid'` special case (everything else assumed kg/bag) and `setup_inventory.js` reimplements the identical ternary inline instead of calling the shared function — works today only because all 4 non-liquid types happen to be solids. The generic inline-edit/patch/delete pattern is copy-pasted across 8+ registry files (`setup_species.js`, `setup_ingredients.js`, `setup_locations.js`, `setup_crops.js`, `setup_fertilizers.js`, `setup_workers.js`, `setup_tools.js`, `setup_harvest_destinations.js`) instead of one shared helper each.
 - Source: scoped code review, 2026-09-19.
 
+### 13. Health event type `mortality` isn't in the database enum — logging a death fails partway
+- **Status:** Confirmed, not fixed (found 2026-11-20 while building the medicine cabinet — flagging per house rule).
+- **Problem:** the Health form offers "Mortality" as an event type, but `health_event_enum` only has vaccination/deworming/treatment/observation/injury. `submitHealthEvent()` writes the `animal_mortality` row, marks the animal `deceased` and closes its group membership *before* inserting the health event — so the final insert fails, leaving the animal marked dead with an error message and no health-log entry.
+- **Fix options:** add `mortality` to the enum (one-line migration), or stop writing a health event for mortality at all (the `animal_mortality` table already records it). Needs your call.
+
+### 14. Farm-wide inventory / purchasing system
+- **Status:** Future — agreed direction 2026-11-20, not designed yet.
+- **Idea:** one purchasing + stock system across all farm items — medicines, fuel, fertilizer, tools, feed ingredients, seeds — instead of today's separate per-module purchase tables.
+- **Groundwork:** the medicine cabinet (`medicines` + `medicine_movements`) was deliberately built in the item-registry + movement-ledger shape such a system would use, so it can fold in with a mechanical migration. Fertilizers, ingredients and seeds each have their own purchase tables and pages today — migrating those is the real work.
+
+### 15. Medicine withdrawal periods
+- **Status:** Idea, not requested yet. A `withdrawal_days` field on `medicines` would let the app warn when a recently-treated animal isn't yet safe to sell for meat — relevant once the fattening cycle runs. Dose rows in `medicine_movements` already record which animal got what and when.
+
 ---
 
 ## Resolved — no code change needed
+
+### Medicine cabinet + reorder reminders — BUILT 2026-11-20
+- New Medicines page (`health_meds.js`), per-animal dose grid on the Health treatment form, Schedules manager on the Health page, "Medicines to buy" banner on Overview. See `CODEBASE.md`.
+- **Schema (migrations `medicine_inventory`, `health_events_allow_group_target`):** new `medicines` and `medicine_movements` tables; `medicine_id` on `animal_health_events` and `scheduled_health_events`; schedules' target rule relaxed to exactly one of animal/group/location (was animal-or-location only, so group schedules were impossible).
+- **Pre-existing bug fixed because it blocked this:** `animal_health_events.animal_id` was `NOT NULL`, so the Health form's "Group" target could never save. Now nullable with a check that an animal or a group is set.
+- **Verified:** with seeded test rows against live Supabase — stock maths, dose suggestions, look-ahead shortfall, Overview banner, cost auto-fill, and Cost & Sales P&L pickup. Form payloads were captured and replayed via SQL (the browser session was read-only, not signed in), so the signed-in click-through itself is untested. Test rows deleted.
 
 ### Gypsum / manure as fertilizer-registry entries (was gap #5 + part of item #2)
 - **Decision:** Gypsum and farmyard manure are modeled as `fertilizers` registry rows, not separate `amendment_applications`/`gypsum_applications` tables.

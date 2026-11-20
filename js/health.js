@@ -5,8 +5,11 @@
 // ============================================================
 
 // ---- Module state ----
-var healthScheds     = [];
+var healthScheds     = [];   // active schedules due within 14 days (Due panel + form link)
+var healthAllScheds  = [];   // every schedule, active and retired (Schedules table)
 var healthEvts       = [];
+var hfCostTouched    = false; // true once the user types a cost, so auto-costing stops overwriting it
+var schedEditId      = null;  // schedule being edited (null = adding)
 var breedingData     = [];
 var birthData        = [];
 var birthStep        = 1;
@@ -23,18 +26,26 @@ async function loadHealthPage() {
   if (logEl) logEl.innerHTML = '<div class="loading">Loading...</div>';
   try {
     if (!anSharedLoaded) await loadSharedAnimalData();
+    // Medicine helpers (stock, dose suggestions, costing) live in health_meds.js
+    await loadModule('health_meds');
     var due14 = new Date(); due14.setDate(due14.getDate() + 14);
     var due14s = due14.toISOString().slice(0, 10);
     var r = await Promise.all([
-      sbGet('scheduled_health_events',
-        'active=eq.true&next_due_date=lte.' + due14s + '&select=*&order=next_due_date'),
+      sbGet('scheduled_health_events', 'select=*&order=next_due_date'),
       sbGet('animal_health_events',
-        'select=*,animals(farm_id,name),workers(name)&order=date.desc&limit=300')
+        'select=*,animals(farm_id,name),workers(name)&order=date.desc&limit=300'),
+      medLoadData()
     ]);
-    healthScheds = r[0]; healthEvts = r[1];
+    // All schedules feed the Schedules table; only active ones due within 14 days feed the Due panel
+    healthAllScheds = r[0];
+    healthScheds = healthAllScheds.filter(function(s) {
+      return s.active && s.next_due_date && s.next_due_date <= due14s;
+    });
+    healthEvts = r[1];
     populateHealthForm();
     renderHealthDue();
     renderHealthLog();
+    renderSchedTable();
     document.getElementById('health-updated').textContent =
       'Updated ' + new Date().toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' });
     renderAbbrevKey('abbrev-health', ['BCS', 'PKR']);
@@ -68,6 +79,107 @@ function populateHealthForm() {
     healthScheds.map(function(s) {
       return '<option value="' + s.id + '">' + s.description + ' (due ' + fmtDate(s.next_due_date) + ')</option>';
     }).join('');
+
+  // Medicine selector: active cabinet medicines, plus a free-text fallback
+  document.getElementById('hf-med').innerHTML = hfMedOptionsHtml(true);
+  document.getElementById('hf-cost').value = '';
+  hfCostTouched = false;
+  onHfMedChange();
+}
+
+// <option> list of active medicines, labelled with purpose and current stock
+// so the right one is easy to pick. withOther adds the "not in cabinet" option.
+function hfMedOptionsHtml(withOther) {
+  return '<option value="">None</option>' +
+    medList.filter(function(m) { return m.active; }).map(function(m) {
+      return '<option value="' + m.id + '">' + medEsc(m.name) +
+        (m.purpose ? ' — ' + medEsc(m.purpose) : '') +
+        ' (' + medFmtStock(m, medStock(m.id)) + ')</option>';
+    }).join('') +
+    (withOther ? '<option value="other">Other — not in cabinet</option>' : '');
+}
+
+// Shows the free-text product/dose fields for "not in cabinet", otherwise the dose grid
+function onHfMedChange() {
+  var v = document.getElementById('hf-med').value;
+  document.getElementById('hf-free-wrap').style.display = v === 'other' ? 'grid' : 'none';
+  renderHfDoseGrid();
+}
+
+// The animals a treatment covers, based on the form's target selection
+function hfTargetAnimals() {
+  var t = document.getElementById('hf-target-type').value;
+  if (t === 'animal') {
+    var id = parseInt(document.getElementById('hf-animal').value);
+    return id ? anSharedAnimals.filter(function(a) { return a.id === id; }) : [];
+  }
+  var gid = parseInt(document.getElementById('hf-group').value);
+  return gid ? getGroupAnimals(gid) : [];
+}
+
+// Per-animal dose grid: one row per animal, pre-filled with the label-rate
+// suggestion from its latest weight. Each box is editable — the number entered
+// is what's actually deducted from stock.
+function renderHfDoseGrid() {
+  var wrap = document.getElementById('hf-dose-grid');
+  if (!wrap) return;
+  var medId = parseInt(document.getElementById('hf-med').value);
+  var med = medId ? medById(medId) : null;
+  if (!med) { wrap.innerHTML = ''; return; }
+  var animals = hfTargetAnimals();
+  if (!animals.length) {
+    wrap.innerHTML = '<div class="fc-hint" style="margin:0 0 12px">Select an animal or group to enter doses.</div>';
+    return;
+  }
+  var html = '<div style="margin:0 0 12px">' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dose per animal (' + med.stock_unit + ') &middot; label ' +
+      medFmtDoseRate(med) + ' &middot; pre-filled from latest weight, edit any you dosed differently, 0 = not dosed</div>' +
+    '<div style="overflow-x:auto"><table><thead><tr>' +
+    '<th>Animal</th><th class="right">Weight</th><th class="right">Suggested</th><th class="right">Dose given</th>' +
+    '</tr></thead><tbody>';
+  animals.forEach(function(a) {
+    var kg = medAnimalWeight(a.id);
+    var sug = medSuggestDose(med, a.id);
+    html += '<tr>' +
+      '<td style="font-weight:500">' + a.farm_id + (a.name ? ' <span style="color:var(--muted);font-weight:400">' + medEsc(a.name) + '</span>' : '') + '</td>' +
+      '<td class="mono right">' + (kg != null ? r1(kg) + ' kg' : '—') + '</td>' +
+      '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug) : '—') + '</td>' +
+      '<td class="right"><input type="number" class="hf-dose-input" data-animal="' + a.id + '" min="0" step="any" ' +
+        'style="width:90px;text-align:right" value="' + (sug != null ? sug : '') + '" oninput="updateHfDoseTotal()"></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>' +
+    '<div id="hf-dose-total" class="fc-derived" style="margin-top:8px"></div></div>';
+  wrap.innerHTML = html;
+  updateHfDoseTotal();
+}
+
+// Reads the dose grid: [{ animal_id, qty }] for every row with a dose above 0
+function hfReadDoses() {
+  var out = [];
+  document.querySelectorAll('.hf-dose-input').forEach(function(inp) {
+    var q = parseFloat(inp.value);
+    if (q > 0) out.push({ animal_id: parseInt(inp.dataset.animal), qty: q });
+  });
+  return out;
+}
+
+// Totals the grid, compares with stock, and fills the cost field from the
+// latest purchase price (unless the user has typed their own cost)
+function updateHfDoseTotal() {
+  var el = document.getElementById('hf-dose-total');
+  var med = medById(parseInt(document.getElementById('hf-med').value));
+  if (!el || !med) return;
+  var doses = hfReadDoses();
+  var total = doses.reduce(function(s, d) { return s + d.qty; }, 0);
+  var stock = medStock(med.id);
+  var cpu = medCostPerUnit(med.id);
+  var cost = cpu != null ? total * cpu : null;
+  el.innerHTML = 'Total ' + medFmtUnits(med, total) + ' for ' + doses.length + ' animal' + (doses.length !== 1 ? 's' : '') +
+    ' &middot; in stock ' + medFmtStock(med, stock) +
+    (total > stock ? ' <span style="color:var(--red)">&middot; more than the app shows in stock</span>' : '') +
+    (cost != null ? ' &middot; cost ' + pkr(cost) : ' &middot; no purchase price yet');
+  if (!hfCostTouched) document.getElementById('hf-cost').value = cost != null ? Math.round(cost) : '';
 }
 
 function toggleHealthForm() {
@@ -80,6 +192,7 @@ function onHfTargetChange() {
   document.getElementById('hf-group-wrap').style.display  = t === 'group'  ? 'flex' : 'none';
   var mortFields = document.getElementById('hf-mortality-fields');
   if (mortFields) mortFields.style.display = 'none';
+  renderHfDoseGrid();
 }
 
 function onHfEventTypeChange() {
@@ -105,15 +218,13 @@ function renderHealthDue() {
     var daysLabel = diff < 0
       ? Math.abs(diff) + ' day' + (Math.abs(diff) !== 1 ? 's' : '') + ' overdue'
       : (diff === 0 ? 'Due today' : diff + ' day' + (diff !== 1 ? 's' : '') + ' away');
-    var target = s.animal_id ? getAnimalDisplayName(s.animal_id)
-               : (s.group_id ? getGroupName(s.group_id)
-               : (s.location_id ? getPenName(s.location_id) : '\u2014'));
-    var targetLabel = s.animal_id ? 'Animal' : (s.group_id ? 'Group' : 'Pen');
+    var target = schedTargetName(s);
+    var targetLabel = s.animal_id ? 'Animal' : (s.group_id ? 'Group' : 'Location');
     html += '<div class="due-card ' + cls + '">' +
       '<div class="due-card-top"><span class="due-card-title">' + s.description + '</span>' +
       '<span class="due-card-days ' + cls + '">' + daysLabel + '</span></div>' +
       '<div class="due-card-meta">' + (s.event_type || '') + ' &middot; ' + targetLabel + ': ' + target +
-      (s.product ? ' &middot; ' + s.product : '') + '</div>';
+      (schedProductLabel(s) ? ' &middot; ' + medEsc(schedProductLabel(s)) : '') + '</div>';
     if (s.dose) html += '<div class="due-card-meta">Dose: ' + s.dose + '</div>';
     html += '<div style="margin-top:8px"><button class="btn btn-sm" onclick="preFillHealthForm(' + s.id + ')">Log this event</button></div>';
     html += '</div>';
@@ -127,8 +238,15 @@ function preFillHealthForm(schedId) {
   if (!sched) return;
   document.getElementById('hf-event-type').value = sched.event_type || 'vaccination';
   document.getElementById('hf-sched').value = schedId;
-  if (sched.product) document.getElementById('hf-product').value = sched.product;
-  if (sched.dose)    document.getElementById('hf-dose').value    = sched.dose;
+  if (sched.description) document.getElementById('hf-desc').value = sched.description;
+  if (sched.medicine_id && medById(sched.medicine_id)) {
+    document.getElementById('hf-med').value = sched.medicine_id;
+  } else if (sched.product) {
+    document.getElementById('hf-med').value = 'other';
+    document.getElementById('hf-product').value = sched.product;
+    if (sched.dose) document.getElementById('hf-dose').value = sched.dose;
+  }
+  onHfMedChange();
   if (sched.animal_id) {
     document.getElementById('hf-target-type').value = 'animal';
     document.getElementById('hf-animal').value = sched.animal_id;
@@ -208,8 +326,22 @@ async function submitHealthEvent() {
     };
     if (animalId) d.animal_id = parseInt(animalId);
     if (groupId)  d.group_id  = parseInt(groupId);
-    var prod = document.getElementById('hf-product').value.trim(); if (prod) d.product_used = prod;
-    var dose = document.getElementById('hf-dose').value.trim();    if (dose) d.dose = dose;
+    // Medicine: a cabinet medicine is recorded by id (with a readable summary in
+    // product_used/dose for the log); "other" keeps the old free-text fields
+    var medSel = document.getElementById('hf-med').value;
+    var med = (medSel && medSel !== 'other') ? medById(parseInt(medSel)) : null;
+    var doses = [];
+    if (med) {
+      doses = hfReadDoses();
+      if (!doses.length) throw new Error('Enter a dose for at least one animal, or set Medicine to None.');
+      var doseTotal = doses.reduce(function(s, x) { return s + x.qty; }, 0);
+      d.medicine_id  = med.id;
+      d.product_used = med.name;
+      d.dose = medFmtUnits(med, doseTotal) + (doses.length > 1 ? ' total, ' + doses.length + ' animals' : '');
+    } else if (medSel === 'other') {
+      var prod = document.getElementById('hf-product').value.trim(); if (prod) d.product_used = prod;
+      var dose = document.getElementById('hf-dose').value.trim();    if (dose) d.dose = dose;
+    }
     var cost = document.getElementById('hf-cost').value;           if (cost) d.cost_pkr = parseFloat(cost);
     var fu   = document.getElementById('hf-followup').value;       if (fu)   d.follow_up_date = fu;
 
@@ -235,7 +367,27 @@ async function submitHealthEvent() {
       }
     }
 
-    await sbInsert('animal_health_events', [d]);
+    var saved = await sbInsert('animal_health_events', [d]);
+    if (!saved || !saved.length) throw new Error('The health event was not returned by the database — check it saved before retrying.');
+
+    // One stock movement per dosed animal, valued at the latest purchase price.
+    // If this fails, remove the event so stock and the log never disagree.
+    if (med) {
+      var cpu = medCostPerUnit(med.id);
+      var moves = doses.map(function(x) {
+        return {
+          medicine_id: med.id, date: date, movement_type: 'dose', quantity: -x.qty,
+          cost_pkr: cpu != null ? r2(x.qty * cpu) : null,
+          health_event_id: saved[0].id, animal_id: x.animal_id
+        };
+      });
+      try {
+        await sbInsert('medicine_movements', moves);
+      } catch(moveErr) {
+        await sbDelete('animal_health_events', saved[0].id).catch(function() {});
+        throw new Error('Could not record the doses, so the event was not saved: ' + moveErr.message);
+      }
+    }
 
     // Update scheduled event if linked
     var schedId = document.getElementById('hf-sched').value;
@@ -259,6 +411,157 @@ async function submitHealthEvent() {
   } catch(err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
+}
+
+// ============================================================
+// SCHEDULES (recurring rounds — feed the Due panel and the
+// medicine reorder look-ahead in health_meds.js)
+// ============================================================
+
+// What a schedule administers: the cabinet medicine's name, else free-text product
+function schedProductLabel(s) {
+  var m = s.medicine_id ? medById(s.medicine_id) : null;
+  return m ? m.name : (s.product || '');
+}
+
+function schedTargetName(s) {
+  if (s.animal_id)   return getAnimalDisplayName(s.animal_id);
+  if (s.group_id)    return getGroupName(s.group_id);
+  if (s.location_id) return getLocationName(s.location_id);
+  return '—';
+}
+
+function renderSchedTable() {
+  var tbl = document.getElementById('health-sched-table');
+  if (!healthAllScheds.length) {
+    tbl.innerHTML = '<div class="empty">No schedules yet. Use + Add schedule to set up a recurring round.</div>';
+    return;
+  }
+  // Active first, then by next due date; retired at the bottom
+  var rows = healthAllScheds.slice().sort(function(a, b) {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    return (a.next_due_date || '9999').localeCompare(b.next_due_date || '9999');
+  });
+  var colCount = 8;
+  var html = '<div style="overflow-x:auto"><table><thead><tr>' +
+    '<th>Description</th><th>Type</th><th>Target</th><th>Medicine</th>' +
+    '<th class="right">Every</th><th>Last done</th><th>Next due</th><th>Actions</th>' +
+    '</tr></thead><tbody>';
+  var retiredHeader = false;
+  rows.forEach(function(s) {
+    if (!s.active && !retiredHeader) {
+      html += '<tr><td colspan="' + colCount + '" style="padding:6px 14px;background:var(--bg);' +
+        'font-size:11px;font-weight:500;color:var(--muted);letter-spacing:0.05em;' +
+        'border-top:2px solid var(--border);text-transform:uppercase">Retired schedules</td></tr>';
+      retiredHeader = true;
+    }
+    html += '<tr' + (!s.active ? ' style="opacity:0.5"' : '') + '>' +
+      '<td style="font-weight:500">' + medEsc(s.description) + '</td>' +
+      '<td class="muted-cell">' + (s.event_type || '—') + '</td>' +
+      '<td>' + medEsc(schedTargetName(s)) + '</td>' +
+      '<td class="muted-cell">' + (schedProductLabel(s) ? medEsc(schedProductLabel(s)) : '—') + '</td>' +
+      '<td class="mono right">' + (s.interval_days ? s.interval_days + ' d' : 'once') + '</td>' +
+      '<td class="mono">' + fmtDate(s.last_done_date) + '</td>' +
+      '<td class="mono">' + fmtDate(s.next_due_date) + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" onclick="openSchedForm(' + s.id + ')">Edit</button> ' +
+        '<button class="btn btn-sm" onclick="setSchedActive(' + s.id + ',' + !s.active + ')">' + (s.active ? 'Retire' : 'Reactivate') + '</button> ' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteSchedule(' + s.id + ')">Delete</button>' +
+      '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  tbl.innerHTML = html;
+}
+
+// Opens the add/edit form; id = null for a new schedule
+function openSchedForm(id) {
+  schedEditId = id;
+  var s = id !== null ? healthAllScheds.find(function(x) { return x.id === id; }) : null;
+  document.getElementById('sf-title').textContent = s ? 'Edit schedule' : 'New schedule';
+  document.getElementById('sf-group').innerHTML = '<option value="">Select group</option>' +
+    anSharedGroups.filter(function(g) { return g.status === 'active'; }).map(function(g) {
+      return '<option value="' + g.id + '">' + medEsc(g.name) + '</option>';
+    }).join('');
+  document.getElementById('sf-animal').innerHTML = '<option value="">Select animal</option>' +
+    anSharedAnimals.filter(function(a) { return a.status === 'active' || a.status === 'quarantine'; }).map(function(a) {
+      return '<option value="' + a.id + '">' + a.farm_id + (a.name ? ' (' + medEsc(a.name) + ')' : '') + '</option>';
+    }).join('');
+  document.getElementById('sf-med').innerHTML = hfMedOptionsHtml(false);
+
+  document.getElementById('sf-desc').value        = s ? s.description || '' : '';
+  document.getElementById('sf-event-type').value  = s ? s.event_type || 'deworming' : 'deworming';
+  document.getElementById('sf-target-type').value = s && s.animal_id ? 'animal' : 'group';
+  document.getElementById('sf-group').value       = s && s.group_id ? s.group_id : '';
+  document.getElementById('sf-animal').value      = s && s.animal_id ? s.animal_id : '';
+  document.getElementById('sf-med').value         = s && s.medicine_id ? s.medicine_id : '';
+  document.getElementById('sf-product').value     = s ? s.product || '' : '';
+  document.getElementById('sf-interval').value    = s && s.interval_days ? s.interval_days : '';
+  document.getElementById('sf-next').value        = s ? s.next_due_date || '' : todayISO();
+  document.getElementById('sf-notes').value       = s ? s.notes || '' : '';
+  document.getElementById('sf-status').textContent = '';
+  onSfTargetChange();
+  var box = document.getElementById('sched-form');
+  box.classList.add('open');
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeSchedForm() {
+  schedEditId = null;
+  document.getElementById('sched-form').classList.remove('open');
+}
+
+function onSfTargetChange() {
+  var t = document.getElementById('sf-target-type').value;
+  document.getElementById('sf-group-wrap').style.display  = t === 'group'  ? 'flex' : 'none';
+  document.getElementById('sf-animal-wrap').style.display = t === 'animal' ? 'flex' : 'none';
+}
+
+async function submitSchedule() {
+  var statusEl = document.getElementById('sf-status');
+  statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--muted)';
+  try {
+    var t = document.getElementById('sf-target-type').value;
+    var groupId  = parseInt(document.getElementById('sf-group').value)  || null;
+    var animalId = parseInt(document.getElementById('sf-animal').value) || null;
+    var interval = parseInt(document.getElementById('sf-interval').value) || null;
+    var d = {
+      description:   document.getElementById('sf-desc').value.trim(),
+      event_type:    document.getElementById('sf-event-type').value,
+      // Exactly one target is set; the other is cleared (DB enforces one target)
+      group_id:      t === 'group'  ? groupId  : null,
+      animal_id:     t === 'animal' ? animalId : null,
+      location_id:   null,
+      medicine_id:   parseInt(document.getElementById('sf-med').value) || null,
+      product:       document.getElementById('sf-product').value.trim() || null,
+      interval_days: interval,
+      next_due_date: document.getElementById('sf-next').value || null,
+      notes:         document.getElementById('sf-notes').value.trim() || null
+    };
+    if (!d.description) throw new Error('Description is required.');
+    if (!d.group_id && !d.animal_id) throw new Error('Select a ' + t + '.');
+    if (!d.next_due_date) throw new Error('Next due date is required.');
+    if (schedEditId !== null) await sbPatch('scheduled_health_events', schedEditId, d);
+    else await sbInsert('scheduled_health_events', [Object.assign({ active: true }, d)]);
+    closeSchedForm();
+    await loadHealthPage();
+  } catch(err) {
+    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
+  }
+}
+
+async function setSchedActive(id, active) {
+  try {
+    await sbPatch('scheduled_health_events', id, { active: active });
+    await loadHealthPage();
+  } catch(err) { alert('Error: ' + err.message); }
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Delete this schedule? Logged health events are kept. This cannot be undone.')) return;
+  try {
+    await sbDelete('scheduled_health_events', id);
+    await loadHealthPage();
+  } catch(err) { alert('Error: ' + err.message); }
 }
 
 // ============================================================
