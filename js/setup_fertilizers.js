@@ -8,7 +8,8 @@
 //   2. Purchases — what you bought, when, from where, at what cost.
 //                  Qty stored as purchase units (bags / containers).
 //                  kg/L total and cost/kg or L derived on display.
-//   3. Inventory — derived stock view in setup_inventory.js.
+//   3. Inventory — derived stock view on the Land page Fertilizer tab
+//                  (land.js), reached from the Inventory › Fertilizers menu item.
 //
 // Type drives unit system:
 //   liquid  → purchase unit = container, stock unit = L

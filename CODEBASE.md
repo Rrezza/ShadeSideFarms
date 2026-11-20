@@ -17,6 +17,11 @@ Standalone single-page mobile app for farmhands, separate from `Index.html` — 
 
 ---
 
+## Sidebar layout (2026-11-20)
+**Setup** = adding/editing the things themselves (plots, workers, locations, ingredients, species, crops, harvest destinations, fertilizers, medicines, tools). **Inventory** (sits above Feed) = stock levels and buying, one page per item type: Medicines (`health_meds.js`), Fertilizers (the Land page's `fert` tab via `navLandTab`), Feed Ingredients (`fd_inventory.js`), Seeds (`fd_seeds.js`). **Animals › Health** = administering doses and managing schedules. The old Setup › Inventory page (`setup_inventory.js`, fertilizer stock only — a duplicate of Land's) was removed.
+
+---
+
 ## Animal Module (`an_*`)
 
 ### `an_helpers.js`
@@ -73,7 +78,7 @@ Seed inventory tracking (purchases, harvest allocations, adjustments). Stock cal
 Health events, breeding, births, cost, and sales tracking. Includes scheduled events with due dates, an event log, a Schedules manager (create/edit/retire recurring rounds targeting a group or animal, optionally linked to a cabinet medicine — `renderSchedTable()`, `openSchedForm()`, `submitSchedule()`), and step-through wizards for breeding and births. The treatment form picks a medicine from the cabinet (or "Other — not in cabinet" free text) and shows a per-animal dose grid (`renderHfDoseGrid()`, pre-filled from label rate × latest weight); saving writes one `animal_health_events` row (group treatments carry `group_id`, no `animal_id`) plus one `medicine_movements` dose row per animal, and auto-fills the event cost from the latest purchase price unless typed over (`hfCostTouched`). Lazy-loads `health_meds.js` for its helpers. Key globals: `healthScheds` (active, due ≤14 days), `healthAllScheds`, `healthEvts`, `schedEditId`, `breedingData`, `birthData`, `birthStep`, `csGroupId`. Key function: `loadHealthPage()`. Reads: `scheduled_health_events`, `animal_health_events`, `medicines`, `medicine_movements`, `animals`, `workers`.
 
 ### `health_meds.js`
-Medicines page (Animals nav) — the medicine cabinet. Registry (`medicines`: name, active ingredient, purpose, form, stock unit ml/tablet/g/dose, pack type + size, label dose per kg or per head, minimum stock) and a stock ledger (`medicine_movements`: purchase / dose / adjustment; stock = sum of quantity). Purchases record packs, cost and an information-only expiry date; cabinet counts store the difference vs. the ledger as an adjustment with a reason. Also the shared helpers used by `health.js` and `overview.js`: `medLoadData()`, `medStock()`, `medCostPerUnit()` (latest purchase), `medSuggestDose()` (label rate × latest/entry weight, rounded to 0.5), `medFmtStock()` ("2 vials + 40 ml"), and `medComputeAlerts()` / `medAlertsHtml()` — reorder alerts for scheduled rounds due within `MED_LOOKAHEAD_DAYS` (30) whose estimated need exceeds stock, plus anything below minimum. Brands are not pooled by active ingredient (deliberate — each schedule names one exact medicine). Key globals: `medList`, `medMovements`, `medEditId`, `medActionId`, `medExpanded`. Key function: `loadMedicinesPage()`.
+The medicine cabinet, serving two pages: **Setup › Medicines** (`loadMedSetupPage()` — the list itself: add/edit/retire/delete, `renderMedSetupTable()`) and **Inventory › Medicines** (`loadMedicinesPage()` — reorder alerts, stock table, Buy/Count forms, per-medicine history). Registry (`medicines`: name, active ingredient, purpose, form, stock unit ml/tablet/g/dose, pack type + size, label dose per kg or per head, minimum stock) and a stock ledger (`medicine_movements`: purchase / dose / adjustment; stock = sum of quantity). Purchases record packs, cost and an information-only expiry date; cabinet counts store the difference vs. the ledger as an adjustment with a reason. Also the shared helpers used by `health.js` and `overview.js`: `medLoadData()`, `medStock()`, `medCostPerUnit()` (latest purchase), `medSuggestDose()` (label rate × latest/entry weight, rounded to 0.5), `medFmtStock()` ("2 vials + 40 ml"), and `medComputeAlerts()` / `medAlertsHtml()` — reorder alerts for scheduled rounds due within `MED_LOOKAHEAD_DAYS` (30) whose estimated need exceeds stock, plus anything below minimum. Brands are not pooled by active ingredient (deliberate — each schedule names one exact medicine). Key globals: `medList`, `medMovements`, `medEditId`, `medActionId`, `medExpanded`. Key functions: `loadMedicinesPage()`, `loadMedSetupPage()`, `medGroupedRows()` (shared by both tables).
 
 ---
 
@@ -119,9 +124,6 @@ Harvest destinations registry. Rows here drive the destination dropdown in the h
 
 ### `setup_fertilizers.js`
 Registry (nutrient profile, purchase unit, reorder threshold) and derived stock display. Liquid fertilizers track L/container; solids track kg/bag. Key globals: `fertData`, `fertNutrientsId`. Key functions: `fertStockUnit()`, `fertPurchUnitLabel()`, `loadFertilizersPage()`. Reads: `fertilizers`. Purchase logging itself lives in `land.js` (`openLandPurchModal()`) — this file's own purchase modal was dead code, removed 2026-09-19.
-
-### `setup_inventory.js`
-Inventory page showing fertilizer stock only (feed ingredient stock and its own stock-adjustment modal both live in `fd_inventory.js` — this file's ingredient-stock computation and stock-adjustment modal were dead code, removed 2026-09-19). Stock = purchases − applications. Key globals: `invFertStock`, `invFertList`. Key function: `loadInventoryPage()`. Reads: `fertilizers`, `fertilizer_purchases`, `fertilizer_applications`.
 
 ### `setup_workers.js`
 Workers registry (permanent / part-time / day labour) with daily rates. Inline edit, active filtering. Key global: `workersData`. Key functions: `loadWorkersPage()`, `renderWorkersTable()`. Reads/writes: `workers`.

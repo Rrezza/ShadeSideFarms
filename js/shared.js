@@ -162,6 +162,7 @@ var PAGE_MAP = {
   rationplans:    { module: 'fd_ration_plans', init: 'loadRationPlansPage' },
   health:         { module: 'health',  init: 'loadHealthPage' },
   medicines:      { module: 'health_meds', init: 'loadMedicinesPage' },
+  medsetup:       { module: 'health_meds', init: 'loadMedSetupPage' },
   breeding:       { module: 'health',  init: 'loadBreedingPage' },
   costsales:      { module: 'health',  init: 'loadCostSalesPage' },
   // Overview (landing page)
@@ -180,7 +181,6 @@ var PAGE_MAP = {
   crops:          { module: 'setup_crops',       init: 'loadCropsPage' },
   fertilizers:    { module: 'setup_fertilizers',         init: 'loadFertilizersPage' },
   tools:          { module: 'setup_tools',               init: 'loadToolsPage' },
-  inventory:      { module: 'setup_inventory',           init: 'loadInventoryPage' },
   harvestdest:    { module: 'setup_harvest_destinations', init: 'loadHarvestDestinationsPage' }
 };
 

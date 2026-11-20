@@ -137,6 +137,11 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Idea:** one purchasing + stock system across all farm items — medicines, fuel, fertilizer, tools, feed ingredients, seeds — instead of today's separate per-module purchase tables.
 - **Groundwork:** the medicine cabinet (`medicines` + `medicine_movements`) was deliberately built in the item-registry + movement-ledger shape such a system would use, so it can fold in with a mechanical migration. Fertilizers, ingredients and seeds each have their own purchase tables and pages today — migrating those is the real work.
 
+### 16. Land page — `crop_observations.notes` column doesn't exist
+- **Status:** Confirmed, not fixed (found 2026-11-20 while testing the Inventory menu — flagging per house rule).
+- **Problem:** loading the Land page requests `crop_observations?select=...,notes,...`, which 400s with `column crop_observations.notes does not exist` (the real column is `note`, singular — `overview.js` already uses `note`). Crop-level observations therefore don't load on the Land page.
+- **Fix:** change `notes` → `note` in that `land.js` query (and anywhere it reads `.notes` off those rows). Small; needs your go-ahead.
+
 ### 15. Medicine withdrawal periods
 - **Status:** Idea, not requested yet. A `withdrawal_days` field on `medicines` would let the app warn when a recently-treated animal isn't yet safe to sell for meat — relevant once the fattening cycle runs. Dose rows in `medicine_movements` already record which animal got what and when.
 
@@ -145,6 +150,7 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 ## Resolved — no code change needed
 
 ### Medicine cabinet + reorder reminders — BUILT 2026-11-20
+- **Reorganised same day (r83):** split into Setup › Medicines (the list) and Inventory › Medicines (stock, buying, counts, reminders). New sidebar **Inventory** section above Feed now also holds Fertilizers, Feed Ingredients and Seeds (menu moves only — pages unchanged). Old Setup › Inventory page and `setup_inventory.js` removed (duplicated Land's fertilizer stock).
 - New Medicines page (`health_meds.js`), per-animal dose grid on the Health treatment form, Schedules manager on the Health page, "Medicines to buy" banner on Overview. See `CODEBASE.md`.
 - **Schema (migrations `medicine_inventory`, `health_events_allow_group_target`):** new `medicines` and `medicine_movements` tables; `medicine_id` on `animal_health_events` and `scheduled_health_events`; schedules' target rule relaxed to exactly one of animal/group/location (was animal-or-location only, so group schedules were impossible).
 - **Pre-existing bug fixed because it blocked this:** `animal_health_events.animal_id` was `NOT NULL`, so the Health form's "Group" target could never save. Now nullable with a check that an animal or a group is set.

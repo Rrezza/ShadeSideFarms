@@ -1,7 +1,8 @@
 // ============================================================
 // health_meds.js — Medicine cabinet: registry, stock ledger,
 // purchases, cabinet counts, dose suggestions and reorder alerts.
-// Page: Medicines (Animals nav section)
+// Pages: Setup › Medicines (the list: add / edit / retire)
+//        Inventory › Medicines (stock, buy, count, history, reminders)
 // Also loaded on demand by health.js (treatment form dose grid)
 // and overview.js (reorder banner) for its shared helpers.
 // Depends on: shared.js (sbGet/sbInsert/sbPatch/sbDelete, anShared* animal data)
@@ -219,7 +220,7 @@ function medAlertsHtml(alerts) {
 }
 
 // ============================================================
-// MEDICINES PAGE
+// INVENTORY › MEDICINES (stock levels, buying, counting)
 // ============================================================
 async function loadMedicinesPage() {
   var el = document.getElementById('med-content');
@@ -241,7 +242,7 @@ async function loadMedicinesPage() {
 }
 var medPageScheds = [];  // active schedules, for the alert panel on this page
 
-// Lays out the page shell once per render: alerts, add/edit form, purchase/count form, table
+// Lays out the page: reorder alerts, the purchase/count form slot, and the stock table
 function renderMedicinesPage() {
   var alerts = medComputeAlerts(medPageScheds);
   var html =
@@ -254,91 +255,83 @@ function renderMedicinesPage() {
       '</div>' +
     '</div>' +
     '<div class="section">' +
-      '<div class="section-hdr"><h2>Medicine cabinet</h2>' +
-      '<button class="btn btn-sm btn-primary" onclick="openMedForm(null)">+ Add medicine</button></div>' +
-      '<div id="med-form-wrap"></div>' +
+      '<div class="section-hdr"><h2>Stock</h2>' +
+      // Adding/editing medicines lives in Setup; link there so it's one click away
+      '<button class="btn btn-sm" onclick="goToPage(\'medsetup\')">Manage medicine list</button></div>' +
       '<div id="med-action-wrap"></div>' +
       '<div id="med-table"></div>' +
     '</div>';
   document.getElementById('med-content').innerHTML = html;
-  if (medEditId !== null || medFormOpen) renderMedForm();
   if (medActionId !== null) renderMedActionForm();
   renderMedTable();
 }
 
-// ---- Medicines table: active grouped by active ingredient, retired at the bottom ----
-function renderMedTable() {
-  var tbl = document.getElementById('med-table');
-  if (!medList.length) {
-    tbl.innerHTML = '<div class="empty">No medicines yet. Use + Add medicine to stock the cabinet.</div>';
-    return;
-  }
-  var rows = medList.slice().sort(function(a, b) {
+// Groups active medicines by active ingredient so brands of the same drug sit together.
+// Returns [{ label, meds: [...] }] in display order; retired medicines go last.
+function medGroupedRows(includeRetired) {
+  var rows = medList.filter(function(m) { return includeRetired || m.active; }).sort(function(a, b) {
     if (a.active !== b.active) return a.active ? -1 : 1;
     var ai = (a.active_ingredient || '￿').toLowerCase(), bi = (b.active_ingredient || '￿').toLowerCase();
     if (ai !== bi) return ai < bi ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
-  var colCount = 8;
+  var groups = [];
+  rows.forEach(function(m) {
+    var label = !m.active ? 'Retired medicines' : (m.active_ingredient || 'No active ingredient recorded');
+    var last = groups[groups.length - 1];
+    if (!last || last.label.toLowerCase() !== label.toLowerCase()) groups.push({ label: label, meds: [m] });
+    else last.meds.push(m);
+  });
+  return groups;
+}
+
+// Separator row used by both medicine tables
+function medGroupRow(label, colCount) {
+  return '<tr style="background:var(--bg)"><td colspan="' + colCount + '" style="' +
+    'padding:6px 16px;font-size:11px;font-weight:600;color:var(--muted);' +
+    'text-transform:uppercase;letter-spacing:0.06em;border-top:2px solid var(--border)">' +
+    medEsc(label) + '</td></tr>';
+}
+
+// ---- Stock table: active medicines only ----
+function renderMedTable() {
+  var tbl = document.getElementById('med-table');
+  if (!medList.some(function(m) { return m.active; })) {
+    tbl.innerHTML = '<div class="empty">No medicines yet. Add them in Setup › Medicines, then log purchases here.</div>';
+    return;
+  }
+  var colCount = 7;
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Medicine</th><th>Used for</th><th>Pack</th><th>Label dose</th>' +
+    '<th>Medicine</th><th>Used for</th><th>Pack</th>' +
     '<th class="right">In stock</th><th class="right">Cost / unit</th><th>Latest expiry</th><th>Actions</th>' +
     '</tr></thead><tbody>';
-  var lastGroup = null, retiredHeader = false;
-  rows.forEach(function(m) {
-    // Section separators: one per active ingredient, then a single "Retired" block
-    if (!m.active && !retiredHeader) {
-      html += '<tr><td colspan="' + colCount + '" style="padding:6px 14px;background:var(--bg);' +
-        'font-size:11px;font-weight:500;color:var(--muted);letter-spacing:0.05em;' +
-        'border-top:2px solid var(--border);text-transform:uppercase">Retired medicines</td></tr>';
-      retiredHeader = true;
-    } else if (m.active) {
-      var grp = m.active_ingredient || 'No active ingredient recorded';
-      if (grp.toLowerCase() !== (lastGroup || '').toLowerCase()) {
-        lastGroup = grp;
-        html += '<tr style="background:var(--bg)"><td colspan="' + colCount + '" style="' +
-          'padding:6px 16px;font-size:11px;font-weight:600;color:var(--muted);' +
-          'text-transform:uppercase;letter-spacing:0.06em;border-top:2px solid var(--border)">' +
-          medEsc(grp) + '</td></tr>';
+  medGroupedRows(false).forEach(function(g) {
+    html += medGroupRow(g.label, colCount);
+    g.meds.forEach(function(m) {
+      var stock = medStock(m.id);
+      var low = m.min_stock != null && stock < Number(m.min_stock);
+      var cpu = medCostPerUnit(m.id);
+      var expiry = medLatestExpiry(m.id);
+      html += '<tr>' +
+        '<td style="font-weight:500">' + medEsc(m.name) + '</td>' +
+        '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
+        '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
+        '<td class="mono right"' + (low ? ' style="color:var(--red);font-weight:500"' : '') + '>' +
+          medFmtStock(m, stock) +
+          (m.min_stock != null ? '<div style="font-size:11px;color:var(--muted);font-weight:400">min ' + medFmtUnits(m, Number(m.min_stock)) + '</div>' : '') +
+        '</td>' +
+        '<td class="mono right">' + (cpu != null ? 'PKR ' + r2(cpu).toLocaleString() : '—') + '</td>' +
+        '<td class="muted-cell">' + (expiry ? fmtDate(expiry) : '—') + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm btn-primary" onclick="openMedAction(' + m.id + ',\'purchase\')">Buy</button> ' +
+          '<button class="btn btn-sm" onclick="openMedAction(' + m.id + ',\'count\')">Count</button> ' +
+          '<button class="btn btn-sm" onclick="toggleMedHistory(' + m.id + ')">' + (medExpanded.has(m.id) ? 'Hide' : 'History') + '</button>' +
+        '</td></tr>';
+      if (medExpanded.has(m.id)) {
+        html += '<tr class="grp-expand-row"><td colspan="' + colCount + '" style="padding:0">' +
+          renderMedHistory(m) + '</td></tr>';
       }
-    }
-
-    var stock = medStock(m.id);
-    var low = m.active && m.min_stock != null && stock < Number(m.min_stock);
-    var cpu = medCostPerUnit(m.id);
-    var expiry = medLatestExpiry(m.id);
-    var hasMoves = medMovements.some(function(mv) { return mv.medicine_id === m.id; });
-
-    html += '<tr' + (!m.active ? ' style="opacity:0.5"' : '') + '>' +
-      '<td style="font-weight:500">' + medEsc(m.name) +
-        '<div style="font-size:11px;color:var(--muted);font-weight:400">' + medEsc(m.form) + '</div></td>' +
-      '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
-      '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
-      '<td class="muted-cell">' + medFmtDoseRate(m) + '</td>' +
-      '<td class="mono right"' + (low ? ' style="color:var(--red);font-weight:500"' : '') + '>' +
-        medFmtStock(m, stock) +
-        (m.min_stock != null ? '<div style="font-size:11px;color:var(--muted);font-weight:400">min ' + medFmtUnits(m, Number(m.min_stock)) + '</div>' : '') +
-      '</td>' +
-      '<td class="mono right">' + (cpu != null ? 'PKR ' + r2(cpu).toLocaleString() : '—') + '</td>' +
-      '<td class="muted-cell">' + (expiry ? fmtDate(expiry) : '—') + '</td>' +
-      '<td style="white-space:nowrap">' +
-        (m.active
-          ? '<button class="btn btn-sm btn-primary" onclick="openMedAction(' + m.id + ',\'purchase\')">Buy</button> ' +
-            '<button class="btn btn-sm" onclick="openMedAction(' + m.id + ',\'count\')">Count</button> '
-          : '') +
-        '<button class="btn btn-sm" onclick="toggleMedHistory(' + m.id + ')">' + (medExpanded.has(m.id) ? 'Hide' : 'History') + '</button> ' +
-        '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
-        (m.active
-          ? '<button class="btn btn-sm" onclick="setMedActive(' + m.id + ',false)">Retire</button>'
-          : '<button class="btn btn-sm" onclick="setMedActive(' + m.id + ',true)">Reactivate</button>') +
-        // Delete only while the medicine has no ledger history; after that, retire it instead
-        (!hasMoves ? ' <button class="btn btn-sm btn-danger" onclick="deleteMedicine(' + m.id + ')">Delete</button>' : '') +
-      '</td></tr>';
-
-    if (medExpanded.has(m.id)) {
-      html += '<tr class="grp-expand-row"><td colspan="' + colCount + '" style="padding:0">' +
-        renderMedHistory(m) + '</td></tr>';
-    }
+    });
   });
   html += '</tbody></table></div>';
   tbl.innerHTML = html;
@@ -391,8 +384,70 @@ async function deleteMedMovement(id) {
 }
 
 // ============================================================
-// ADD / EDIT MEDICINE FORM
+// SETUP › MEDICINES (the list: add / edit / retire / delete)
 // ============================================================
+async function loadMedSetupPage() {
+  var el = document.getElementById('medsetup-content');
+  el.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    await medLoadData();
+    renderMedSetupPage();
+  } catch(err) {
+    el.innerHTML = '<div class="loading" style="color:var(--red)">Error: ' + err.message + '</div>';
+    console.error(err);
+  }
+}
+
+function renderMedSetupPage() {
+  document.getElementById('medsetup-content').innerHTML =
+    '<div class="section">' +
+      '<div class="section-hdr"><h2>Medicines and vaccines</h2>' +
+      '<button class="btn btn-sm btn-primary" onclick="openMedForm(null)">+ Add medicine</button></div>' +
+      '<div id="med-form-wrap"></div>' +
+      '<div id="medsetup-table"></div>' +
+    '</div>';
+  if (medFormOpen) renderMedForm();
+  renderMedSetupTable();
+}
+
+function renderMedSetupTable() {
+  var tbl = document.getElementById('medsetup-table');
+  if (!medList.length) {
+    tbl.innerHTML = '<div class="empty">No medicines yet. Use + Add medicine to start the list.</div>';
+    return;
+  }
+  var colCount = 7;
+  var html = '<div style="overflow-x:auto"><table><thead><tr>' +
+    '<th>Medicine</th><th>Used for</th><th>Pack</th><th>Label dose</th>' +
+    '<th class="right">Minimum stock</th><th>Notes</th><th>Actions</th>' +
+    '</tr></thead><tbody>';
+  medGroupedRows(true).forEach(function(g) {
+    html += medGroupRow(g.label, colCount);
+    g.meds.forEach(function(m) {
+      // Delete only while nothing has been bought/dosed/counted; after that, retire it
+      var hasMoves = medMovements.some(function(mv) { return mv.medicine_id === m.id; });
+      html += '<tr' + (!m.active ? ' style="opacity:0.5"' : '') + '>' +
+        '<td style="font-weight:500">' + medEsc(m.name) +
+          '<div style="font-size:11px;color:var(--muted);font-weight:400">' + medEsc(m.form) + '</div></td>' +
+        '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '\u2014') + '</td>' +
+        '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
+        '<td class="muted-cell">' + medFmtDoseRate(m) + '</td>' +
+        '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '\u2014') + '</td>' +
+        '<td class="muted-cell">' + (m.notes ? medEsc(m.notes) : '\u2014') + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
+          (m.active
+            ? '<button class="btn btn-sm" onclick="setMedActive(' + m.id + ',false)">Retire</button>'
+            : '<button class="btn btn-sm" onclick="setMedActive(' + m.id + ',true)">Reactivate</button>') +
+          (!hasMoves ? ' <button class="btn btn-sm btn-danger" onclick="deleteMedicine(' + m.id + ')">Delete</button>' : '') +
+        '</td></tr>';
+    });
+  });
+  html += '</tbody></table></div>';
+  tbl.innerHTML = html;
+}
+
+// ---- Add / edit form ----
 var medFormOpen = false;
 
 function openMedForm(id) {
@@ -505,7 +560,7 @@ async function submitMedicine() {
     else await sbInsert('medicines', [d]);
     closeMedForm();
     await medLoadData();
-    renderMedicinesPage();
+    renderMedSetupPage();
   } catch(err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
@@ -515,7 +570,7 @@ async function setMedActive(id, active) {
   try {
     await sbPatch('medicines', id, { active: active });
     await medLoadData();
-    renderMedicinesPage();
+    renderMedSetupPage();
   } catch(err) { alert('Error: ' + err.message); }
 }
 
@@ -525,7 +580,7 @@ async function deleteMedicine(id) {
   try {
     await sbDelete('medicines', id);
     await medLoadData();
-    renderMedicinesPage();
+    renderMedSetupPage();
   } catch(err) {
     // Most likely a schedule or health event still points at it
     alert('Could not delete — it is probably linked to a schedule or health event. Retire it instead.\n\n' + err.message);

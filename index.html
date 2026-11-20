@@ -307,11 +307,10 @@
     .baseline-table td{padding:8px 0;font-size:13px;border-bottom:1px solid var(--bg2)}
     .baseline-table .b-tgt{color:var(--muted);font-size:12px}
     .land-trend-chart-wrap{padding:18px 22px;height:300px;position:relative}
-    /* Inventory page */
+    /* Stock-level colours, shared by the inventory pages */
     .inv-stock-pos{color:var(--green);font-weight:500}
     .inv-stock-low{color:var(--amber);font-weight:500}
     .inv-stock-zero{color:var(--red);font-weight:500}
-    .inv-note{background:var(--amber-lt);border:1px solid var(--amber-bdr);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--amber);margin:14px 22px}
     /* Abbreviations key (Task 4 #3) */
     .abbrev-block{margin-top:24px;border-top:1px solid var(--border);padding-top:16px}
     .abbrev-block summary{font-size:12px;color:var(--muted);cursor:pointer;user-select:none;padding:4px 0}
@@ -401,7 +400,6 @@
         <div class="nav-section-hdr" onclick="toggleNavSection('land')"><span>Land</span><span class="nav-section-arrow">▾</span></div>
         <div class="nav-section-items">
           <button class="nav-item" data-page="land-crops"  onclick="navLandTab('crops',this)"><span class="nav-dot"></span>Crop Tracking</button>
-          <button class="nav-item" data-page="land-fert"   onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizer Inventory</button>
           <button class="nav-item" data-page="land-app"    onclick="navLandTab('app',this)"><span class="nav-dot"></span>Fertilizer Applications</button>
           <button class="nav-item" data-page="land-water"  onclick="navLandTab('water',this)"><span class="nav-dot"></span>Watering</button>
           <button class="nav-item" data-page="land-soil"   onclick="navLandTab('soil',this)"><span class="nav-dot"></span>Soil Tests</button>
@@ -419,9 +417,19 @@
           <button class="nav-item" data-page="weighttracking" onclick="showPage('weighttracking',this)"><span class="nav-dot"></span>Weight Tracking</button>
           <button class="nav-item" data-page="anfeed"         onclick="showPage('anfeed',this)"><span class="nav-dot"></span>Feeding</button>
           <button class="nav-item" data-page="health"         onclick="showPage('health',this)"><span class="nav-dot"></span>Health</button>
-          <button class="nav-item" data-page="medicines"      onclick="showPage('medicines',this)"><span class="nav-dot"></span>Medicines</button>
           <button class="nav-item" data-page="breeding"       onclick="showPage('breeding',this)"><span class="nav-dot"></span>Breeding</button>
           <button class="nav-item" data-page="costsales"      onclick="showPage('costsales',this)"><span class="nav-dot"></span>Cost &amp; Sales</button>
+        </div>
+      </div>
+
+      <!-- Inventory: stock levels and buying, one page per item type (items themselves are added in Setup) -->
+      <div class="nav-section-wrap" data-section="inventory">
+        <div class="nav-section-hdr" onclick="toggleNavSection('inventory')"><span>Inventory</span><span class="nav-section-arrow">▾</span></div>
+        <div class="nav-section-items">
+          <button class="nav-item" data-page="medicines"     onclick="showPage('medicines',this)"><span class="nav-dot"></span>Medicines</button>
+          <button class="nav-item" data-page="land-fert"     onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizers</button>
+          <button class="nav-item" data-page="inginventory"  onclick="showPage('inginventory',this)"><span class="nav-dot"></span>Feed Ingredients</button>
+          <button class="nav-item" data-page="seedinventory" onclick="showPage('seedinventory',this)"><span class="nav-dot"></span>Seeds</button>
         </div>
       </div>
 
@@ -429,8 +437,6 @@
       <div class="nav-section-wrap" data-section="feed">
         <div class="nav-section-hdr" onclick="toggleNavSection('feed')"><span>Feed</span><span class="nav-section-arrow">▾</span></div>
         <div class="nav-section-items">
-          <button class="nav-item" data-page="inginventory" onclick="showPage('inginventory',this)"><span class="nav-dot"></span>Ingredient Inventory</button>
-          <button class="nav-item" data-page="seedinventory" onclick="showPage('seedinventory',this)"><span class="nav-dot"></span>Seed Inventory</button>
           <button class="nav-item" data-page="prices"       onclick="showPage('prices',this)"><span class="nav-dot"></span>Price History</button>
           <button class="nav-item" data-page="recipesetup"  onclick="showPage('recipesetup',this)"><span class="nav-dot"></span>Recipe Setup</button>
           <button class="nav-item" data-page="rationplans"  onclick="showPage('rationplans',this)"><span class="nav-dot"></span>Ration Plans</button>
@@ -451,14 +457,14 @@
           <button class="nav-item" data-page="crops"        onclick="showPage('crops',this)"><span class="nav-dot"></span>Crops</button>
           <button class="nav-item" data-page="harvestdest"  onclick="showPage('harvestdest',this)"><span class="nav-dot"></span>Harvest Destinations</button>
           <button class="nav-item" data-page="fertilizers"  onclick="showPage('fertilizers',this)"><span class="nav-dot"></span>Fertilizers</button>
+          <button class="nav-item" data-page="medsetup"     onclick="showPage('medsetup',this)"><span class="nav-dot"></span>Medicines</button>
           <button class="nav-item" data-page="tools"        onclick="showPage('tools',this)"><span class="nav-dot"></span>Tools</button>
-          <button class="nav-item" data-page="inventory"    onclick="showPage('inventory',this)"><span class="nav-dot"></span>Inventory</button>
         </div>
       </div>
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-11-20 · r82</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-11-20 · r83</div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -1173,13 +1179,22 @@
       <div id="abbrev-health"></div>
     </div>
 
-    <!-- Medicines page — content rendered by health_meds.js -->
+    <!-- Inventory › Medicines — stock, buying, counts (rendered by health_meds.js) -->
     <div class="page" id="page-medicines">
       <div class="page-hdr">
-        <div><h1>Medicines</h1><div class="last-updated" id="med-updated"></div></div>
+        <div><h1>Medicine Inventory</h1><div class="last-updated" id="med-updated"></div></div>
         <button class="refresh-btn" onclick="loadMedicinesPage()">&#x21BB; Refresh</button>
       </div>
       <div id="med-content"><div class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Setup › Medicines — the medicine list itself (rendered by health_meds.js) -->
+    <div class="page" id="page-medsetup">
+      <div class="page-hdr">
+        <div><h1>Medicines</h1></div>
+        <button class="refresh-btn" onclick="loadMedSetupPage()">&#x21BB; Refresh</button>
+      </div>
+      <div id="medsetup-content"><div class="loading">Loading...</div></div>
     </div>
 
     <!-- Breeding page -->
@@ -1949,23 +1964,6 @@
         <div id="tool-table"><div class="loading">Loading…</div></div>
       </div>
       <div id="abbrev-tools"></div>
-    </div>
-
-    <!-- Inventory (NEW) -->
-    <div class="page" id="page-inventory">
-      <div class="page-hdr"><h1>Inventory</h1>
-        <button class="refresh-btn" onclick="loadInventoryPage()">↻ Refresh</button>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Feed ingredients</h2><span class="section-meta">Manual adjustment</span></div>
-        <div class="inv-note">Ingredient stock is manually adjusted. Per-ingredient daily usage is not yet captured by feed events. Stock = total purchases + sum of manual adjustments.</div>
-        <div id="inv-ing-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Fertilizers</h2><span class="section-meta">Auto-calculated</span></div>
-        <div id="inv-fert-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div id="abbrev-inventory"></div>
     </div>
 
     <!-- Species -->
