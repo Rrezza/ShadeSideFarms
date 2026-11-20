@@ -10,9 +10,11 @@ Always edit files in the main project directory: `/Users/Core/Documents/Jodhu/Sh
 Never edit files inside `.claude/worktrees/` or any worktree path. GitHub Desktop watches the main directory — changes in worktrees are invisible.
 
 ## Version number — mandatory on every change
-`Index.html` line 425 contains the app build string, e.g. `2026-05-12 · r58`.
+The app build lives in ONE place: `APP_BUILD` (a number) and `APP_BUILD_DATE` in the inline `<script>` block at the bottom of `Index.html`. The sidebar footer (`2026-11-20 · r84`) is filled from them automatically.
 
-Increment `rN` and update the date on every session where any file is changed, no matter how small. Do this as the last step before reporting work complete. Do not skip this.
+Increment `APP_BUILD` by 1 and update `APP_BUILD_DATE` on every session where any file is changed, no matter how small. Do this as the last step before reporting work complete. Do not skip this — `APP_BUILD` is also the cache-busting `?v=` on every script URL (static scripts in `Index.html` and lazy modules via `loadModule()` in `shared.js`). If it isn't bumped, browsers keep running stale cached JS after a deploy and new pages hang on "Loading...".
+
+Never hardcode a `?v=` number on a script tag or in `loadModule()` — always use `APP_BUILD`.
 
 ## Clarify before coding
 Never jump straight to implementation. Ask clarifying questions first to understand the exact behaviour wanted, edge cases, and how it connects to existing modules. This applies every time, without exception.

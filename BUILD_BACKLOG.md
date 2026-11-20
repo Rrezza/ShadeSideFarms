@@ -149,6 +149,10 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Stale cached scripts after deploys — FIXED 2026-11-20 (r84)
+- **Symptom:** after the r83 push, Setup › Medicines hung on "Loading..." — the browser was still running cached pre-r83 JS, because every script's cache-busting `?v=` number was hand-typed (`?v=29`, `?v=27`...) and never bumped with builds.
+- **Fix:** one `APP_BUILD` constant in `Index.html` drives every `?v=` (static scripts + `loadModule()`) and the sidebar footer. `CLAUDE.md`'s version rule now points at it. GitHub Pages still caches `Index.html` itself for up to 10 minutes, so a deploy can take that long to reach a browser.
+
 ### Medicine cabinet + reorder reminders — BUILT 2026-11-20
 - **Reorganised same day (r83):** split into Setup › Medicines (the list) and Inventory › Medicines (stock, buying, counts, reminders). New sidebar **Inventory** section above Feed now also holds Fertilizers, Feed Ingredients and Seeds (menu moves only — pages unchanged). Old Setup › Inventory page and `setup_inventory.js` removed (duplicated Land's fertilizer stock).
 - New Medicines page (`health_meds.js`), per-animal dose grid on the Health treatment form, Schedules manager on the Health page, "Medicines to buy" banner on Overview. See `CODEBASE.md`.
