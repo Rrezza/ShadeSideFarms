@@ -464,7 +464,7 @@
     </div>
     <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08)"><div id="auth-btn-container"></div></div>
     <div class="sidebar-footer" id="sb-status">Connecting…</div>
-    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none">2026-11-20 · r83</div>
+    <div class="sidebar-footer" id="sb-build" style="padding-top:0;border-top:none"><!-- filled from APP_BUILD at the bottom of this file --></div>
   </nav>
   <main class="main">
     <div id="auth-readonly-banner" style="display:flex;align-items:center;justify-content:space-between;background:#FFF8E1;border-bottom:1px solid #FFE082;padding:8px 22px;font-size:13px;color:#7a6000"><span>&#128274; Read-only — <a href="#" onclick="authShowLoginModal();return false;" style="color:#7a6000;font-weight:500">sign in</a> to make changes</span></div>
@@ -2511,13 +2511,21 @@
   </div>
 </div>
 
-<script src="js/shared.js?v=29"></script>
-<script src="js/an_helpers.js?v=22"></script>
-<script src="js/fd_shared.js?v=22"></script>
-<script src="js/setup_shared.js?v=23"></script>
-<script src="js/setup_harvest_destinations.js?v=1"></script>
-<script src="js/health.js?v=22"></script>
-<script src="js/auth.js?v=19"></script>
+<script>
+  // ---- App build: the ONE place to bump on every change ----
+  // APP_BUILD is appended to every script URL (here and in loadModule() in
+  // shared.js), so a new build number makes browsers fetch fresh copies
+  // instead of running stale cached code. The sidebar footer shows it too.
+  var APP_BUILD      = 84;
+  var APP_BUILD_DATE = '2026-11-20';
+  ['shared', 'an_helpers', 'fd_shared', 'setup_shared', 'setup_harvest_destinations', 'health', 'auth']
+    .forEach(function(name) {
+      // document.write keeps these as ordinary blocking scripts, loaded in order
+      // before the page finishes parsing — same behaviour as plain <script src> tags
+      document.write('<script src="js/' + name + '.js?v=' + APP_BUILD + '"><\/script>');
+    });
+  document.getElementById('sb-build').textContent = APP_BUILD_DATE + ' \u00b7 r' + APP_BUILD;
+</script>
 <script>document.addEventListener("DOMContentLoaded", function() { authInit(); });</script>
 </body>
 </html>
