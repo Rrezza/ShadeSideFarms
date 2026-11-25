@@ -100,7 +100,8 @@ function populateHealthForm() {
 // so the right one is easy to pick. withOther adds the "not in cabinet" option.
 function hfMedOptionsHtml(withOther) {
   return '<option value="">None</option>' +
-    medList.filter(function(m) { return m.active; }).map(function(m) {
+    // Only medicines are dosed; health supplies and consumables are logged via Use
+    medList.filter(function(m) { return m.active && (m.kind || 'medicine') === 'medicine'; }).map(function(m) {
       return '<option value="' + m.id + '">' + medEsc(m.name) +
         (m.purpose ? ' — ' + medEsc(m.purpose) : '') +
         ' (' + medFmtStock(m, medStock(m.id)) + ')</option>';

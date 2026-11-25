@@ -426,10 +426,11 @@
       <div class="nav-section-wrap" data-section="inventory">
         <div class="nav-section-hdr" onclick="toggleNavSection('inventory')"><span>Inventory</span><span class="nav-section-arrow">▾</span></div>
         <div class="nav-section-items">
-          <button class="nav-item" data-page="medicines"     onclick="showPage('medicines',this)"><span class="nav-dot"></span>Medicines</button>
+          <button class="nav-item" data-page="medicines"     onclick="showPage('medicines',this)"><span class="nav-dot"></span>Medicines &amp; Health Supplies</button>
           <button class="nav-item" data-page="land-fert"     onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizers</button>
           <button class="nav-item" data-page="inginventory"  onclick="showPage('inginventory',this)"><span class="nav-dot"></span>Feed Ingredients</button>
           <button class="nav-item" data-page="seedinventory" onclick="showPage('seedinventory',this)"><span class="nav-dot"></span>Seeds</button>
+          <button class="nav-item" data-page="equipment"     onclick="showPage('equipment',this)"><span class="nav-dot"></span>Tools &amp; Equipment</button>
         </div>
       </div>
 
@@ -457,9 +458,8 @@
           <button class="nav-item" data-page="crops"        onclick="showPage('crops',this)"><span class="nav-dot"></span>Crops</button>
           <button class="nav-item" data-page="harvestdest"  onclick="showPage('harvestdest',this)"><span class="nav-dot"></span>Harvest Destinations</button>
           <button class="nav-item" data-page="fertilizers"  onclick="showPage('fertilizers',this)"><span class="nav-dot"></span>Fertilizers</button>
-          <button class="nav-item" data-page="medsetup"     onclick="showPage('medsetup',this)"><span class="nav-dot"></span>Medicines</button>
+          <button class="nav-item" data-page="medsetup"     onclick="showPage('medsetup',this)"><span class="nav-dot"></span>Medicines &amp; Health Supplies</button>
           <button class="nav-item" data-page="protocols"    onclick="showPage('protocols',this)"><span class="nav-dot"></span>Health Protocols</button>
-          <button class="nav-item" data-page="tools"        onclick="showPage('tools',this)"><span class="nav-dot"></span>Tools</button>
         </div>
       </div>
     </div>
@@ -1214,10 +1214,20 @@
       <div id="abbrev-health"></div>
     </div>
 
+    <!-- Inventory › Tools & Equipment — equipment (inv_equipment.js) + consumables (health_meds.js) -->
+    <div class="page" id="page-equipment">
+      <div class="page-hdr">
+        <div><h1>Tools &amp; Equipment</h1></div>
+        <button class="refresh-btn" onclick="loadEquipmentPage()">&#x21BB; Refresh</button>
+      </div>
+      <div id="equip-content"><div class="loading">Loading...</div></div>
+      <div id="fsup-content"></div>
+    </div>
+
     <!-- Inventory › Medicines — stock, buying, counts (rendered by health_meds.js) -->
     <div class="page" id="page-medicines">
       <div class="page-hdr">
-        <div><h1>Medicine Inventory</h1><div class="last-updated" id="med-updated"></div></div>
+        <div><h1>Medicines &amp; Health Supplies</h1><div class="last-updated" id="med-updated"></div></div>
         <button class="refresh-btn" onclick="loadMedicinesPage()">&#x21BB; Refresh</button>
       </div>
       <div id="med-content"><div class="loading">Loading...</div></div>
@@ -1235,7 +1245,7 @@
     <!-- Setup › Medicines — the medicine list itself (rendered by health_meds.js) -->
     <div class="page" id="page-medsetup">
       <div class="page-hdr">
-        <div><h1>Medicines</h1></div>
+        <div><h1>Medicines &amp; Health Supplies</h1></div>
         <button class="refresh-btn" onclick="loadMedSetupPage()">&#x21BB; Refresh</button>
       </div>
       <div id="medsetup-content"><div class="loading">Loading...</div></div>
@@ -1992,20 +2002,6 @@
       <div id="abbrev-fertilizers"></div>
     </div>
 
-    <!-- Tools (NEW) -->
-    <div class="page" id="page-tools">
-      <div class="page-hdr"><h1>Tools</h1>
-        <div class="page-hdr-right">
-          <button class="btn btn-primary" onclick="openToolModal()">+ Add tool</button>
-          <button class="refresh-btn" onclick="loadToolsPage()">↻ Refresh</button>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Equipment inventory</h2><span class="section-meta" id="tool-count"></span></div>
-        <div id="tool-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div id="abbrev-tools"></div>
-    </div>
 
     <!-- Species -->
     <div class="page" id="page-species">
@@ -2523,42 +2519,13 @@
   </div>
 </div>
 
-<!-- Tool modal -->
-<div class="modal-overlay" id="tool-modal" style="display:none">
-  <div class="modal-box">
-    <h3 id="tool-modal-title">Add tool</h3>
-    <div class="modal-fields">
-      <label>Name</label>
-      <input type="text" id="tool-name" placeholder="e.g. Drip pump, Brush cutter">
-      <label>Category</label>
-      <input type="text" id="tool-category" placeholder="e.g. irrigation, hand-tool">
-      <label>Purchase date</label>
-      <input type="date" id="tool-purchase-date">
-      <label>Condition</label>
-      <select id="tool-condition">
-        <option value="new">New</option>
-        <option value="good">Good</option>
-        <option value="fair">Fair</option>
-        <option value="needs_repair">Needs repair</option>
-        <option value="retired">Retired</option>
-      </select>
-      <label>Notes</label>
-      <input type="text" id="tool-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeToolModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitTool()">Save</button>
-      <span id="tool-modal-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
 
 <script>
   // ---- App build: the ONE place to bump on every change ----
   // APP_BUILD is appended to every script URL (here and in loadModule() in
   // shared.js), so a new build number makes browsers fetch fresh copies
   // instead of running stale cached code. The sidebar footer shows it too.
-  var APP_BUILD      = 92;
+  var APP_BUILD      = 93;
   var APP_BUILD_DATE = '2026-11-25';
   ['shared', 'an_helpers', 'fd_shared', 'setup_shared', 'setup_harvest_destinations', 'health', 'auth']
     .forEach(function(name) {

@@ -99,7 +99,7 @@ function protoTypeSelect(attrs, cur) {
 }
 function protoMedSelect(attrs, cur) {
   return '<select ' + attrs + '><option value="">— not in cabinet —</option>' +
-    medList.filter(function(m) { return m.active || m.id === cur; }).map(function(m) {
+    medList.filter(function(m) { return (m.kind || 'medicine') === 'medicine' && (m.active || m.id === cur); }).map(function(m) {
       return '<option value="' + m.id + '"' + (cur === m.id ? ' selected' : '') + '>' + medEsc(m.name) + '</option>';
     }).join('') + '</select>';
 }

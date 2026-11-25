@@ -240,8 +240,9 @@ async function loadOverviewMedAlerts() {
     if (!alerts.length) { el.innerHTML = ''; return; }
     el.innerHTML =
       '<div class="section">' +
-        '<div class="section-hdr"><h2>Medicines to buy</h2>' +
-        '<button class="btn btn-sm" onclick="goToPage(\'medicines\')">Open cabinet</button></div>' +
+        '<div class="section-hdr"><h2>Supplies to buy</h2>' +
+        '<div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="goToPage(\'medicines\')">Medicines</button>' +
+        '<button class="btn btn-sm" onclick="goToPage(\'equipment\')">Tools &amp; consumables</button></div></div>' +
         '<div style="padding:16px 22px">' + medAlertsHtml(alerts) + '</div>' +
       '</div>';
   } catch (err) {

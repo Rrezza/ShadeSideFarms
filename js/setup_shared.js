@@ -45,16 +45,6 @@ async function deleteFertPurchase(id) {
   }
 }
 
-async function deleteTool(id, name) {
-  if (!confirm('Delete tool "' + name + '"? This cannot be undone.')) return;
-  try {
-    await sbDelete('tools', id);
-    await loadToolsPage();
-  } catch (err) {
-    alert('Delete failed: ' + err.message);
-  }
-}
-
 async function deleteSpecies(id, name) {
   if (!confirm('Delete species "' + name + '"?\n\nIf animals of this species exist, the delete will fail — do not delete species that are in active use.')) return;
   try {

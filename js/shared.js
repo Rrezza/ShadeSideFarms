@@ -175,6 +175,7 @@ var PAGE_MAP = {
   medicines:      { module: 'health_meds', init: 'loadMedicinesPage' },
   medsetup:       { module: 'health_meds', init: 'loadMedSetupPage' },
   protocols:      { module: 'setup_protocols', init: 'loadProtocolsPage' },
+  equipment:      { module: 'inv_equipment', init: 'loadEquipmentPage' },
   breeding:       { module: 'health',  init: 'loadBreedingPage' },
   costsales:      { module: 'health',  init: 'loadCostSalesPage' },
   // Overview (landing page)
@@ -192,7 +193,6 @@ var PAGE_MAP = {
   species:        { module: 'setup_species',     init: 'loadSpeciesPage' },
   crops:          { module: 'setup_crops',       init: 'loadCropsPage' },
   fertilizers:    { module: 'setup_fertilizers',         init: 'loadFertilizersPage' },
-  tools:          { module: 'setup_tools',               init: 'loadToolsPage' },
   harvestdest:    { module: 'setup_harvest_destinations', init: 'loadHarvestDestinationsPage' }
 };
 
