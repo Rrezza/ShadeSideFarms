@@ -127,11 +127,6 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Confirmed reuse, not yet fixed:** the same "swallow FK error via string-matching instead of a structured error code" pattern already flagged in `land.js` recurs in `setup_shared.js`'s `fkErrMsg()` — a third module with this gap now. `setup_fertilizers.js`'s `fertStockUnit()`/`fertPurchUnitLabel()` hardcode a single `'liquid'` special case (everything else assumed kg/bag) and `setup_inventory.js` reimplements the identical ternary inline instead of calling the shared function — works today only because all 4 non-liquid types happen to be solids. The generic inline-edit/patch/delete pattern is copy-pasted across 8+ registry files (`setup_species.js`, `setup_ingredients.js`, `setup_locations.js`, `setup_crops.js`, `setup_fertilizers.js`, `setup_workers.js`, `setup_tools.js`, `setup_harvest_destinations.js`) instead of one shared helper each.
 - Source: scoped code review, 2026-09-19.
 
-### 13. Health event type `mortality` isn't in the database enum — logging a death fails partway
-- **Status:** Confirmed, not fixed (found 2026-11-20 while building the medicine cabinet — flagging per house rule).
-- **Problem:** the Health form offers "Mortality" as an event type, but `health_event_enum` only has vaccination/deworming/treatment/observation/injury. `submitHealthEvent()` writes the `animal_mortality` row, marks the animal `deceased` and closes its group membership *before* inserting the health event — so the final insert fails, leaving the animal marked dead with an error message and no health-log entry.
-- **Fix options:** add `mortality` to the enum (one-line migration), or stop writing a health event for mortality at all (the `animal_mortality` table already records it). Needs your call.
-
 ### 14. Farm-wide inventory / purchasing system
 - **Status:** Future — agreed direction 2026-11-20, not designed yet.
 - **Idea:** one purchasing + stock system across all farm items — medicines, fuel, fertilizer, tools, feed ingredients, seeds — instead of today's separate per-module purchase tables.
@@ -142,12 +137,15 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Problem:** loading the Land page requests `crop_observations?select=...,notes,...`, which 400s with `column crop_observations.notes does not exist` (the real column is `note`, singular — `overview.js` already uses `note`). Crop-level observations therefore don't load on the Land page.
 - **Fix:** change `notes` → `note` in that `land.js` query (and anywhere it reads `.notes` off those rows). Small; needs your go-ahead.
 
-### 15. Medicine withdrawal periods
-- **Status:** Idea, not requested yet. A `withdrawal_days` field on `medicines` would let the app warn when a recently-treated animal isn't yet safe to sell for meat — relevant once the fattening cycle runs. Dose rows in `medicine_movements` already record which animal got what and when.
-
 ---
 
 ## Resolved — no code change needed
+
+### Health: mortality fix, withdrawal periods, follow-up reminders — DONE 2026-11-25 (r87)
+- **Mortality (was #13):** `mortality` added to `health_event_enum`; the health event is now saved before the mortality record / deceased status / membership close, and rolled back if those fail. The mortality record now carries the animal's group (previously only set for group-targeted events, which can't log a death), so group P&L death counts are correct.
+- **Withdrawal periods (was #15):** `medicines.withdrawal_days`; red "withdrawal to <date>" badges on Groups members and the Animals list; sale and Left farm warn and ask to confirm (checked against the sale/exit date).
+- **Follow-ups:** `animal_health_events.follow_up_done`; open follow-ups show in Health › Due now (14 days) and on Overview (7 days / overdue) with Log follow-up and Done. Changing a follow-up date in Edit re-opens it.
+- **Bug found and fixed on the way:** the Schedules form (added r82) reused the sale form's `sf-animal`/`sf-notes`/`sf-status` IDs. Because the Health page comes first in the page, recording a sale in Cost & Sales read the empty schedule box and always failed with "Select an animal" — sales were broken from r82 to r86. Schedule form IDs renamed to `sch-*`.
 
 ### Stale cached scripts after deploys — FIXED 2026-11-20 (r84)
 - **Symptom:** after the r83 push, Setup › Medicines hung on "Loading..." — the browser was still running cached pre-r83 JS, because every script's cache-busting `?v=` number was hand-typed (`?v=29`, `?v=27`...) and never bumped with builds.

@@ -14,7 +14,9 @@ async function loadGroupsPage() {
     anSharedLoaded = false;
     // Member actions (Move group / Left farm / Delete) reuse the Animals page's
     // modals and save logic in an_animals.js
-    await Promise.all([loadSharedAnimalData(), loadModule('an_animals')]);
+    // health_meds supplies the withdrawal-period badges and exit warnings
+    await Promise.all([loadSharedAnimalData(), loadModule('an_animals'), loadModule('health_meds')]);
+    await medLoadData();
     var activeGrps = anSharedGroups.filter(function(g) { return g.status === 'active'; });
     var closedGrps = anSharedGroups.filter(function(g) { return g.status !== 'active'; });
 
@@ -119,7 +121,7 @@ function renderGroupDetail(g, animals, stats) {
           '<td>' + getSpeciesName(a.species_id) + '</td>' +
           '<td>' + (a.breed || '\u2014') + '</td>' +
           '<td>' + (a.sex || '\u2014') + '</td>' +
-          '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span></td>' +
+          '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span>' + medWithdrawalBadge(a.id) + '</td>' +
           '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
           '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
           '<td style="white-space:nowrap">' +

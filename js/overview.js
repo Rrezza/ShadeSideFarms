@@ -91,7 +91,8 @@ async function loadOverviewPage() {
     }
 
     renderOverview();
-    // Medicine reorder banner loads on its own so a failure never blocks the plot cards
+    // Health banners load on their own so a failure never blocks the plot cards
+    loadOverviewFollowups();
     loadOverviewMedAlerts();
 
     var updEl = document.getElementById('ov-updated');
@@ -101,6 +102,42 @@ async function loadOverviewPage() {
     if (loadingEl) loadingEl.innerHTML =
       '<div style="padding:22px;color:var(--red)"><strong>Error loading overview:</strong> ' + err.message + '</div>';
     console.error('loadOverviewPage failed:', err);
+  }
+}
+
+// ---- Health follow-ups banner ----
+// Follow-ups from logged health events that are overdue or due within 7 days
+// and not yet marked done. Hidden when there are none. Managed on the Health page.
+async function loadOverviewFollowups() {
+  var el = document.getElementById('ov-followups');
+  if (!el) return;
+  try {
+    var soon = new Date(); soon.setDate(soon.getDate() + 7);
+    var rows = await sbGet('animal_health_events',
+      'follow_up_done=eq.false&follow_up_date=lte.' + soon.toISOString().slice(0, 10) +
+      '&select=id,date,event_type,description,follow_up_date,animal_id,group_id&order=follow_up_date');
+    if (!rows.length) { el.innerHTML = ''; return; }
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var cards = rows.map(function(e) {
+      var diff = Math.round((new Date(e.follow_up_date + 'T00:00:00') - today) / 864e5);
+      var cls = diff < 0 ? 'overdue' : 'soon';
+      var label = diff < 0 ? Math.abs(diff) + ' day' + (Math.abs(diff) !== 1 ? 's' : '') + ' overdue'
+                : (diff === 0 ? 'Due today' : 'In ' + diff + ' day' + (diff !== 1 ? 's' : ''));
+      var target = e.animal_id ? getAnimalDisplayName(e.animal_id) : (e.group_id ? getGroupName(e.group_id) : '\u2014');
+      return '<div class="due-card ' + cls + '">' +
+        '<div class="due-card-top"><span class="due-card-title">' + target + ' &middot; ' + (e.description || e.event_type) + '</span>' +
+        '<span class="due-card-days ' + cls + '">' + label + '</span></div>' +
+        '<div class="due-card-meta">' + (e.event_type || '') + ' logged ' + fmtDate(e.date) + '</div></div>';
+    }).join('');
+    el.innerHTML =
+      '<div class="section">' +
+        '<div class="section-hdr"><h2>Health follow-ups</h2>' +
+        '<button class="btn btn-sm" onclick="goToPage(\'health\')">Open Health</button></div>' +
+        '<div style="padding:16px 22px">' + cards + '</div>' +
+      '</div>';
+  } catch (err) {
+    console.warn('Overview: follow-ups failed —', err.message);
+    el.innerHTML = '';
   }
 }
 

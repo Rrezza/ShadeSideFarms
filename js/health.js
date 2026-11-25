@@ -8,6 +8,8 @@
 var healthScheds     = [];   // active schedules due within 14 days (Due panel + form link)
 var healthAllScheds  = [];   // every schedule, active and retired (Schedules table)
 var healthEvts       = [];
+var healthFollowups  = [];    // logged events with an open follow-up due within 14 days (or overdue)
+var hfFollowupOf     = null;  // event whose follow-up the log form is currently recording
 var hfCostTouched    = false; // true once the user types a cost, so auto-costing stops overwriting it
 var schedEditId      = null;  // schedule being edited (null = adding)
 var breedingData     = [];
@@ -34,8 +36,11 @@ async function loadHealthPage() {
       sbGet('scheduled_health_events', 'select=*&order=next_due_date'),
       sbGet('animal_health_events',
         'select=*,animals(farm_id,name),workers(name)&order=date.desc&limit=300'),
-      medLoadData()
+      medLoadData(),
+      sbGet('animal_health_events',
+        'follow_up_done=eq.false&follow_up_date=lte.' + due14s + '&select=*&order=follow_up_date')
     ]);
+    healthFollowups = r[3];
     // All schedules feed the Schedules table; only active ones due within 14 days feed the Due panel
     healthAllScheds = r[0];
     healthScheds = healthAllScheds.filter(function(s) {
@@ -183,6 +188,7 @@ function updateHfDoseTotal() {
 }
 
 function toggleHealthForm() {
+  hfFollowupOf = null;  // a fresh form isn't a follow-up of anything
   document.getElementById('health-log-form').classList.toggle('open');
 }
 
@@ -201,41 +207,92 @@ function onHfEventTypeChange() {
   if (mortFields) mortFields.style.display = (et === 'mortality') ? 'grid' : 'none';
 }
 
-function renderHealthDue() {
+// Days-until label and card colour shared by schedule and follow-up cards
+function healthDueInfo(dateISO) {
   var today = new Date(); today.setHours(0, 0, 0, 0);
+  var diff = Math.round((new Date(dateISO + 'T00:00:00') - today) / 864e5);
+  return {
+    cls: diff < 0 ? 'overdue' : (diff <= 7 ? 'soon' : 'upcoming'),
+    label: diff < 0
+      ? Math.abs(diff) + ' day' + (Math.abs(diff) !== 1 ? 's' : '') + ' overdue'
+      : (diff === 0 ? 'Due today' : diff + ' day' + (diff !== 1 ? 's' : '') + ' away')
+  };
+}
+
+// Target of a logged event: the animal, else the group
+function healthEventTarget(e) {
+  return e.animal_id ? getAnimalDisplayName(e.animal_id) : (e.group_id ? getGroupName(e.group_id) : '—');
+}
+
+function renderHealthDue() {
+  var total = healthScheds.length + healthFollowups.length;
   document.getElementById('health-due-meta').textContent =
-    healthScheds.length + ' event' + (healthScheds.length !== 1 ? 's' : '') + ' due within 14 days';
-  if (!healthScheds.length) {
+    healthScheds.length + ' scheduled · ' +
+    healthFollowups.length + ' follow-up' + (healthFollowups.length !== 1 ? 's' : '') + ' · within 14 days';
+  if (!total) {
     document.getElementById('health-due-panel').innerHTML =
-      '<div class="empty">No health events due in the next 14 days.</div>';
+      '<div class="empty">Nothing scheduled or due for follow-up in the next 14 days.</div>';
     return;
   }
   var html = '<div class="due-grid">';
   healthScheds.forEach(function(s) {
-    var due  = new Date(s.next_due_date + 'T00:00:00');
-    var diff = Math.round((due - today) / 864e5);
-    var cls  = diff < 0 ? 'overdue' : (diff <= 7 ? 'soon' : 'upcoming');
-    var daysLabel = diff < 0
-      ? Math.abs(diff) + ' day' + (Math.abs(diff) !== 1 ? 's' : '') + ' overdue'
-      : (diff === 0 ? 'Due today' : diff + ' day' + (diff !== 1 ? 's' : '') + ' away');
+    var info = healthDueInfo(s.next_due_date);
     var target = schedTargetName(s);
     var targetLabel = s.animal_id ? 'Animal' : (s.group_id ? 'Group' : 'Location');
-    html += '<div class="due-card ' + cls + '">' +
-      '<div class="due-card-top"><span class="due-card-title">' + s.description + '</span>' +
-      '<span class="due-card-days ' + cls + '">' + daysLabel + '</span></div>' +
-      '<div class="due-card-meta">' + (s.event_type || '') + ' &middot; ' + targetLabel + ': ' + target +
+    html += '<div class="due-card ' + info.cls + '">' +
+      '<div class="due-card-top"><span class="due-card-title">' + medEsc(s.description) + '</span>' +
+      '<span class="due-card-days ' + info.cls + '">' + info.label + '</span></div>' +
+      '<div class="due-card-meta">' + (s.event_type || '') + ' &middot; ' + targetLabel + ': ' + medEsc(target) +
       (schedProductLabel(s) ? ' &middot; ' + medEsc(schedProductLabel(s)) : '') + '</div>';
-    if (s.dose) html += '<div class="due-card-meta">Dose: ' + s.dose + '</div>';
+    if (s.dose) html += '<div class="due-card-meta">Dose: ' + medEsc(s.dose) + '</div>';
     html += '<div style="margin-top:8px"><button class="btn btn-sm" onclick="preFillHealthForm(' + s.id + ')">Log this event</button></div>';
     html += '</div>';
+  });
+  // Follow-ups from logged events: stay here until marked Done (or a follow-up event is logged)
+  healthFollowups.forEach(function(e) {
+    var info = healthDueInfo(e.follow_up_date);
+    html += '<div class="due-card ' + info.cls + '">' +
+      '<div class="due-card-top"><span class="due-card-title">Follow-up: ' + medEsc(e.description || e.event_type) + '</span>' +
+      '<span class="due-card-days ' + info.cls + '">' + info.label + '</span></div>' +
+      '<div class="due-card-meta">' + medEsc(healthEventTarget(e)) + ' &middot; ' + (e.event_type || '') +
+      ' logged ' + fmtDate(e.date) + (e.product_used ? ' &middot; ' + medEsc(e.product_used) : '') + '</div>' +
+      '<div style="margin-top:8px;display:flex;gap:6px">' +
+        '<button class="btn btn-sm" onclick="preFillFollowup(' + e.id + ')">Log follow-up</button>' +
+        '<button class="btn btn-sm" onclick="markFollowupDone(' + e.id + ')">Done</button>' +
+      '</div></div>';
   });
   html += '</div>';
   document.getElementById('health-due-panel').innerHTML = html;
 }
 
+// Opens the log form pre-filled for a follow-up of an earlier event. Saving it
+// marks the original follow-up done (see submitHealthEvent).
+function preFillFollowup(eventId) {
+  var e = healthFollowups.find(function(x) { return x.id === eventId; });
+  if (!e) return;
+  populateHealthForm();
+  hfFollowupOf = eventId;
+  document.getElementById('hf-event-type').value = e.event_type === 'mortality' ? 'observation' : (e.event_type || 'observation');
+  document.getElementById('hf-desc').value = 'Follow-up: ' + (e.description || '');
+  document.getElementById('hf-target-type').value = e.animal_id ? 'animal' : 'group';
+  if (e.animal_id) document.getElementById('hf-animal').value = e.animal_id;
+  else document.getElementById('hf-group').value = e.group_id;
+  onHfTargetChange();
+  document.getElementById('health-log-form').classList.add('open');
+  document.getElementById('health-log-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function markFollowupDone(eventId) {
+  try {
+    await sbPatch('animal_health_events', eventId, { follow_up_done: true });
+    await loadHealthPage();
+  } catch(err) { alert('Error: ' + err.message); }
+}
+
 function preFillHealthForm(schedId) {
   var sched = healthScheds.find(function(s) { return s.id === schedId; });
   if (!sched) return;
+  hfFollowupOf = null;
   document.getElementById('hf-event-type').value = sched.event_type || 'vaccination';
   document.getElementById('hf-sched').value = schedId;
   if (sched.description) document.getElementById('hf-desc').value = sched.description;
@@ -421,6 +478,7 @@ function renderHealthEventEdit(e) {
         opt('vaccination', 'Vaccination', e.event_type) + opt('deworming', 'Deworming', e.event_type) +
         opt('treatment', 'Treatment', e.event_type) + opt('observation', 'Observation', e.event_type) +
         opt('injury', 'Injury', e.event_type) +
+        (e.event_type === 'mortality' ? opt('mortality', 'Mortality', e.event_type) : '') +
       '</select></div>' +
       '<div class="hf-field"><label>Vet involved?</label><select id="he-vet">' +
         opt('false', 'No', String(!!e.vet_involved)) + opt('true', 'Yes', String(!!e.vet_involved)) +
@@ -505,6 +563,8 @@ async function saveHealthEventEdit(eventId) {
       cost_pkr: costRaw === '' ? null : parseFloat(costRaw),
       follow_up_date: document.getElementById('he-followup').value || null
     };
+    // A new or changed follow-up date re-opens the reminder
+    if (patch.follow_up_date && patch.follow_up_date !== e.follow_up_date) patch.follow_up_done = false;
 
     if (!med) {
       patch.product_used = document.getElementById('he-product').value.trim() || null;
@@ -557,6 +617,7 @@ async function deleteHealthEvent(eventId) {
   var msg = 'Delete this health event?' +
     (doses.length && med ? '\n\n' + medFmtUnits(med, total) + ' of ' + med.name + ' will go back into stock.' : '') +
     '\n\nIf it was logged against a schedule, the schedule\'s next due date is not changed back — edit it under Schedules if needed.' +
+    (e && e.event_type === 'mortality' ? '\n\nThis only removes the log entry — the animal stays marked as deceased and its mortality record is kept.' : '') +
     '\n\nThis cannot be undone.';
   if (!confirm(msg)) return;
   try {
@@ -580,6 +641,7 @@ async function submitHealthEvent() {
     if (!date || !desc) throw new Error('Date and description required.');
     if (targetType === 'animal' && !animalId) throw new Error('Select an animal.');
     if (targetType === 'group'  && !groupId)  throw new Error('Select a group.');
+    if (evType === 'mortality' && targetType !== 'animal') throw new Error('A death must be logged against an individual animal, not a group.');
     var d = {
       date: date, event_type: evType, description: desc,
       vet_involved: document.getElementById('hf-vet').value === 'true'
@@ -605,28 +667,6 @@ async function submitHealthEvent() {
     var cost = document.getElementById('hf-cost').value;           if (cost) d.cost_pkr = parseFloat(cost);
     var fu   = document.getElementById('hf-followup').value;       if (fu)   d.follow_up_date = fu;
 
-    // Mortality special handling
-    if (evType === 'mortality' && animalId) {
-      var cause   = document.getElementById('hf-mort-cause') ? document.getElementById('hf-mort-cause').value.trim() : '';
-      var disposal= document.getElementById('hf-mort-disposal') ? document.getElementById('hf-mort-disposal').value : '';
-      var mortRec = {
-        animal_id: parseInt(animalId),
-        date: date,
-        probable_cause: cause || null,
-        carcass_disposal: disposal || null,
-        vet_confirmed: document.getElementById('hf-vet').value === 'true'
-      };
-      if (groupId) mortRec.group_id = parseInt(groupId);
-      await sbInsert('animal_mortality', [mortRec]);
-      // Update animal status to deceased
-      await sbPatch('animals', parseInt(animalId), { status: 'deceased' });
-      // Set group_members.left_date
-      var memRec = anSharedMembers.find(function(m) { return m.animal_id === parseInt(animalId); });
-      if (memRec) {
-        await sbPatch('group_members', memRec.id, { left_date: date, left_reason: 'deceased' });
-      }
-    }
-
     var saved = await sbInsert('animal_health_events', [d]);
     if (!saved || !saved.length) throw new Error('The health event was not returned by the database — check it saved before retrying.');
 
@@ -647,6 +687,39 @@ async function submitHealthEvent() {
         await sbDelete('animal_health_events', saved[0].id).catch(function() {});
         throw new Error('Could not record the doses, so the event was not saved: ' + moveErr.message);
       }
+    }
+
+    // Mortality: written AFTER the health event so a failure can't leave an animal
+    // marked dead with no log entry. If these follow-on writes fail, the event is
+    // removed again so the user can retry cleanly.
+    if (evType === 'mortality') {
+      try {
+        var cause    = document.getElementById('hf-mort-cause').value.trim();
+        var disposal = document.getElementById('hf-mort-disposal').value;
+        var mortRec = {
+          animal_id: parseInt(animalId),
+          date: date,
+          probable_cause: cause || null,
+          carcass_disposal: disposal || null,
+          vet_confirmed: document.getElementById('hf-vet').value === 'true'
+        };
+        var mortGroup = getAnimalGroupId(parseInt(animalId));
+        if (mortGroup) mortRec.group_id = mortGroup;
+        await sbInsert('animal_mortality', [mortRec]);
+        await sbPatch('animals', parseInt(animalId), { status: 'deceased' });
+        // Close the animal's group membership
+        var memRec = anSharedMembers.find(function(m) { return m.animal_id === parseInt(animalId); });
+        if (memRec) await sbPatch('group_members', memRec.id, { left_date: date, left_reason: 'deceased' });
+      } catch(mortErr) {
+        await sbDelete('animal_health_events', saved[0].id).catch(function() {});
+        throw new Error('Could not record the death, so the event was not saved: ' + mortErr.message);
+      }
+    }
+
+    // Logging a follow-up closes the original event's follow-up reminder
+    if (hfFollowupOf) {
+      await sbPatch('animal_health_events', hfFollowupOf, { follow_up_done: true });
+      hfFollowupOf = null;
     }
 
     // Update scheduled event if linked
@@ -737,29 +810,29 @@ function renderSchedTable() {
 function openSchedForm(id) {
   schedEditId = id;
   var s = id !== null ? healthAllScheds.find(function(x) { return x.id === id; }) : null;
-  document.getElementById('sf-title').textContent = s ? 'Edit schedule' : 'New schedule';
-  document.getElementById('sf-group').innerHTML = '<option value="">Select group</option>' +
+  document.getElementById('sch-title').textContent = s ? 'Edit schedule' : 'New schedule';
+  document.getElementById('sch-group').innerHTML = '<option value="">Select group</option>' +
     anSharedGroups.filter(function(g) { return g.status === 'active'; }).map(function(g) {
       return '<option value="' + g.id + '">' + medEsc(g.name) + '</option>';
     }).join('');
-  document.getElementById('sf-animal').innerHTML = '<option value="">Select animal</option>' +
+  document.getElementById('sch-animal').innerHTML = '<option value="">Select animal</option>' +
     anSharedAnimals.filter(function(a) { return a.status === 'active' || a.status === 'quarantine'; }).map(function(a) {
       return '<option value="' + a.id + '">' + a.farm_id + (a.name ? ' (' + medEsc(a.name) + ')' : '') + '</option>';
     }).join('');
-  document.getElementById('sf-med').innerHTML = hfMedOptionsHtml(false);
+  document.getElementById('sch-med').innerHTML = hfMedOptionsHtml(false);
 
-  document.getElementById('sf-desc').value        = s ? s.description || '' : '';
-  document.getElementById('sf-event-type').value  = s ? s.event_type || 'deworming' : 'deworming';
-  document.getElementById('sf-target-type').value = s && s.animal_id ? 'animal' : 'group';
-  document.getElementById('sf-group').value       = s && s.group_id ? s.group_id : '';
-  document.getElementById('sf-animal').value      = s && s.animal_id ? s.animal_id : '';
-  document.getElementById('sf-med').value         = s && s.medicine_id ? s.medicine_id : '';
-  document.getElementById('sf-product').value     = s ? s.product || '' : '';
-  document.getElementById('sf-interval').value    = s && s.interval_days ? s.interval_days : '';
-  document.getElementById('sf-next').value        = s ? s.next_due_date || '' : todayISO();
-  document.getElementById('sf-notes').value       = s ? s.notes || '' : '';
-  document.getElementById('sf-status').textContent = '';
-  onSfTargetChange();
+  document.getElementById('sch-desc').value        = s ? s.description || '' : '';
+  document.getElementById('sch-event-type').value  = s ? s.event_type || 'deworming' : 'deworming';
+  document.getElementById('sch-target-type').value = s && s.animal_id ? 'animal' : 'group';
+  document.getElementById('sch-group').value       = s && s.group_id ? s.group_id : '';
+  document.getElementById('sch-animal').value      = s && s.animal_id ? s.animal_id : '';
+  document.getElementById('sch-med').value         = s && s.medicine_id ? s.medicine_id : '';
+  document.getElementById('sch-product').value     = s ? s.product || '' : '';
+  document.getElementById('sch-interval').value    = s && s.interval_days ? s.interval_days : '';
+  document.getElementById('sch-next').value        = s ? s.next_due_date || '' : todayISO();
+  document.getElementById('sch-notes').value       = s ? s.notes || '' : '';
+  document.getElementById('sch-status').textContent = '';
+  onSchTargetChange();
   var box = document.getElementById('sched-form');
   box.classList.add('open');
   box.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -770,32 +843,32 @@ function closeSchedForm() {
   document.getElementById('sched-form').classList.remove('open');
 }
 
-function onSfTargetChange() {
-  var t = document.getElementById('sf-target-type').value;
-  document.getElementById('sf-group-wrap').style.display  = t === 'group'  ? 'flex' : 'none';
-  document.getElementById('sf-animal-wrap').style.display = t === 'animal' ? 'flex' : 'none';
+function onSchTargetChange() {
+  var t = document.getElementById('sch-target-type').value;
+  document.getElementById('sch-group-wrap').style.display  = t === 'group'  ? 'flex' : 'none';
+  document.getElementById('sch-animal-wrap').style.display = t === 'animal' ? 'flex' : 'none';
 }
 
 async function submitSchedule() {
-  var statusEl = document.getElementById('sf-status');
+  var statusEl = document.getElementById('sch-status');
   statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--muted)';
   try {
-    var t = document.getElementById('sf-target-type').value;
-    var groupId  = parseInt(document.getElementById('sf-group').value)  || null;
-    var animalId = parseInt(document.getElementById('sf-animal').value) || null;
-    var interval = parseInt(document.getElementById('sf-interval').value) || null;
+    var t = document.getElementById('sch-target-type').value;
+    var groupId  = parseInt(document.getElementById('sch-group').value)  || null;
+    var animalId = parseInt(document.getElementById('sch-animal').value) || null;
+    var interval = parseInt(document.getElementById('sch-interval').value) || null;
     var d = {
-      description:   document.getElementById('sf-desc').value.trim(),
-      event_type:    document.getElementById('sf-event-type').value,
+      description:   document.getElementById('sch-desc').value.trim(),
+      event_type:    document.getElementById('sch-event-type').value,
       // Exactly one target is set; the other is cleared (DB enforces one target)
       group_id:      t === 'group'  ? groupId  : null,
       animal_id:     t === 'animal' ? animalId : null,
       location_id:   null,
-      medicine_id:   parseInt(document.getElementById('sf-med').value) || null,
-      product:       document.getElementById('sf-product').value.trim() || null,
+      medicine_id:   parseInt(document.getElementById('sch-med').value) || null,
+      product:       document.getElementById('sch-product').value.trim() || null,
       interval_days: interval,
-      next_due_date: document.getElementById('sf-next').value || null,
-      notes:         document.getElementById('sf-notes').value.trim() || null
+      next_due_date: document.getElementById('sch-next').value || null,
+      notes:         document.getElementById('sch-notes').value.trim() || null
     };
     if (!d.description) throw new Error('Description is required.');
     if (!d.group_id && !d.animal_id) throw new Error('Select a ' + t + '.');
@@ -1218,6 +1291,9 @@ async function loadCostSalesPage() {
   if (el) el.innerHTML = '<div class="loading">Loading...</div>';
   try {
     if (!anSharedLoaded) await loadSharedAnimalData();
+    // Medicine data for the withdrawal-period check on sales
+    await loadModule('health_meds');
+    await medLoadData();
     var allGroups = anSharedGroups;
     if (!csGroupId && allGroups.length) csGroupId = allGroups[0].id;
     var grpOpts = allGroups.map(function(g) {
@@ -1394,6 +1470,8 @@ async function submitSale(groupId) {
     if (!animalId) throw new Error('Select an animal.');
     if (!date)     throw new Error('Date required.');
     if (!price)    throw new Error('Sale price required.');
+    // Selling inside a medicine withdrawal window needs a deliberate OK
+    if (!medConfirmWithdrawal(parseInt(animalId), date, 'Record the sale')) { st.textContent = ''; return; }
     var d = {
       animal_id: parseInt(animalId),
       group_id: groupId,

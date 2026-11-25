@@ -11,6 +11,9 @@ async function loadAnimalsListPage() {
   if (wrapper) wrapper.innerHTML = '<div class="loading">Loading...</div>';
   try {
     if (!anSharedLoaded) await loadSharedAnimalData();
+    // health_meds supplies the withdrawal-period badges and exit warnings
+    await loadModule('health_meds');
+    await medLoadData();
     renderAlTabBar();
     renderAnimalsList();
     renderAbbrevKey('abbrev-animalslist', ['BCS', 'ADG', 'DM']);
@@ -115,7 +118,8 @@ function renderAnimalsList() {
         '<td>' + getSpeciesName(a.species_id) + (a.breed ? ' &middot; ' + a.breed : '') + '</td>' +
         '<td class="muted-cell">' + (a.sex || '\u2014') + '</td>' +
         '<td>' + purposeBadge(a.purpose) + '</td>' +
-        '<td><span class="badge ' + statusCls + '">' + statusLabel + '</span></td>' +
+        '<td><span class="badge ' + statusCls + '">' + statusLabel + '</span>' +
+          (a.status === 'active' || a.status === 'quarantine' ? medWithdrawalBadge(a.id) : '') + '</td>' +
         '<td>' + grpName + '</td>' +
         '<td class="muted-cell">' + locName + '</td>' +
         '<td class="right mono">' + (a.entry_weight_kg != null ? r1(parseFloat(a.entry_weight_kg)) : '\u2014') + '</td>' +
@@ -271,6 +275,8 @@ async function alSubmitExit() {
     var reason   = document.getElementById('al-exit-reason').value;
     var notes    = document.getElementById('al-exit-notes').value.trim();
     if (!date) throw new Error('Date left is required.');
+    // Leaving the farm (often slaughter) inside a medicine withdrawal window needs a deliberate OK
+    if (!medConfirmWithdrawal(animalId, date, 'Record it as leaving the farm')) { st.textContent = ''; return; }
 
     var exitNote = 'Left farm: ' + reason.replace(/_/g, ' ') + (notes ? ' \u2014 ' + notes : '');
     await sbPatch('animals', animalId, { status: 'other_exit', notes: exitNote });

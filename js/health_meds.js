@@ -128,6 +128,42 @@ function medSuggestDose(med, animalId) {
   return Math.max(0.5, Math.round(raw * 2) / 2);
 }
 
+// ---- Meat withdrawal ----
+// An animal is in withdrawal while today is before (dose date + the medicine's
+// withdrawal_days) for any dose it received. Returns the latest such window:
+// { safeDate: 'YYYY-MM-DD', med } — or null when the animal is safe.
+function medWithdrawalFor(animalId, asOfISO) {
+  var asOf = asOfISO || todayISO();
+  var worst = null;
+  medMovements.forEach(function(mv) {
+    if (mv.animal_id !== animalId || mv.movement_type !== 'dose') return;
+    var med = medById(mv.medicine_id);
+    if (!med || !med.withdrawal_days) return;
+    var d = new Date(mv.date + 'T00:00:00');
+    d.setDate(d.getDate() + Number(med.withdrawal_days));
+    var safe = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (safe > asOf && (!worst || safe > worst.safeDate)) worst = { safeDate: safe, med: med };
+  });
+  return worst;
+}
+
+// Small red badge for tables; '' when the animal is not in withdrawal
+function medWithdrawalBadge(animalId) {
+  var w = medWithdrawalFor(animalId);
+  return w
+    ? ' <span class="badge badge-red" title="' + medEsc(w.med.name) + ' withdrawal">withdrawal to ' + fmtDate(w.safeDate) + '</span>'
+    : '';
+}
+
+// Confirm dialog before a sale / slaughter / exit. Returns true to go ahead.
+// asOfISO is the sale or exit date, so back-dated entries are checked correctly.
+function medConfirmWithdrawal(animalId, asOfISO, action) {
+  var w = medWithdrawalFor(animalId, asOfISO);
+  if (!w) return true;
+  return confirm(getAnimalDisplayName(animalId) + ' is still in the meat withdrawal period for ' + w.med.name +
+    ' until ' + fmtDate(w.safeDate) + '.\n\n' + action + ' anyway?');
+}
+
 // On-farm animals a schedule applies to (animal, group or location target)
 function medScheduleAnimals(sched) {
   var onFarm = function(a) { return a.status !== 'deceased' && a.status !== 'sold'; };
@@ -416,10 +452,10 @@ function renderMedSetupTable() {
     tbl.innerHTML = '<div class="empty">No medicines yet. Use + Add medicine to start the list.</div>';
     return;
   }
-  var colCount = 7;
+  var colCount = 8;
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
     '<th>Medicine</th><th>Used for</th><th>Pack</th><th>Label dose</th>' +
-    '<th class="right">Minimum stock</th><th>Notes</th><th>Actions</th>' +
+    '<th class="right">Minimum stock</th><th class="right">Withdrawal</th><th>Notes</th><th>Actions</th>' +
     '</tr></thead><tbody>';
   medGroupedRows(true).forEach(function(g) {
     html += medGroupRow(g.label, colCount);
@@ -433,6 +469,7 @@ function renderMedSetupTable() {
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
         '<td class="muted-cell">' + medFmtDoseRate(m) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '\u2014') + '</td>' +
+        '<td class="mono right">' + (m.withdrawal_days != null ? m.withdrawal_days + ' d' : '\u2014') + '</td>' +
         '<td class="muted-cell">' + (m.notes ? medEsc(m.notes) : '\u2014') + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
@@ -508,9 +545,10 @@ function renderMedForm() {
         '<div class="hf-field" id="mf-amount-wrap"><label>Dose (<span class="mf-unit-lbl">' + unit + '</span>)</label><input type="number" id="mf-amount" min="0" step="any" value="' + v('dose_amount') + '" placeholder="e.g. 1"></div>' +
         '<div class="hf-field" id="mf-weight-wrap"><label>Per kg of body weight</label><input type="number" id="mf-weight" min="0" step="any" value="' + v('dose_weight_kg') + '" placeholder="e.g. 50"></div>' +
       '</div>' +
-      '<div class="hf-grid two">' +
+      '<div class="hf-grid">' +
         '<div class="hf-field"><label>Minimum stock to keep (<span class="mf-unit-lbl">' + unit + '</span>)</label><input type="number" id="mf-min" min="0" step="any" value="' + v('min_stock') + '" placeholder="Optional — reminder below this"></div>' +
-        '<div class="hf-field"><label>Notes</label><input type="text" id="mf-notes" value="' + v('notes') + '" placeholder="Optional — storage, withdrawal period, etc."></div>' +
+        '<div class="hf-field"><label>Meat withdrawal (days)</label><input type="number" id="mf-withdrawal" min="0" step="1" value="' + v('withdrawal_days') + '" placeholder="From the label — 0 if none"></div>' +
+        '<div class="hf-field"><label>Notes</label><input type="text" id="mf-notes" value="' + v('notes') + '" placeholder="Optional — storage, etc."></div>' +
       '</div>' +
       '<div style="display:flex;gap:10px;margin-top:8px">' +
         '<button class="btn btn-primary" onclick="submitMedicine()">' + (m ? 'Save changes' : 'Add medicine') + '</button>' +
@@ -549,6 +587,7 @@ async function submitMedicine() {
       dose_amount:       basis ? num('mf-amount') : null,
       dose_weight_kg:    basis === 'per_kg' ? num('mf-weight') : null,
       min_stock:         num('mf-min'),
+      withdrawal_days:   num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
       notes:             txt('mf-notes')
     };
     if (!d.name) throw new Error('Name is required.');

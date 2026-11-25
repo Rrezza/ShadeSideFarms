@@ -478,6 +478,7 @@
           <button class="refresh-btn" onclick="loadOverviewPage()">↻ Refresh</button>
         </div>
       </div>
+      <div id="ov-followups"></div>
       <div id="ov-med-alerts"></div>
       <div id="ov-content"><div class="loading">Loading…</div></div>
     </div>
@@ -1139,11 +1140,11 @@
           <button class="btn btn-sm btn-primary" onclick="openSchedForm(null)">+ Add schedule</button>
         </div>
         <div class="health-form-box" id="sched-form" style="margin:16px 22px">
-          <div style="font-weight:500;margin-bottom:12px" id="sf-title">New schedule</div>
+          <div style="font-weight:500;margin-bottom:12px" id="sch-title">New schedule</div>
           <div class="hf-grid">
-            <div class="hf-field"><label>Description *</label><input type="text" id="sf-desc" placeholder="e.g. Deworming round"></div>
+            <div class="hf-field"><label>Description *</label><input type="text" id="sch-desc" placeholder="e.g. Deworming round"></div>
             <div class="hf-field"><label>Event type</label>
-              <select id="sf-event-type">
+              <select id="sch-event-type">
                 <option value="vaccination">Vaccination</option>
                 <option value="deworming">Deworming</option>
                 <option value="treatment">Treatment</option>
@@ -1151,27 +1152,27 @@
               </select>
             </div>
             <div class="hf-field"><label>Target type</label>
-              <select id="sf-target-type" onchange="onSfTargetChange()">
+              <select id="sch-target-type" onchange="onSchTargetChange()">
                 <option value="group">Group</option>
                 <option value="animal">Individual animal</option>
               </select>
             </div>
           </div>
           <div class="hf-grid">
-            <div class="hf-field" id="sf-group-wrap"><label>Group *</label><select id="sf-group"></select></div>
-            <div class="hf-field" id="sf-animal-wrap" style="display:none"><label>Animal *</label><select id="sf-animal"></select></div>
-            <div class="hf-field"><label>Medicine</label><select id="sf-med"></select></div>
-            <div class="hf-field"><label>Product (if not in cabinet)</label><input type="text" id="sf-product" placeholder="Optional"></div>
+            <div class="hf-field" id="sch-group-wrap"><label>Group *</label><select id="sch-group"></select></div>
+            <div class="hf-field" id="sch-animal-wrap" style="display:none"><label>Animal *</label><select id="sch-animal"></select></div>
+            <div class="hf-field"><label>Medicine</label><select id="sch-med"></select></div>
+            <div class="hf-field"><label>Product (if not in cabinet)</label><input type="text" id="sch-product" placeholder="Optional"></div>
           </div>
           <div class="hf-grid">
-            <div class="hf-field"><label>Repeat every (days)</label><input type="number" id="sf-interval" min="1" step="1" placeholder="e.g. 90"></div>
-            <div class="hf-field"><label>Next due *</label><input type="date" id="sf-next"></div>
-            <div class="hf-field"><label>Notes</label><input type="text" id="sf-notes" placeholder="Optional"></div>
+            <div class="hf-field"><label>Repeat every (days)</label><input type="number" id="sch-interval" min="1" step="1" placeholder="e.g. 90"></div>
+            <div class="hf-field"><label>Next due *</label><input type="date" id="sch-next"></div>
+            <div class="hf-field"><label>Notes</label><input type="text" id="sch-notes" placeholder="Optional"></div>
           </div>
           <div style="display:flex;gap:10px;margin-top:8px">
             <button class="btn btn-primary" onclick="submitSchedule()">Save schedule</button>
             <button class="btn" onclick="closeSchedForm()">Cancel</button>
-            <span id="sf-status" style="font-size:13px;color:var(--muted);align-self:center"></span>
+            <span id="sch-status" style="font-size:13px;color:var(--muted);align-self:center"></span>
           </div>
         </div>
         <div id="health-sched-table"><div class="loading">Loading...</div></div>
@@ -2516,7 +2517,7 @@
   // APP_BUILD is appended to every script URL (here and in loadModule() in
   // shared.js), so a new build number makes browsers fetch fresh copies
   // instead of running stale cached code. The sidebar footer shows it too.
-  var APP_BUILD      = 86;
+  var APP_BUILD      = 87;
   var APP_BUILD_DATE = '2026-11-25';
   ['shared', 'an_helpers', 'fd_shared', 'setup_shared', 'setup_harvest_destinations', 'health', 'auth']
     .forEach(function(name) {
