@@ -284,27 +284,287 @@ function renderHealthLog() {
     vaccination: 'badge-blue', deworming: 'badge-teal', treatment: 'badge-amber',
     observation: 'badge-gray', injury: 'badge-brown', mortality: 'badge-red'
   };
+  var colCount = 10;
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Date</th><th>Target</th><th>Type</th><th>Description</th>' +
+    '<th></th><th>Date</th><th>Target</th><th>Type</th><th>Description</th>' +
     '<th>Product</th><th>Dose</th><th>Vet</th><th class="right">Cost</th><th>Follow-up</th>' +
     '</tr></thead><tbody>';
   evts.forEach(function(e) {
     var target = e.animals ? (e.animals.name || e.animals.farm_id)
-               : (e.group_id ? getGroupName(e.group_id) : '\u2014');
-    html += '<tr>' +
+               : (e.group_id ? getGroupName(e.group_id) : '—');
+    var open = hlExpandedId === e.id;
+    // Every row opens to show its per-animal doses (if any) plus Edit / Delete
+    html += '<tr class="grp-row' + (open ? ' grp-row-open' : '') + '" style="cursor:pointer" onclick="toggleHealthLogRow(' + e.id + ')">' +
+      '<td style="color:var(--muted);width:14px">' + (open ? '▾' : '▸') + '</td>' +
       '<td class="mono">' + fmtDate(e.date) + '</td>' +
-      '<td style="font-weight:500">' + target + '</td>' +
+      '<td style="font-weight:500">' + medEsc(target) + '</td>' +
       '<td><span class="badge ' + (EVTYPE[e.event_type] || 'badge-gray') + '">' + (e.event_type || '') + '</span></td>' +
-      '<td>' + (e.description || '\u2014') + '</td>' +
-      '<td class="muted-cell">' + (e.product_used || '\u2014') + '</td>' +
-      '<td class="muted-cell">' + (e.dose || '\u2014') + '</td>' +
-      '<td>' + (e.vet_involved ? '<span class="badge badge-teal">Yes</span>' : '\u2014') + '</td>' +
-      '<td class="mono right">' + (e.cost_pkr ? pkr(e.cost_pkr) : '\u2014') + '</td>' +
-      '<td class="muted-cell">' + (e.follow_up_date ? fmtDate(e.follow_up_date) : '\u2014') + '</td>' +
+      '<td>' + (e.description ? medEsc(e.description) : '—') + '</td>' +
+      '<td class="muted-cell">' + (e.product_used ? medEsc(e.product_used) : '—') + '</td>' +
+      '<td class="muted-cell">' + (e.dose ? medEsc(e.dose) : '—') + '</td>' +
+      '<td>' + (e.vet_involved ? '<span class="badge badge-teal">Yes</span>' : '—') + '</td>' +
+      '<td class="mono right">' + (e.cost_pkr ? pkr(e.cost_pkr) : '—') + '</td>' +
+      '<td class="muted-cell">' + (e.follow_up_date ? fmtDate(e.follow_up_date) : '—') + '</td>' +
       '</tr>';
+    if (open) {
+      html += '<tr class="grp-expand-row"><td colspan="' + colCount + '" style="padding:0">' +
+        (hlEditId === e.id ? renderHealthEventEdit(e) : renderHealthEventDetail(e)) + '</td></tr>';
+    }
   });
   html += '</tbody></table></div>';
   document.getElementById('health-log-table').innerHTML = html;
+}
+
+// ============================================================
+// HEALTH LOG — event detail, edit and delete
+// ============================================================
+var hlExpandedId = null;   // event whose detail row is open
+var hlEditId     = null;   // event being edited (detail row shows the edit form)
+var hlWeightsAt  = {};     // animal_id -> weight on/before the open event's date
+
+// Dose rows (medicine_movements) recorded for an event, in farm-ID order
+function hlEventDoses(eventId) {
+  return medMovements.filter(function(mv) {
+    return mv.health_event_id === eventId && mv.movement_type === 'dose';
+  }).sort(function(a, b) {
+    var fa = (anSharedAnimals.find(function(x) { return x.id === a.animal_id; }) || {}).farm_id || '';
+    var fb = (anSharedAnimals.find(function(x) { return x.id === b.animal_id; }) || {}).farm_id || '';
+    return fa.localeCompare(fb);
+  });
+}
+
+async function toggleHealthLogRow(eventId) {
+  hlEditId = null;
+  hlExpandedId = hlExpandedId === eventId ? null : eventId;
+  hlWeightsAt = {};
+  renderHealthLog();
+  if (hlExpandedId === null) return;
+  // Fetch each dosed animal's weight as it was on the event date (latest weigh-in on or before it)
+  var e = healthEvts.find(function(x) { return x.id === eventId; });
+  var ids = hlEventDoses(eventId).map(function(mv) { return mv.animal_id; }).filter(Boolean);
+  if (!e || !ids.length) return;
+  try {
+    var ws = await sbGet('animal_weights',
+      'animal_id=in.(' + ids.join(',') + ')&date=lte.' + e.date + '&select=animal_id,weight_kg,date&order=date.desc');
+    ws.forEach(function(w) { if (!(w.animal_id in hlWeightsAt)) hlWeightsAt[w.animal_id] = Number(w.weight_kg); });
+    if (hlExpandedId === eventId && hlEditId === null) renderHealthLog();
+  } catch(err) { console.warn('Health log: weight lookup failed —', err.message); }
+}
+
+// Read-only detail: per-animal dose table + Edit / Delete
+function renderHealthEventDetail(e) {
+  var doses = hlEventDoses(e.id);
+  var med = e.medicine_id ? medById(e.medicine_id) : null;
+  var html = '<div style="padding:14px 22px;background:var(--bg)">';
+  if (doses.length && med) {
+    var total = 0, totalCost = 0, anyCost = false;
+    html += '<div style="overflow-x:auto"><table><thead><tr>' +
+      '<th>Animal</th><th class="right">Weight then</th><th class="right">Dose</th><th class="right">Cost</th>' +
+      '</tr></thead><tbody>';
+    doses.forEach(function(mv) {
+      var a = anSharedAnimals.find(function(x) { return x.id === mv.animal_id; });
+      var qty = -Number(mv.quantity);
+      total += qty;
+      if (mv.cost_pkr != null) { totalCost += Number(mv.cost_pkr); anyCost = true; }
+      // Weight on the event date: latest weigh-in on/before it, else the entry weight (marked)
+      var kg = mv.animal_id in hlWeightsAt ? hlWeightsAt[mv.animal_id] : null;
+      var kgTag = '';
+      if (kg == null && a && a.entry_weight_kg != null) {
+        kg = Number(a.entry_weight_kg);
+        kgTag = ' <span style="font-size:11px;color:var(--muted)">entry</span>';
+      }
+      html += '<tr>' +
+        '<td style="font-weight:500">' + (a ? medEsc(a.farm_id) + (a.name ? ' <span style="color:var(--muted);font-weight:400">' + medEsc(a.name) + '</span>' : '')
+                                            : '<span style="color:var(--muted)">deleted animal</span>') + '</td>' +
+        '<td class="mono right">' + (kg != null ? r1(kg) + ' kg' + kgTag : '—') + '</td>' +
+        '<td class="mono right">' + medFmtUnits(med, qty) + '</td>' +
+        '<td class="mono right">' + (mv.cost_pkr != null ? pkr(mv.cost_pkr) : '—') + '</td>' +
+        '</tr>';
+    });
+    html += '<tr style="font-weight:600;background:var(--bg)"><td>Total &middot; ' + doses.length + ' animal' + (doses.length !== 1 ? 's' : '') + '</td><td></td>' +
+      '<td class="mono right">' + medFmtUnits(med, total) + '</td>' +
+      '<td class="mono right">' + (anyCost ? pkr(totalCost) : '—') + '</td></tr>';
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div style="font-size:13px;color:var(--muted)">No per-animal doses recorded for this event.</div>';
+  }
+  html += '<div style="display:flex;gap:8px;margin-top:12px">' +
+    '<button class="btn btn-sm" onclick="event.stopPropagation();startHealthEventEdit(' + e.id + ')">Edit</button>' +
+    '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteHealthEvent(' + e.id + ')">Delete event</button>' +
+    '</div></div>';
+  return html;
+}
+
+function startHealthEventEdit(eventId) {
+  hlEditId = eventId;
+  renderHealthLog();
+}
+
+function cancelHealthEventEdit() {
+  hlEditId = null;
+  renderHealthLog();
+}
+
+// Edit form: event fields + one dose box per animal. Animals listed are the ones
+// already dosed plus (for a group event) current group members who weren't,
+// so a missed animal can be added. Blank / 0 removes that animal's dose.
+// The medicine itself can't be changed here — delete and re-log for that.
+function renderHealthEventEdit(e) {
+  var med = e.medicine_id ? medById(e.medicine_id) : null;
+  var doses = hlEventDoses(e.id);
+  var opt = function(val, label, cur) { return '<option value="' + val + '"' + (cur === val ? ' selected' : '') + '>' + label + '</option>'; };
+  var html = '<div class="health-form-box open" style="margin:14px 22px" onclick="event.stopPropagation()">' +
+    '<div style="font-weight:500;margin-bottom:12px">Edit event</div>' +
+    '<div class="hf-grid">' +
+      '<div class="hf-field"><label>Date</label><input type="date" id="he-date" value="' + e.date + '"></div>' +
+      '<div class="hf-field"><label>Event type</label><select id="he-type">' +
+        opt('vaccination', 'Vaccination', e.event_type) + opt('deworming', 'Deworming', e.event_type) +
+        opt('treatment', 'Treatment', e.event_type) + opt('observation', 'Observation', e.event_type) +
+        opt('injury', 'Injury', e.event_type) +
+      '</select></div>' +
+      '<div class="hf-field"><label>Vet involved?</label><select id="he-vet">' +
+        opt('false', 'No', String(!!e.vet_involved)) + opt('true', 'Yes', String(!!e.vet_involved)) +
+      '</select></div>' +
+    '</div>' +
+    '<div class="hf-grid" style="grid-template-columns:1fr"><div class="hf-field"><label>Description</label>' +
+      '<input type="text" id="he-desc" value="' + medEsc(e.description || '') + '"></div></div>';
+  if (!med) {
+    // Free-text product / dose for events not linked to a cabinet medicine
+    html += '<div class="hf-grid two">' +
+      '<div class="hf-field"><label>Product used</label><input type="text" id="he-product" value="' + medEsc(e.product_used || '') + '"></div>' +
+      '<div class="hf-field"><label>Dose</label><input type="text" id="he-dose" value="' + medEsc(e.dose || '') + '"></div>' +
+    '</div>';
+  }
+  html += '<div class="hf-grid">' +
+      '<div class="hf-field"><label>Cost (PKR)</label><input type="number" id="he-cost" min="0" step="1" value="' + (e.cost_pkr != null ? Math.round(e.cost_pkr) : '') + '"></div>' +
+      '<div class="hf-field"><label>Follow-up date</label><input type="date" id="he-followup" value="' + (e.follow_up_date || '') + '"></div>' +
+      (med ? '<div class="hf-field"><label>&nbsp;</label><button class="btn btn-sm" onclick="recalcHealthEventCost(' + e.id + ')">Recalculate cost from latest price</button></div>' : '') +
+    '</div>';
+
+  if (med) {
+    var dosedIds = doses.map(function(mv) { return mv.animal_id; });
+    var extra = e.group_id ? getGroupAnimals(e.group_id).filter(function(a) { return dosedIds.indexOf(a.id) < 0; }) : [];
+    html += '<div style="font-size:12px;color:var(--muted);margin:4px 0 6px">' + medEsc(med.name) + ' doses (' + med.stock_unit +
+      ') &middot; blank or 0 removes a dose &middot; stock is adjusted by the difference</div>' +
+      '<div style="overflow-x:auto"><table><thead><tr><th>Animal</th><th class="right">Dose given</th></tr></thead><tbody>';
+    var row = function(animalId, label, val) {
+      return '<tr><td style="font-weight:500">' + label + '</td>' +
+        '<td class="right"><input type="number" class="he-dose-input" data-animal="' + animalId + '" min="0" step="any" ' +
+        'style="width:90px;text-align:right" value="' + (val != null ? val : '') + '"></td></tr>';
+    };
+    doses.forEach(function(mv) {
+      var a = anSharedAnimals.find(function(x) { return x.id === mv.animal_id; });
+      // Doses whose animal was deleted can't be re-saved against it; show them read-only
+      if (!mv.animal_id) return;
+      html += row(mv.animal_id, a ? medEsc(a.farm_id) : 'Animal #' + mv.animal_id, -Number(mv.quantity));
+    });
+    extra.forEach(function(a) {
+      html += row(a.id, medEsc(a.farm_id) + ' <span style="color:var(--muted);font-weight:400">(not dosed)</span>', null);
+    });
+    html += '</tbody></table></div>';
+  }
+  html += '<div style="display:flex;gap:10px;margin-top:12px">' +
+    '<button class="btn btn-primary" onclick="saveHealthEventEdit(' + e.id + ')">Save changes</button>' +
+    '<button class="btn" onclick="cancelHealthEventEdit()">Cancel</button>' +
+    '<span id="he-status" style="font-size:13px;color:var(--muted);align-self:center"></span>' +
+    '</div></div>';
+  return html;
+}
+
+// Per-unit cost for a dose row: the price it was originally costed at, else the latest purchase price
+function hlUnitCost(mv, medId) {
+  if (mv && mv.cost_pkr != null && Number(mv.quantity) !== 0) return Number(mv.cost_pkr) / -Number(mv.quantity);
+  return medCostPerUnit(medId);
+}
+
+// Fills the cost box from the doses currently entered, priced at the latest purchase
+function recalcHealthEventCost(eventId) {
+  var e = healthEvts.find(function(x) { return x.id === eventId; });
+  var cpu = medCostPerUnit(e.medicine_id);
+  if (cpu == null) { alert('No purchase with a price has been logged for this medicine yet — log one under Inventory › Medicines first.'); return; }
+  var total = 0;
+  document.querySelectorAll('.he-dose-input').forEach(function(inp) { var q = parseFloat(inp.value); if (q > 0) total += q; });
+  document.getElementById('he-cost').value = Math.round(total * cpu);
+}
+
+async function saveHealthEventEdit(eventId) {
+  var statusEl = document.getElementById('he-status');
+  statusEl.textContent = 'Saving...'; statusEl.style.color = 'var(--muted)';
+  try {
+    var e = healthEvts.find(function(x) { return x.id === eventId; });
+    var med = e.medicine_id ? medById(e.medicine_id) : null;
+    var date = document.getElementById('he-date').value;
+    var desc = document.getElementById('he-desc').value.trim();
+    if (!date || !desc) throw new Error('Date and description are required.');
+    var costRaw = document.getElementById('he-cost').value;
+    var patch = {
+      date: date,
+      event_type: document.getElementById('he-type').value,
+      description: desc,
+      vet_involved: document.getElementById('he-vet').value === 'true',
+      cost_pkr: costRaw === '' ? null : parseFloat(costRaw),
+      follow_up_date: document.getElementById('he-followup').value || null
+    };
+
+    if (!med) {
+      patch.product_used = document.getElementById('he-product').value.trim() || null;
+      patch.dose = document.getElementById('he-dose').value.trim() || null;
+      await sbPatch('animal_health_events', eventId, patch);
+    } else {
+      // Work out each dose row's change: update, add, or remove
+      var existing = hlEventDoses(eventId);
+      var updates = [], inserts = [], removals = [];
+      var total = 0, count = 0;
+      document.querySelectorAll('.he-dose-input').forEach(function(inp) {
+        var animalId = parseInt(inp.dataset.animal);
+        var q = parseFloat(inp.value);
+        var mv = existing.find(function(x) { return x.animal_id === animalId; });
+        if (q > 0) {
+          total += q; count++;
+          var uc = hlUnitCost(mv, med.id);
+          var fields = { quantity: -q, date: date, cost_pkr: uc != null ? r2(q * uc) : null };
+          if (mv) updates.push({ id: mv.id, fields: fields });
+          else inserts.push(Object.assign({ medicine_id: med.id, movement_type: 'dose', health_event_id: eventId, animal_id: animalId }, fields));
+        } else if (mv) {
+          removals.push(mv.id);
+        }
+      });
+      // Doses whose animal has since been deleted aren't editable — keep them in the total
+      existing.filter(function(mv) { return !mv.animal_id; }).forEach(function(mv) {
+        total += -Number(mv.quantity); count++;
+        updates.push({ id: mv.id, fields: { date: date } });
+      });
+      if (!count) throw new Error('At least one animal needs a dose. To remove the whole event, use Delete event instead.');
+      patch.dose = medFmtUnits(med, total) + (count > 1 ? ' total, ' + count + ' animals' : '');
+
+      for (var i = 0; i < updates.length; i++) await sbPatch('medicine_movements', updates[i].id, updates[i].fields);
+      if (inserts.length) await sbInsert('medicine_movements', inserts);
+      for (var j = 0; j < removals.length; j++) await sbDelete('medicine_movements', removals[j]);
+      await sbPatch('animal_health_events', eventId, patch);
+    }
+    hlEditId = null;
+    await loadHealthPage();
+  } catch(err) {
+    statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
+  }
+}
+
+async function deleteHealthEvent(eventId) {
+  var e = healthEvts.find(function(x) { return x.id === eventId; });
+  var doses = hlEventDoses(eventId);
+  var med = e && e.medicine_id ? medById(e.medicine_id) : null;
+  var total = doses.reduce(function(s, mv) { return s - Number(mv.quantity); }, 0);
+  var msg = 'Delete this health event?' +
+    (doses.length && med ? '\n\n' + medFmtUnits(med, total) + ' of ' + med.name + ' will go back into stock.' : '') +
+    '\n\nIf it was logged against a schedule, the schedule\'s next due date is not changed back — edit it under Schedules if needed.' +
+    '\n\nThis cannot be undone.';
+  if (!confirm(msg)) return;
+  try {
+    // Dose rows are removed automatically with the event (on delete cascade)
+    await sbDelete('animal_health_events', eventId);
+    hlExpandedId = null; hlEditId = null;
+    await loadHealthPage();
+  } catch(err) { alert('Delete failed: ' + err.message); }
 }
 
 async function submitHealthEvent() {
