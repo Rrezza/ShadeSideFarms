@@ -429,7 +429,7 @@
           <button class="nav-item" data-page="medicines"     onclick="showPage('medicines',this)"><span class="nav-dot"></span>Medicines &amp; Health Supplies</button>
           <button class="nav-item" data-page="land-fert"     onclick="navLandTab('fert',this)"><span class="nav-dot"></span>Fertilizers</button>
           <button class="nav-item" data-page="inginventory"  onclick="showPage('inginventory',this)"><span class="nav-dot"></span>Feed Ingredients</button>
-          <button class="nav-item" data-page="seedinventory" onclick="showPage('seedinventory',this)"><span class="nav-dot"></span>Seeds</button>
+          <button class="nav-item" data-page="seedinventory" onclick="showPage('seedinventory',this)"><span class="nav-dot"></span>Seeds &amp; Harvest</button>
           <button class="nav-item" data-page="equipment"     onclick="showPage('equipment',this)"><span class="nav-dot"></span>Tools &amp; Equipment</button>
         </div>
       </div>
@@ -800,21 +800,11 @@
     <!-- Feed: Seed Inventory -->
     <div class="page" id="page-seedinventory">
       <div class="page-hdr">
-        <h1>Seed Inventory</h1>
-        <div class="page-hdr-right">
-          <button class="btn btn-primary" onclick="openSdPurchModal()">+ Log seed purchase</button>
-          <button class="refresh-btn" onclick="loadSeedInventory()">↻ Refresh</button>
-        </div>
+        <div><h1>Seeds &amp; Harvest</h1></div>
+        <button class="refresh-btn" onclick="loadSeedInventory()">&#x21BB; Refresh</button>
       </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Current seed stock</h2><span class="section-meta" id="sd-stock-count"></span></div>
-        <div id="sd-stock-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div class="section">
-        <div class="section-hdr"><h2>Purchase log</h2><span class="section-meta" id="sd-purch-count"></span></div>
-        <div id="sd-purch-table"><div class="loading">Loading…</div></div>
-      </div>
-      <div id="abbrev-seeds"></div>
+      <!-- Crop store: rendered by fd_seeds.js -->
+      <div id="sd-content"><div class="loading">Loading…</div></div>
     </div>
 
     <!-- Price History -->
@@ -1680,6 +1670,7 @@
               </div>
               <div class="lf-field"><label>Sow / plant date</label><input type="date" id="lc-sow" onchange="suggestGroupName()"></div>
               <div class="lf-field" id="lc-end-wrap"><label>Expected end date</label><input type="date" id="lc-end"></div>
+              <div class="lf-field"><label>Seed sown (kg)</label><input type="number" id="lc-sown" min="0" step="any" placeholder="Optional — taken from the crop store"></div>
               <div class="lf-field" style="grid-column:1/-1"><label>Notes</label><input type="text" id="lc-notes" placeholder="variety, seed source, planting method…"></div>
             </div>
             <div style="padding:0 22px 18px;display:flex;gap:10px">
@@ -2179,64 +2170,7 @@
   </div>
 </div>
 
-<!-- Seed Purchase Modal -->
-<div class="modal-overlay" id="sd-purch-modal" style="display:none">
-  <div class="modal-box">
-    <h3>Log seed purchase</h3>
-    <div class="modal-fields">
-      <label>Crop</label>
-      <select id="sd-crop"><option value="">Select crop</option></select>
-      <label>Variety</label>
-      <input type="text" id="sd-variety" placeholder="e.g. Chakwal-50, local desi">
-      <label>Date</label>
-      <input type="date" id="sd-date">
-      <label>Quantity (kg)</label>
-      <input type="number" id="sd-qty" min="0.001" step="0.1" placeholder="e.g. 5">
-      <label>Cost per kg (PKR)</label>
-      <input type="number" id="sd-cpk" min="0" step="1" placeholder="optional">
-      <label>Germination % (from label)</label>
-      <input type="number" id="sd-germ" min="0" max="100" step="1" placeholder="e.g. 92">
-      <label>Supplier</label>
-      <input type="text" id="sd-supplier" placeholder="optional">
-      <label>Lot / batch ref</label>
-      <input type="text" id="sd-lot" placeholder="optional">
-      <label>Notes</label>
-      <input type="text" id="sd-notes" placeholder="optional">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeSdPurchModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSdPurch()">Save</button>
-      <span id="sd-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
 
-<!-- Seed Stock Adjustment Modal -->
-<div class="modal-overlay" id="sd-adj-modal" style="display:none">
-  <div class="modal-box">
-    <h3 id="sd-adj-title">Adjust seed stock</h3>
-    <div class="modal-fields">
-      <label>Date</label>
-      <input type="date" id="sd-adj-date">
-      <label>Delta (kg) — positive to add, negative to remove</label>
-      <input type="number" id="sd-adj-delta" step="0.01" placeholder="e.g. -0.5 or +2">
-      <label>Reason</label>
-      <select id="sd-adj-reason">
-        <option value="count">Physical count correction</option>
-        <option value="germination_test">Germination test use</option>
-        <option value="spoilage">Spoilage / expired</option>
-        <option value="other">Other</option>
-      </select>
-      <label>Notes</label>
-      <input type="text" id="sd-adj-notes">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeSdAdj()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSdAdj()">Save</button>
-      <span id="sd-adj-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
-    </div>
-  </div>
-</div>
 
 <!-- Auth / Login modal -->
 <div class="modal-overlay" id="auth-login-modal" style="display:none">
@@ -2525,7 +2459,7 @@
   // APP_BUILD is appended to every script URL (here and in loadModule() in
   // shared.js), so a new build number makes browsers fetch fresh copies
   // instead of running stale cached code. The sidebar footer shows it too.
-  var APP_BUILD      = 93;
+  var APP_BUILD      = 94;
   var APP_BUILD_DATE = '2026-11-25';
   ['shared', 'an_helpers', 'fd_shared', 'setup_shared', 'setup_harvest_destinations', 'health', 'auth']
     .forEach(function(name) {

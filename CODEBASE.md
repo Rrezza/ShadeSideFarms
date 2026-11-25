@@ -18,7 +18,7 @@ Standalone single-page mobile app for farmhands, separate from `Index.html` — 
 ---
 
 ## Sidebar layout (2026-11-20)
-**Setup** = adding/editing the things themselves (plots, workers, locations, ingredients, species, crops, harvest destinations, fertilizers, medicines, tools). **Inventory** (sits above Feed) = stock levels and buying, one page per item type: Medicines & Health Supplies (`health_meds.js`), Fertilizers (the Land page's `fert` tab via `navLandTab`), Feed Ingredients (`fd_inventory.js`), Seeds (`fd_seeds.js`), Tools & Equipment (`inv_equipment.js` + consumables from `health_meds.js`). Setup › Tools was removed 2026-11-25 (equipment is managed on its Inventory page). **Animals › Health** = administering doses and managing schedules. The old Setup › Inventory page (`setup_inventory.js`, fertilizer stock only — a duplicate of Land's) was removed.
+**Setup** = adding/editing the things themselves (plots, workers, locations, ingredients, species, crops, harvest destinations, fertilizers, medicines, tools). **Inventory** (sits above Feed) = stock levels and buying, one page per item type: Medicines & Health Supplies (`health_meds.js`), Fertilizers (the Land page's `fert` tab via `navLandTab`), Feed Ingredients (`fd_inventory.js`), Seeds & Harvest (`fd_seeds.js`, the crop store), Tools & Equipment (`inv_equipment.js` + consumables from `health_meds.js`). Setup › Tools was removed 2026-11-25 (equipment is managed on its Inventory page). **Animals › Health** = administering doses and managing schedules. The old Setup › Inventory page (`setup_inventory.js`, fertilizer stock only — a duplicate of Land's) was removed.
 
 ---
 
@@ -68,7 +68,7 @@ Acquisition log page for purchases, harvests, and vet supplies. Tabular view wit
 Price history charts for purchased ingredients. Selectable by category and name, tracks `cost_per_kg` over time. Key globals: `phIngsList`, `phData`, `phSelected`. Key function: `loadPriceHistory()`. Reads: `ingredients`, `ingredient_acquisitions`.
 
 ### `fd_seeds.js`
-Seed inventory tracking (purchases, harvest allocations, adjustments). Stock calculated per crop. Key globals: `sdCrops`, `sdPurchases`, `sdAllocations`, `sdAdjustments`, `sdEditId`. Key functions: `loadSeedInventory()`, `sdSafe()`. Reads: `crops`, `seed_purchases`, `harvest_allocations`, `seed_stock_adjustments`.
+Inventory › Seeds & Harvest — the **crop store**: one stock per crop in kg (seed and stored grain are the same pile; small amounts display in grams). In: purchases (`crop_stock_movements` 'purchase', with cost, variety, supplier) and harvests allocated to destination key `seed_stock` (labelled "Crop store (grain / seed)" in `harvest_destinations`). Out: seed sown (`plot_crops.qty_kg_sown` — entered on the Land planting form, editable per planting in the crop's History), to feed (also inserts a 'harvested' `ingredient_acquisitions` row so it appears in Feed stock; deleting the movement deletes that row), sold (with price), household, spoiled; plus count adjustments. Per-crop totals for each, stock, spent and sales. Replaced the old `seed_purchases` / `seed_stock_adjustments` tables (dropped, both empty). Key globals: `sdCrops`, `sdMoves`, `sdHarvestIn`, `sdSowings`, `sdAction`. Key functions: `loadSeedInventory()`, `sdTotals()`, `submitSdAction()`, `patchSdSown()`, `deleteSdMove()`.
 
 ---
 

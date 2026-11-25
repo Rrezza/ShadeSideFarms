@@ -1059,7 +1059,7 @@ function toggleLandCropForm() {
     toggleCropEndDate();
     // Reset crop fields
     var sowEl = document.getElementById('lc-sow'); if (sowEl) sowEl.value = todayISO();
-    ['lc-notes','lc-end'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+    ['lc-notes','lc-end','lc-sown'].forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
     var stEl = document.getElementById('lc-status'); if (stEl) stEl.textContent = '';
   }
 }
@@ -1910,6 +1910,9 @@ async function submitLandCrop() {
     if (sow)     cd.sow_date                 = sow;
     if (endDate) cd.expected_termination_date = endDate;
     if (notes)   cd.notes                    = notes;
+    // Seed sown is deducted from the crop store (Inventory › Seeds & Harvest)
+    var sown = parseFloat((document.getElementById('lc-sown') || {}).value);
+    if (sown > 0) cd.qty_kg_sown = sown;
     await sbInsert('plot_crops', [cd]);
 
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
@@ -2403,11 +2406,11 @@ async function submitHarvestAlloc() {
       if (isNaN(kg) || kg <= 0) throw new Error('Row ' + (i + 1) + ': enter a valid quantity.');
       if (dest === 'feed_inventory' && !row.ingredientId)
         throw new Error('Row ' + (i + 1) + ': select an ingredient for feed inventory.');
-      // Seed Inventory tallies allocations by crop_id and silently drops any row
-      // where it's null (js/fd_seeds.js) — refuse the allocation here instead of
-      // letting it vanish from stock numbers with no indication anything's wrong.
+      // The crop store (destination key 'seed_stock', labelled "Crop store") tallies
+      // allocations by crop_id and would silently drop a row where it's null
+      // (js/fd_seeds.js) — refuse the allocation here instead.
       if (dest === 'seed_stock' && !seedCropId)
-        throw new Error('Row ' + (i + 1) + ': this crop group has no linked crop record, so it can\'t be allocated to seed stock.');
+        throw new Error('Row ' + (i + 1) + ': this crop group has no linked crop record, so it can\'t go to the crop store.');
       totalUsed += kg;
     });
     if (totalUsed > p2AllocTotalKg + 0.01)

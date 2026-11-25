@@ -17,7 +17,7 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Items:**
   - External-processing receive-back workflow (`processing_transaction_outputs` table + "Receive back" modal in Ingredient Inventory)
   - Fertilizer `source_type` (purchased/gifted/own_animals)
-  - Seed deduction from stock on sowing (tied to `plot_crops.qty_kg_sown`)
+  - ~~Seed deduction from stock on sowing~~ — done 2026-11-25 with the crop store (r94)
 - Source: breakdown doc §6 item 2.
 
 ### 3. Wire feed cost into Cost & Sales P&L
@@ -137,11 +137,6 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Idea:** workers see problems first. A two-tap flow in `Farmhand.html` — pick animal, pick symptom (off feed, limping, coughing, scouring, bloat, injury, other), optional note — that creates an `observation` health event for that animal with a follow-up date of today, so it lands in the dashboard's Health › Due now and Overview follow-up reminders automatically.
 - **To decide when building:** symptom list; whether to allow a photo; whether the worker picks from a list of animal IDs (needs readable tags on the goats) or by group + description.
 
-### 18. Crop store (Inventory › Seeds & Harvest) — NEXT
-- **Status:** Agreed 2026-11-25, step 3 of the inventory build. Not started.
-- **Design:** one stock per crop (seed and stored grain are the same pile), in kg. In: bought (with cost), harvested (new "Crop store" harvest-allocation destination, replacing "Seed stock"). Out: sown (deducted automatically when a planting is logged with an amount sown — closes item 2's seed-deduction piece), to feed (also an inflow on Feed Ingredients), sold (with price), household, spoiled / count correction. Per-crop totals for each, stock now, spent and sold. Harvested produce carries no cost (assumption).
-- **Touches:** `fd_seeds.js` (reworked), `land.js` harvest allocation and plantings, feed-ingredient link per crop.
-
 ### 19. Equipment depreciation
 - **Status:** Deferred by choice (2026-11-25). Purchase date and cost are recorded on every equipment item, so straight-line depreciation over a useful life can be added later without re-entering anything — worth doing once a farm-wide P&L exists.
 
@@ -153,6 +148,10 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 ---
 
 ## Resolved — no code change needed
+
+### Inventory step 3: crop store (Seeds & Harvest) — DONE 2026-11-25 (r94)
+- Inventory › Seeds & Harvest reworked into a per-crop store: bought, harvested (harvest allocation destination `seed_stock`, relabelled "Crop store (grain / seed)"), sown (`plot_crops.qty_kg_sown`, new field on the planting form + editable in History), to feed (creates the Feed-stock entry), sold, household, spoiled, counts. New `crop_stock_movements` table; empty `seed_purchases` / `seed_stock_adjustments` dropped.
+- **Your existing 22 plantings have no seed-sown amount** — fill them in from each crop's History if you want past sowing deducted.
 
 ### Inventory steps 1–2: health supplies, tools & equipment, consumables — DONE 2026-11-25 (r93)
 - **Health supplies** (syringes, gloves…) live alongside medicines (Setup and Inventory › Medicines & Health Supplies), counted in pieces with Buy / **Use** / Count and minimum-stock reminders; kept out of dosing pickers.
