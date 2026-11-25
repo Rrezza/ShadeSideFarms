@@ -1227,8 +1227,78 @@ function populateBreedingForm() {
   document.getElementById('br-date').value = todayISO();
 }
 
+var brEditId = null;   // breeding event being edited in the form (null = logging a new one)
+
 function toggleBrForm() {
-  document.getElementById('br-form-box').classList.toggle('open');
+  var box = document.getElementById('br-form-box');
+  if (box.classList.contains('open')) { closeBrForm(); return; }
+  brEditId = null;
+  populateBreedingForm();
+  document.getElementById('br-sire').value = '';
+  document.getElementById('br-obs').value = '';
+  document.getElementById('br-notes').value = '';
+  document.getElementById('br-submit-btn').textContent = 'Save mating';
+  document.getElementById('br-status').textContent = '';
+  box.classList.add('open');
+}
+
+function closeBrForm() {
+  brEditId = null;
+  document.getElementById('br-submit-btn').textContent = 'Save mating';
+  document.getElementById('br-form-box').classList.remove('open');
+}
+
+// Adds an <option> for an animal that's no longer in the dropdown's filter
+// (e.g. a doe since sold), so editing an old record still shows who it was.
+function brEnsureOption(selectId, animalId) {
+  var sel = document.getElementById(selectId);
+  if (!animalId || sel.querySelector('option[value="' + animalId + '"]')) return;
+  var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
+  var o = document.createElement('option');
+  o.value = animalId;
+  o.textContent = a ? a.farm_id + (a.name ? ' (' + a.name + ')' : '') : 'Animal #' + animalId;
+  sel.appendChild(o);
+}
+
+// Opens the mating form filled in with an existing record; Save then updates it
+function startBreedingEdit(id) {
+  var b = breedingData.find(function(x) { return x.id === id; });
+  if (!b) return;
+  populateBreedingForm();
+  brEditId = id;
+  brEnsureOption('br-dam', b.dam_id);
+  brEnsureOption('br-sire', b.sire_id);
+  document.getElementById('br-dam').value   = b.dam_id;
+  document.getElementById('br-date').value  = b.date;
+  document.getElementById('br-sire').value  = b.sire_id || '';
+  document.getElementById('br-obs').value   = b.observed_by || '';
+  document.getElementById('br-notes').value = b.notes || '';
+  document.getElementById('br-submit-btn').textContent = 'Save changes';
+  document.getElementById('br-status').textContent = '';
+  var box = document.getElementById('br-form-box');
+  box.classList.add('open');
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function deleteBreedingEvent(id) {
+  var b = breedingData.find(function(x) { return x.id === id; });
+  var who = b && b.dams ? (b.dams.name || b.dams.farm_id) : 'this doe';
+  if (!confirm('Delete the mating record for ' + who + (b ? ' on ' + fmtDate(b.date) : '') + '? This cannot be undone.')) return;
+  try {
+    // A birth may point at this mating; keep the birth, just drop the link
+    await sbPatchWhere('birth_events', 'breeding_event_id=eq.' + id, { breeding_event_id: null });
+    await sbDelete('breeding_events', id);
+    if (brEditId === id) closeBrForm();
+    await loadBreedingPage();
+  } catch(err) { alert('Delete failed: ' + err.message); }
+}
+
+// Mating date + gestation as YYYY-MM-DD, using local date parts
+// (toISOString() would land a day early in Pakistan, UTC+5)
+function brExpectedDate(matingISO, gestDays) {
+  var d = new Date(matingISO + 'T00:00:00');
+  d.setDate(d.getDate() + gestDays);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 function renderBreedingEvents() {
@@ -1239,30 +1309,31 @@ function renderBreedingEvents() {
     return;
   }
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Date</th><th>Dam</th><th>Sire</th><th>Expected kidding</th><th>Birth registered</th><th>Notes</th>' +
+    '<th>Date</th><th>Dam</th><th>Sire</th><th>Expected kidding</th><th>Birth registered</th><th>Notes</th><th>Actions</th>' +
     '</tr></thead><tbody>';
   breedingData.forEach(function(b) {
     var gestDays = 150;
-    if (b.dams) {
-      var damA = anSharedAnimals.find(function(a) { return a.id === b.dam_id; });
-      if (damA) {
-        var sp = anSharedSpecies.find(function(s) { return s.id === damA.species_id; });
-        if (sp && sp.gestation_days) gestDays = sp.gestation_days;
-      }
+    var damA = anSharedAnimals.find(function(a) { return a.id === b.dam_id; });
+    if (damA) {
+      var sp = anSharedSpecies.find(function(s) { return s.id === damA.species_id; });
+      if (sp && sp.gestation_days) gestDays = sp.gestation_days;
     }
-    var expected = new Date(b.date + 'T00:00:00'); expected.setDate(expected.getDate() + gestDays);
-    var expS = expected.toISOString().slice(0, 10);
-    var damName  = b.dams  ? (b.dams.name  || b.dams.farm_id)  : '\u2014';
+    var expS = brExpectedDate(b.date, gestDays);
+    var damName  = b.dams  ? (b.dams.name  || b.dams.farm_id)  : '—';
     var sireName = b.sires ? (b.sires.farm_id) : 'Unknown';
-    var birthReg = birthData.find(function(bd) { return bd.dam_id === b.dam_id; });
-    html += '<tr>' +
+    // Only a birth after this mating counts as its birth
+    var birthReg = birthData.find(function(bd) { return bd.dam_id === b.dam_id && bd.date >= b.date; });
+    html += '<tr' + (brEditId === b.id ? ' class="ing-selected"' : '') + '>' +
       '<td class="mono">' + fmtDate(b.date) + '</td>' +
       '<td style="font-weight:500">' + damName + '</td>' +
       '<td class="muted-cell">' + sireName + '</td>' +
       '<td class="mono">' + fmtDate(expS) + '</td>' +
       '<td>' + (birthReg ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>') + '</td>' +
-      '<td class="muted-cell">' + (b.notes || '\u2014') + '</td>' +
-      '</tr>';
+      '<td class="muted-cell">' + (b.notes || '—') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" onclick="startBreedingEdit(' + b.id + ')">Edit</button> ' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteBreedingEvent(' + b.id + ')">Delete</button>' +
+      '</td></tr>';
   });
   html += '</tbody></table></div>';
   el.innerHTML = html;
@@ -1275,17 +1346,22 @@ async function submitBreedingEvent() {
     var damId = document.getElementById('br-dam').value;
     var date  = document.getElementById('br-date').value;
     if (!damId || !date) throw new Error('Dam and date required.');
+    var sire  = document.getElementById('br-sire').value;
+    var obs   = document.getElementById('br-obs').value;
+    var notes = document.getElementById('br-notes').value.trim();
+    // Every field is sent (null when blank) so an edit can also clear a value.
+    // No sire picked = sire unknown (there's no separate "unknown" choice).
     var d = {
       dam_id: parseInt(damId), date: date,
-      // No sire picked = sire unknown (there's no separate "unknown" choice any more)
-      sire_unknown: !document.getElementById('br-sire').value
+      sire_id: sire ? parseInt(sire) : null,
+      sire_unknown: !sire,
+      observed_by: obs ? parseInt(obs) : null,
+      notes: notes || null
     };
-    var sire = document.getElementById('br-sire').value; if (sire) d.sire_id = parseInt(sire);
-    var obs  = document.getElementById('br-obs').value;  if (obs)  d.observed_by = parseInt(obs);
-    var notes= document.getElementById('br-notes').value.trim(); if (notes) d.notes = notes;
-    await sbInsert('breeding_events', [d]);
+    if (brEditId !== null) await sbPatch('breeding_events', brEditId, d);
+    else await sbInsert('breeding_events', [d]);
     st.textContent = 'Saved.'; st.style.color = 'var(--green)';
-    document.getElementById('br-form-box').classList.remove('open');
+    closeBrForm();
     await loadBreedingPage();
   } catch(err) {
     st.textContent = 'Error: ' + err.message; st.style.color = 'var(--red)';

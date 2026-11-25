@@ -146,6 +146,10 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Breeding events: edit and delete — DONE 2026-11-25 (r92)
+- Edit (re-uses the mating form) and Delete on each breeding row.
+- Fixed on the way: expected kidding date was a day early in UTC+5 (`toISOString()`); "Birth registered" showed Yes for any birth the doe had ever had, not one after that mating.
+
 ### Sign-in kept alive + breeding/species tidy-up — DONE 2026-11-25 (r91)
 - **Root cause of the breeding "RLS error":** not the breeding table. Confirmed in the API logs — the save went out with the anonymous key (`POST 401`, "new row violates row-level security policy"). `auth.js` (1) never saved a refreshed session, so after Supabase rotated the refresh token the next reload silently dropped to read-only, and (2) had no renewal while the page was open, despite CODEBASE.md saying it did. Worse, edits/deletes sent while read-only returned success but changed nothing — confirmed: the Nitroxin "not safe in pregnancy" edit at 07:58 that day never saved.
 - **Fix:** refreshed sessions saved; token renewed 2 min before expiry and on wake; every write calls `authBeforeWrite()` first (renews if needed, otherwise a clear "you are signed out" error).
