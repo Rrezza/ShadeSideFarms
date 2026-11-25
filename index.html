@@ -458,6 +458,7 @@
           <button class="nav-item" data-page="harvestdest"  onclick="showPage('harvestdest',this)"><span class="nav-dot"></span>Harvest Destinations</button>
           <button class="nav-item" data-page="fertilizers"  onclick="showPage('fertilizers',this)"><span class="nav-dot"></span>Fertilizers</button>
           <button class="nav-item" data-page="medsetup"     onclick="showPage('medsetup',this)"><span class="nav-dot"></span>Medicines</button>
+          <button class="nav-item" data-page="protocols"    onclick="showPage('protocols',this)"><span class="nav-dot"></span>Health Protocols</button>
           <button class="nav-item" data-page="tools"        onclick="showPage('tools',this)"><span class="nav-dot"></span>Tools</button>
         </div>
       </div>
@@ -881,6 +882,38 @@
       </div>
     </div>
 
+    <!-- Per-animal health history (filled by openAnimalHealthHistory() in health.js) -->
+    <div class="modal-overlay" id="ah-modal" style="display:none" onclick="if (event.target === this) closeAnimalHealthHistory()">
+      <div class="modal-box" style="width:820px;max-height:85vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <h3 id="ah-title">Health history</h3>
+          <button class="btn btn-sm" onclick="closeAnimalHealthHistory()">Close</button>
+        </div>
+        <div id="ah-body"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- Apply a health protocol to a group (setup_protocols.js) -->
+    <div class="modal-overlay" id="pa-modal" style="display:none">
+      <div class="modal-box" style="width:560px">
+        <h3>Apply health protocol</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Group: <strong id="pa-group"></strong></p>
+        <div class="modal-fields">
+          <label>Protocol</label>
+          <select id="pa-protocol" onchange="renderApplyPreview()"></select>
+          <label>Arrival date (step days count from here)</label>
+          <input type="date" id="pa-date" onchange="renderApplyPreview()">
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin:10px 0 6px">These schedules will be created:</div>
+        <div id="pa-preview" style="overflow-x:auto"></div>
+        <div class="modal-btns">
+          <button class="btn" onclick="closeApplyProtocol()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitApplyProtocol()">Create schedules</button>
+          <span id="pa-status" style="font-size:12px;color:var(--muted);align-self:center;margin-left:8px"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- Animal exit modal -->
     <div class="modal-overlay" id="al-exit-modal" style="display:none">
       <div class="modal-box">
@@ -1187,6 +1220,15 @@
         <button class="refresh-btn" onclick="loadMedicinesPage()">&#x21BB; Refresh</button>
       </div>
       <div id="med-content"><div class="loading">Loading...</div></div>
+    </div>
+
+    <!-- Setup › Health Protocols — reusable schedule sets (rendered by setup_protocols.js) -->
+    <div class="page" id="page-protocols">
+      <div class="page-hdr">
+        <div><h1>Health Protocols</h1></div>
+        <button class="refresh-btn" onclick="loadProtocolsPage()">&#x21BB; Refresh</button>
+      </div>
+      <div id="protocols-content"><div class="loading">Loading...</div></div>
     </div>
 
     <!-- Setup › Medicines — the medicine list itself (rendered by health_meds.js) -->
@@ -2517,7 +2559,7 @@
   // APP_BUILD is appended to every script URL (here and in loadModule() in
   // shared.js), so a new build number makes browsers fetch fresh copies
   // instead of running stale cached code. The sidebar footer shows it too.
-  var APP_BUILD      = 87;
+  var APP_BUILD      = 89;
   var APP_BUILD_DATE = '2026-11-25';
   ['shared', 'an_helpers', 'fd_shared', 'setup_shared', 'setup_harvest_destinations', 'health', 'auth']
     .forEach(function(name) {

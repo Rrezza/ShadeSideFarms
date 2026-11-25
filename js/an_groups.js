@@ -125,6 +125,7 @@ function renderGroupDetail(g, animals, stats) {
           '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
           '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
           '<td style="white-space:nowrap">' +
+            '<button class="btn btn-sm" onclick="' + stop + 'openAnimalHealthHistory(' + a.id + ')">Health</button> ' +
             '<button class="btn btn-sm" onclick="' + stop + 'grpStartMemberEdit(' + a.id + ')">Edit</button> ' +
             '<button class="btn btn-sm btn-primary" onclick="' + stop + 'alOpenAssign(' + a.id + ', ' + g.id + ')">Move group</button> ' +
             '<button class="btn btn-sm" onclick="' + stop + 'alOpenExit(' + a.id + ')">Left farm</button> ' +
@@ -167,6 +168,7 @@ function renderGroupDetail(g, animals, stats) {
       '<button class="btn btn-sm" onclick="event.stopPropagation();goToPage(\'health\')">Health events</button>' +
       '<button class="btn btn-sm" onclick="event.stopPropagation();goToPage(\'costsales\')">Cost &amp; Sales</button>' +
       '<button class="btn btn-sm" onclick="event.stopPropagation();openGroupEditModal(' + g.id + ')">Edit group</button>' +
+      '<button class="btn btn-sm" onclick="event.stopPropagation();loadModule(\'setup_protocols\').then(function(){ openApplyProtocol(' + g.id + '); })">Apply protocol</button>' +
       '<button class="btn btn-sm" style="margin-left:auto;color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();deleteGroup(' + g.id + ', \'' + g.name.replace(/'/g,"\\'") + '\', ' + animals.length + ')">Delete group</button>' +
     '</div>' +
     '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">' +

@@ -164,6 +164,7 @@ var PAGE_MAP = {
   health:         { module: 'health',  init: 'loadHealthPage' },
   medicines:      { module: 'health_meds', init: 'loadMedicinesPage' },
   medsetup:       { module: 'health_meds', init: 'loadMedSetupPage' },
+  protocols:      { module: 'setup_protocols', init: 'loadProtocolsPage' },
   breeding:       { module: 'health',  init: 'loadBreedingPage' },
   costsales:      { module: 'health',  init: 'loadCostSalesPage' },
   // Overview (landing page)

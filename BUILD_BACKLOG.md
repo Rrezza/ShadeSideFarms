@@ -132,6 +132,11 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 - **Idea:** one purchasing + stock system across all farm items — medicines, fuel, fertilizer, tools, feed ingredients, seeds — instead of today's separate per-module purchase tables.
 - **Groundwork:** the medicine cabinet (`medicines` + `medicine_movements`) was deliberately built in the item-registry + movement-ledger shape such a system would use, so it can fold in with a mechanical migration. Fertilizers, ingredients and seeds each have their own purchase tables and pages today — migrating those is the real work.
 
+### 17. Farmhand.html — "sick animal" quick report
+- **Status:** Agreed for later (2026-11-25). Not designed yet.
+- **Idea:** workers see problems first. A two-tap flow in `Farmhand.html` — pick animal, pick symptom (off feed, limping, coughing, scouring, bloat, injury, other), optional note — that creates an `observation` health event for that animal with a follow-up date of today, so it lands in the dashboard's Health › Due now and Overview follow-up reminders automatically.
+- **To decide when building:** symptom list; whether to allow a photo; whether the worker picks from a list of animal IDs (needs readable tags on the goats) or by group + description.
+
 ### 16. Land page — `crop_observations.notes` column doesn't exist
 - **Status:** Confirmed, not fixed (found 2026-11-20 while testing the Inventory menu — flagging per house rule).
 - **Problem:** loading the Land page requests `crop_observations?select=...,notes,...`, which 400s with `column crop_observations.notes does not exist` (the real column is `note`, singular — `overview.js` already uses `note`). Crop-level observations therefore don't load on the Land page.
@@ -140,6 +145,13 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 ---
 
 ## Resolved — no code change needed
+
+### Health: per-animal history, arrival protocols, targeted deworming — DONE 2026-11-25 (r89)
+- **Per-animal health history:** Health button on Animals list and Groups member rows (`openAnimalHealthHistory()` in `health.js`).
+- **Arrival protocols:** Setup › Health Protocols + Apply protocol on a group (`setup_protocols.js`; tables `health_protocols`, `health_protocol_steps`).
+- **Targeted deworming:** FAMACHA scores at weigh-ins (`famacha_scores` table); deworming dose grid pre-fills 0 for scores 1–2 within 14 days (assumption: 14 days is the freshness cut-off — adjust `HF_FAMACHA_MAX_AGE_DAYS` if wanted); last-dewormer / same-class warning on the log form, Due cards and Schedules table.
+- **Fixed on the way:** one-off schedules never closed after being logged (only repeating ones were handled) — they now set `active=false`. Repeating schedules' next due date was computed via `toISOString()` and landed one day early in Pakistan (UTC+5) — now local-date maths.
+- **Not yet set:** none of your medicines has an active ingredient recorded (e.g. Nitroxin = nitroxynil), so the rotation check currently only catches the *same product* reused. Fill in Active ingredient under Setup › Medicines for it to catch different brands of the same drug.
 
 ### Health: mortality fix, withdrawal periods, follow-up reminders — DONE 2026-11-25 (r87)
 - **Mortality (was #13):** `mortality` added to `health_event_enum`; the health event is now saved before the mortality record / deceased status / membership close, and rolled back if those fail. The mortality record now carries the animal's group (previously only set for group-targeted events, which can't log a death), so group P&L death counts are correct.

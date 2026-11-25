@@ -10,6 +10,7 @@ var healthAllScheds  = [];   // every schedule, active and retired (Schedules ta
 var healthEvts       = [];
 var healthFollowups  = [];    // logged events with an open follow-up due within 14 days (or overdue)
 var hfFollowupOf     = null;  // event whose follow-up the log form is currently recording
+var hfFamacha        = {};    // animal_id -> latest FAMACHA { score, date }
 var hfCostTouched    = false; // true once the user types a cost, so auto-costing stops overwriting it
 var schedEditId      = null;  // schedule being edited (null = adding)
 var breedingData     = [];
@@ -38,9 +39,12 @@ async function loadHealthPage() {
         'select=*,animals(farm_id,name),workers(name)&order=date.desc&limit=300'),
       medLoadData(),
       sbGet('animal_health_events',
-        'follow_up_done=eq.false&follow_up_date=lte.' + due14s + '&select=*&order=follow_up_date')
+        'follow_up_done=eq.false&follow_up_date=lte.' + due14s + '&select=*&order=follow_up_date'),
+      sbGet('famacha_scores', 'select=animal_id,score,date&order=date.desc,id.desc&limit=3000')
     ]);
     healthFollowups = r[3];
+    hfFamacha = {};
+    r[4].forEach(function(f) { if (!hfFamacha[f.animal_id]) hfFamacha[f.animal_id] = f; });
     // All schedules feed the Schedules table; only active ones due within 14 days feed the Due panel
     healthAllScheds = r[0];
     healthScheds = healthAllScheds.filter(function(s) {
@@ -125,6 +129,54 @@ function hfTargetAnimals() {
 // Per-animal dose grid: one row per animal, pre-filled with the label-rate
 // suggestion from its latest weight. Each box is editable — the number entered
 // is what's actually deducted from stock.
+// FAMACHA scores older than this aren't used to skip an animal (eyelid colour changes fast)
+var HF_FAMACHA_MAX_AGE_DAYS = 14;
+
+// Latest FAMACHA score for an animal: { score, date, ageDays } or null
+function hfLatestFamacha(animalId) {
+  var f = hfFamacha[animalId];
+  if (!f) return null;
+  var age = Math.round((new Date(todayISO() + 'T00:00:00') - new Date(f.date + 'T00:00:00')) / 864e5);
+  return { score: f.score, date: f.date, ageDays: age };
+}
+
+// Most recent deworming that covered this group / animal (for rotation checks).
+// Group events count for the group; an individual animal also inherits its group's.
+function healthLastDeworming(groupId, animalId) {
+  return healthEvts.find(function(e) {
+    if (e.event_type !== 'deworming' || !e.medicine_id) return false;
+    if (groupId && e.group_id === groupId && !e.animal_id) return true;
+    if (animalId && e.animal_id === animalId) return true;
+    return false;
+  }) || null;
+}
+
+// "Albendazole (Valbazen) on 14 Sep" style label for a past deworming
+function healthDewormLabel(e) {
+  var m = medById(e.medicine_id);
+  if (!m) return e.product_used || '';
+  return (m.active_ingredient ? m.active_ingredient + ' (' + m.name + ')' : m.name) + ' on ' + fmtDate(e.date);
+}
+
+// Rotation note for the log form: last dewormer used on this target, and a
+// warning when the chosen medicine has the same active ingredient (or is the
+// same product, if no ingredient is recorded).
+function hfRotationHtml(med) {
+  var t = document.getElementById('hf-target-type').value;
+  var gid = t === 'group' ? parseInt(document.getElementById('hf-group').value) : getAnimalGroupId(parseInt(document.getElementById('hf-animal').value));
+  var aid = t === 'animal' ? parseInt(document.getElementById('hf-animal').value) : null;
+  var last = healthLastDeworming(gid, aid);
+  if (!last) return '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">No earlier deworming recorded for this ' + t + '.</div>';
+  var lastMed = medById(last.medicine_id);
+  var same = lastMed && (
+    (lastMed.active_ingredient && med.active_ingredient &&
+      lastMed.active_ingredient.trim().toLowerCase() === med.active_ingredient.trim().toLowerCase()) ||
+    lastMed.id === med.id);
+  return '<div style="font-size:12px;margin-bottom:6px;' + (same ? 'color:var(--amber);font-weight:500' : 'color:var(--muted)') + '">' +
+    'Last deworming: ' + medEsc(healthDewormLabel(last)) +
+    (same ? ' — same active ingredient as this one. Rotating dewormer class slows resistance.' : '') + '</div>';
+}
+
 function renderHfDoseGrid() {
   var wrap = document.getElementById('hf-dose-grid');
   if (!wrap) return;
@@ -136,21 +188,35 @@ function renderHfDoseGrid() {
     wrap.innerHTML = '<div class="fc-hint" style="margin:0 0 12px">Select an animal or group to enter doses.</div>';
     return;
   }
+  // Deworming rounds: show FAMACHA and pre-fill 0 for animals recently scored 1–2 (targeted treatment)
+  var deworming = document.getElementById('hf-event-type').value === 'deworming';
   var html = '<div style="margin:0 0 12px">' +
+    (deworming ? hfRotationHtml(med) : '') +
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dose per animal (' + med.stock_unit + ') &middot; label ' +
-      medFmtDoseRate(med) + ' &middot; pre-filled from latest weight, edit any you dosed differently, 0 = not dosed</div>' +
+      medFmtDoseRate(med) + ' &middot; pre-filled from latest weight, edit any you dosed differently, 0 = not dosed' +
+      (deworming ? ' &middot; FAMACHA 1–2 within ' + HF_FAMACHA_MAX_AGE_DAYS + ' days pre-filled 0' : '') + '</div>' +
     '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Animal</th><th class="right">Weight</th><th class="right">Suggested</th><th class="right">Dose given</th>' +
+    '<th>Animal</th><th class="right">Weight</th>' + (deworming ? '<th class="right">FAMACHA</th>' : '') +
+    '<th class="right">Suggested</th><th class="right">Dose given</th>' +
     '</tr></thead><tbody>';
   animals.forEach(function(a) {
     var kg = medAnimalWeight(a.id);
     var sug = medSuggestDose(med, a.id);
+    var famCell = '', prefill = sug;
+    if (deworming) {
+      var f = hfLatestFamacha(a.id);
+      var fresh = f && f.ageDays <= HF_FAMACHA_MAX_AGE_DAYS;
+      if (fresh && f.score <= 2) prefill = 0;
+      famCell = '<td class="mono right"' + (f && !fresh ? ' style="color:var(--faint)" title="Older than ' + HF_FAMACHA_MAX_AGE_DAYS + ' days — not used"' : '') + '>' +
+        (f ? f.score + ' <span style="font-size:11px;color:var(--muted)">' + f.ageDays + 'd ago</span>' : '—') + '</td>';
+    }
     html += '<tr>' +
       '<td style="font-weight:500">' + a.farm_id + (a.name ? ' <span style="color:var(--muted);font-weight:400">' + medEsc(a.name) + '</span>' : '') + '</td>' +
       '<td class="mono right">' + (kg != null ? r1(kg) + ' kg' : '—') + '</td>' +
+      famCell +
       '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug) : '—') + '</td>' +
       '<td class="right"><input type="number" class="hf-dose-input" data-animal="' + a.id + '" min="0" step="any" ' +
-        'style="width:90px;text-align:right" value="' + (sug != null ? sug : '') + '" oninput="updateHfDoseTotal()"></td>' +
+        'style="width:90px;text-align:right" value="' + (prefill != null ? prefill : '') + '" oninput="updateHfDoseTotal()"></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>' +
@@ -205,6 +271,7 @@ function onHfEventTypeChange() {
   var et = document.getElementById('hf-event-type').value;
   var mortFields = document.getElementById('hf-mortality-fields');
   if (mortFields) mortFields.style.display = (et === 'mortality') ? 'grid' : 'none';
+  renderHfDoseGrid();  // deworming adds the FAMACHA column and rotation note
 }
 
 // Days-until label and card colour shared by schedule and follow-up cards
@@ -222,6 +289,20 @@ function healthDueInfo(dateISO) {
 // Target of a logged event: the animal, else the group
 function healthEventTarget(e) {
   return e.animal_id ? getAnimalDisplayName(e.animal_id) : (e.group_id ? getGroupName(e.group_id) : '—');
+}
+
+// For a deworming schedule: last dewormer used on its target, flagged amber
+// when the schedule's medicine has the same active ingredient. '' otherwise.
+function healthSchedRotationNote(s) {
+  if (s.event_type !== 'deworming') return '';
+  var last = healthLastDeworming(s.group_id, s.animal_id);
+  if (!last) return '';
+  var lastMed = medById(last.medicine_id), med = s.medicine_id ? medById(s.medicine_id) : null;
+  var same = lastMed && med && (lastMed.id === med.id ||
+    (lastMed.active_ingredient && med.active_ingredient &&
+     lastMed.active_ingredient.trim().toLowerCase() === med.active_ingredient.trim().toLowerCase()));
+  return '<div style="font-size:11px;' + (same ? 'color:var(--amber);font-weight:500' : 'color:var(--muted)') + '">Last: ' +
+    medEsc(healthDewormLabel(last)) + (same ? ' \u2014 same class, consider rotating' : '') + '</div>';
 }
 
 function renderHealthDue() {
@@ -245,6 +326,7 @@ function renderHealthDue() {
       '<div class="due-card-meta">' + (s.event_type || '') + ' &middot; ' + targetLabel + ': ' + medEsc(target) +
       (schedProductLabel(s) ? ' &middot; ' + medEsc(schedProductLabel(s)) : '') + '</div>';
     if (s.dose) html += '<div class="due-card-meta">Dose: ' + medEsc(s.dose) + '</div>';
+    html += healthSchedRotationNote(s);
     html += '<div style="margin-top:8px"><button class="btn btn-sm" onclick="preFillHealthForm(' + s.id + ')">Log this event</button></div>';
     html += '</div>';
   });
@@ -727,12 +809,18 @@ async function submitHealthEvent() {
     if (schedId) {
       var sched = healthScheds.find(function(s) { return s.id === parseInt(schedId); });
       if (sched && sched.interval_days) {
+        // Repeating: move the due date on by the interval. Built from local date
+        // parts — toISOString() would shift it a day early in Pakistan (UTC+5).
         var nextDue = new Date(date + 'T00:00:00');
         nextDue.setDate(nextDue.getDate() + sched.interval_days);
         await sbPatch('scheduled_health_events', parseInt(schedId), {
           last_done_date: date,
-          next_due_date: nextDue.toISOString().slice(0, 10)
+          next_due_date: nextDue.getFullYear() + '-' + String(nextDue.getMonth() + 1).padStart(2, '0') +
+                         '-' + String(nextDue.getDate()).padStart(2, '0')
         });
+      } else if (sched) {
+        // One-off (e.g. a protocol's arrival step): done once, so close it
+        await sbPatch('scheduled_health_events', parseInt(schedId), { last_done_date: date, active: false });
       }
     }
 
@@ -744,6 +832,112 @@ async function submitHealthEvent() {
   } catch(err) {
     statusEl.textContent = 'Error: ' + err.message; statusEl.style.color = 'var(--red)';
   }
+}
+
+// ============================================================
+// PER-ANIMAL HEALTH HISTORY (opened from the Animals list and
+// Groups page member rows). Needs health_meds.js loaded with data.
+// ============================================================
+// An event belongs to an animal's history when it was logged for that animal,
+// it dosed that animal, or it was logged for a group the animal was in on that date.
+async function openAnimalHealthHistory(animalId) {
+  var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
+  document.getElementById('ah-title').textContent = 'Health history — ' + (a ? a.farm_id + (a.name ? ' (' + a.name + ')' : '') : 'animal');
+  document.getElementById('ah-body').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('ah-modal').style.display = 'flex';
+  try {
+    await loadModule('health_meds');
+    // Every group membership the animal has ever had (including ones it has left)
+    var r = await Promise.all([
+      sbGet('group_members', 'animal_id=eq.' + animalId + '&select=group_id,joined_date,left_date'),
+      medLoadData()
+    ]);
+    var memberships = r[0];
+    var doses = medMovements.filter(function(mv) { return mv.animal_id === animalId && mv.movement_type === 'dose'; });
+    var dosedEventIds = doses.map(function(mv) { return mv.health_event_id; }).filter(Boolean);
+    var groupIds = memberships.map(function(m) { return m.group_id; });
+
+    // One query covering all three ways an event can involve this animal
+    var ors = ['animal_id.eq.' + animalId];
+    if (dosedEventIds.length) ors.push('id.in.(' + dosedEventIds.join(',') + ')');
+    if (groupIds.length)      ors.push('group_id.in.(' + groupIds.join(',') + ')');
+    var evts = await sbGet('animal_health_events', 'or=(' + ors.join(',') + ')&select=*&order=date.desc,id.desc');
+
+    // Group events only count while the animal was actually in that group
+    evts = evts.filter(function(e) {
+      if (e.animal_id === animalId || dosedEventIds.indexOf(e.id) >= 0) return true;
+      return memberships.some(function(m) {
+        return m.group_id === e.group_id && e.date >= m.joined_date && (!m.left_date || e.date <= m.left_date);
+      });
+    });
+    renderAnimalHealthHistory(animalId, evts, doses);
+  } catch(err) {
+    document.getElementById('ah-body').innerHTML = '<div class="loading" style="color:var(--red)">Error: ' + err.message + '</div>';
+  }
+}
+
+function renderAnimalHealthHistory(animalId, evts, doses) {
+  var EVTYPE = {
+    vaccination: 'badge-blue', deworming: 'badge-teal', treatment: 'badge-amber',
+    observation: 'badge-gray', injury: 'badge-brown', mortality: 'badge-red'
+  };
+  // Summary: withdrawal status, treatment count, medicine cost for this animal
+  var w = medWithdrawalFor(animalId);
+  var medCost = doses.reduce(function(s, mv) { return s + (mv.cost_pkr != null ? Number(mv.cost_pkr) : 0); }, 0);
+  var unpriced = doses.some(function(mv) { return mv.cost_pkr == null; });
+  var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 16px">' +
+    '<span class="badge ' + (w ? 'badge-red' : 'badge-green') + '">' +
+      (w ? 'In withdrawal until ' + fmtDate(w.safeDate) + ' — ' + medEsc(w.med.name) : 'Not in withdrawal') + '</span>' +
+    '<span class="badge badge-gray">' + evts.length + ' event' + (evts.length !== 1 ? 's' : '') + '</span>' +
+    '<span class="badge badge-gray">' + doses.length + ' dose' + (doses.length !== 1 ? 's' : '') + '</span>' +
+    '<span class="badge badge-gray">Medicine cost ' +
+      (!doses.length ? pkr(0)
+        : doses.every(function(mv) { return mv.cost_pkr == null; }) ? 'not priced yet'
+        : pkr(medCost) + (unpriced ? ' (some doses unpriced)' : '')) + '</span>' +
+    '</div>';
+
+  // Doses not tied to any remaining event (e.g. their event was on a deleted animal) still count
+  var shownDoseIds = [];
+  if (!evts.length && !doses.length) {
+    document.getElementById('ah-body').innerHTML = html + '<div class="empty">No health events recorded for this animal.</div>';
+    return;
+  }
+  html += '<div style="overflow-x:auto"><table><thead><tr>' +
+    '<th>Date</th><th>Type</th><th>Description</th><th>Medicine</th>' +
+    '<th class="right">Dose given</th><th class="right">Cost</th><th></th>' +
+    '</tr></thead><tbody>';
+  evts.forEach(function(e) {
+    var mv = doses.find(function(d) { return d.health_event_id === e.id; });
+    if (mv) shownDoseIds.push(mv.id);
+    var med = e.medicine_id ? medById(e.medicine_id) : null;
+    var scope = e.group_id && !e.animal_id
+      ? '<span class="badge badge-gray" style="font-size:10px">group: ' + medEsc(getGroupName(e.group_id)) + '</span>' : '';
+    html += '<tr>' +
+      '<td class="mono">' + fmtDate(e.date) + '</td>' +
+      '<td><span class="badge ' + (EVTYPE[e.event_type] || 'badge-gray') + '">' + (e.event_type || '') + '</span></td>' +
+      '<td>' + (e.description ? medEsc(e.description) : '—') + (e.vet_involved ? ' <span class="badge badge-teal" style="font-size:10px">vet</span>' : '') + '</td>' +
+      '<td class="muted-cell">' + (med ? medEsc(med.name) : (e.product_used ? medEsc(e.product_used) : '—')) + '</td>' +
+      // This animal's own dose; for an individual free-text event, its dose text
+      '<td class="mono right">' + (mv && med ? medFmtUnits(med, -Number(mv.quantity))
+                                   : (e.animal_id && e.dose ? medEsc(e.dose) : (med ? '<span style="color:var(--muted)">not dosed</span>' : '—'))) + '</td>' +
+      '<td class="mono right">' + (mv ? (mv.cost_pkr != null ? pkr(mv.cost_pkr) : '—')
+                                   : (e.animal_id && e.cost_pkr ? pkr(e.cost_pkr) : '—')) + '</td>' +
+      '<td>' + scope + '</td>' +
+      '</tr>';
+  });
+  doses.filter(function(d) { return shownDoseIds.indexOf(d.id) < 0; }).forEach(function(d) {
+    var med = medById(d.medicine_id);
+    html += '<tr><td class="mono">' + fmtDate(d.date) + '</td><td><span class="badge badge-gray">dose</span></td>' +
+      '<td class="muted-cell">No linked event</td><td class="muted-cell">' + (med ? medEsc(med.name) : '—') + '</td>' +
+      '<td class="mono right">' + (med ? medFmtUnits(med, -Number(d.quantity)) : '') + '</td>' +
+      '<td class="mono right">' + (d.cost_pkr != null ? pkr(d.cost_pkr) : '—') + '</td><td></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('ah-body').innerHTML = html;
+}
+
+function closeAnimalHealthHistory() {
+  document.getElementById('ah-modal').style.display = 'none';
 }
 
 // ============================================================
@@ -792,7 +986,7 @@ function renderSchedTable() {
       '<td style="font-weight:500">' + medEsc(s.description) + '</td>' +
       '<td class="muted-cell">' + (s.event_type || '—') + '</td>' +
       '<td>' + medEsc(schedTargetName(s)) + '</td>' +
-      '<td class="muted-cell">' + (schedProductLabel(s) ? medEsc(schedProductLabel(s)) : '—') + '</td>' +
+      '<td class="muted-cell">' + (schedProductLabel(s) ? medEsc(schedProductLabel(s)) : '—') + healthSchedRotationNote(s) + '</td>' +
       '<td class="mono right">' + (s.interval_days ? s.interval_days + ' d' : 'once') + '</td>' +
       '<td class="mono">' + fmtDate(s.last_done_date) + '</td>' +
       '<td class="mono">' + fmtDate(s.next_due_date) + '</td>' +

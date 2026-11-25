@@ -126,6 +126,7 @@ function renderAnimalsList() {
         '<td class="right mono">' + (curW != null ? r1(curW) : '\u2014') + '</td>' +
         '<td class="right mono">' + (days != null ? days : '\u2014') + '</td>' +
         '<td style="white-space:nowrap">' +
+          '<button class="btn btn-sm" onclick="openAnimalHealthHistory(' + a.id + ')">Health</button> ' +
           '<button class="btn btn-sm" onclick="alStartEdit(' + a.id + ')">Edit</button> ' +
           '<button class="btn btn-sm btn-primary" onclick="alOpenAssign(' + a.id + ', ' + (mem ? mem.group_id : 'null') + ')">' +
             (mem ? 'Move group' : 'Assign group') +
@@ -328,6 +329,7 @@ async function alDeleteAnimal(animalId, farmId) {
     await sbPatchWhere('medicine_movements', 'animal_id=eq.' + animalId, { animal_id: null });
     // Delete all child records
     await sbDeleteWhere('animal_weights',       'animal_id=eq.' + animalId);
+    await sbDeleteWhere('famacha_scores',       'animal_id=eq.' + animalId);
     await sbDeleteWhere('animal_health_events', 'animal_id=eq.' + animalId);
     await sbDeleteWhere('quarantine_records',   'animal_id=eq.' + animalId);
     await sbDeleteWhere('animal_sales',         'animal_id=eq.' + animalId);

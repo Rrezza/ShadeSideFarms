@@ -202,6 +202,7 @@ function renderWeightLogTable() {
     '<th>Last weighed</th>' +
     '<th>New weight (kg)</th>' +
     '<th>BCS (1–5)</th>' +
+    '<th title="FAMACHA eyelid score: 1 = red (healthy) … 5 = white (severe anaemia)">FAMACHA (1–5)</th>' +
     '</tr></thead><tbody>';
 
   animals.forEach(function(a) {
@@ -257,6 +258,9 @@ function renderWeightLogTable() {
         'min="0" step="0.1" style="width:90px" placeholder="kg"></td>' +
       '<td><input type="number" class="wt-bcs-input" data-animal-id="' + a.id + '" ' +
         'min="1" max="5" step="0.5" style="width:70px" placeholder="opt."></td>' +
+      // FAMACHA can be scored without a weight (saved to its own table)
+      '<td><input type="number" class="wt-fam-input" data-animal-id="' + a.id + '" ' +
+        'min="1" max="5" step="1" style="width:70px" placeholder="opt."></td>' +
       '</tr>';
   });
 
@@ -280,9 +284,20 @@ async function saveAllWeights() {
       if (bcs != null) rec.bcs_score = bcs;
       inserts.push(rec);
     });
-    if (!inserts.length) { st.textContent = 'No weights entered.'; return; }
-    await sbInsert('animal_weights', inserts);
-    st.textContent = inserts.length + ' record' + (inserts.length !== 1 ? 's' : '') + ' saved.';
+    // FAMACHA scores, independent of whether a weight was entered
+    var famInserts = [];
+    document.querySelectorAll('.wt-fam-input').forEach(function(inp) {
+      var v = parseInt(inp.value);
+      if (!v) return;
+      if (v < 1 || v > 5) throw new Error('FAMACHA scores must be whole numbers from 1 to 5.');
+      famInserts.push({ animal_id: parseInt(inp.dataset.animalId), date: today, score: v });
+    });
+    if (!inserts.length && !famInserts.length) { st.textContent = 'No weights or FAMACHA scores entered.'; return; }
+    if (inserts.length)    await sbInsert('animal_weights', inserts);
+    if (famInserts.length) await sbInsert('famacha_scores', famInserts);
+    document.querySelectorAll('.wt-fam-input').forEach(function(inp) { inp.value = ''; });
+    st.textContent = inserts.length + ' weight' + (inserts.length !== 1 ? 's' : '') +
+      (famInserts.length ? ', ' + famInserts.length + ' FAMACHA score' + (famInserts.length !== 1 ? 's' : '') : '') + ' saved.';
     st.style.color = 'var(--green)';
     // Reload data and refresh all weight-dependent views
     anSharedLoaded = false;
