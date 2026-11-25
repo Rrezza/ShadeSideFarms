@@ -1133,7 +1133,7 @@ async function loadBreedingPage() {
     if (!anSharedLoaded) await loadSharedAnimalData();
     var r = await Promise.all([
       sbGet('breeding_events',
-        'select=id,date,dam_id,sire_id,sire_unknown,location_id,observed_by,notes,' +
+        'select=id,date,dam_id,sire_id,sire_unknown,observed_by,notes,' +
         'dams:animals!breeding_events_dam_id_fkey(farm_id,name,species_id),' +
         'sires:animals!breeding_events_sire_id_fkey(farm_id,name)&order=date.desc&limit=200'),
       sbGet('birth_events',
@@ -1195,7 +1195,7 @@ function renderDueToKid() {
     var cls   = diff < 0 ? 'overdue' : (diff <= 7 ? 'soon' : 'upcoming');
     var daysLabel = diff < 0 ? Math.abs(diff) + 'd overdue' : (diff === 0 ? 'Today' : diff + 'd away');
     var damName = b.dams ? (b.dams.name || b.dams.farm_id) : '\u2014';
-    var sireName = b.sires ? (b.sires.farm_id) : (b.sire_unknown ? 'Unknown' : 'Not recorded');
+    var sireName = b.sires ? (b.sires.farm_id) : 'Unknown';
     html += '<div class="due-card ' + cls + '">' +
       '<div class="due-card-top"><span class="due-card-title">Dam: ' + damName + '</span>' +
       '<span class="due-card-days ' + cls + '">' + daysLabel + '</span></div>' +
@@ -1221,9 +1221,6 @@ function populateBreedingForm() {
   document.getElementById('br-sire').innerHTML =
     '<option value="">Select sire (optional)</option>' +
     males.map(function(a) { return '<option value="' + a.id + '">' + a.farm_id + (a.name?' ('+a.name+')':'') + '</option>'; }).join('');
-  document.getElementById('br-loc').innerHTML =
-    '<option value="">Select location</option>' +
-    anSharedPens.map(function(p) { return '<option value="' + p.id + '">' + p.name + '</option>'; }).join('');
   document.getElementById('br-obs').innerHTML =
     '<option value="">Select worker</option>' +
     anSharedWorkers.map(function(w) { return '<option value="' + w.id + '">' + w.name + '</option>'; }).join('');
@@ -1256,7 +1253,7 @@ function renderBreedingEvents() {
     var expected = new Date(b.date + 'T00:00:00'); expected.setDate(expected.getDate() + gestDays);
     var expS = expected.toISOString().slice(0, 10);
     var damName  = b.dams  ? (b.dams.name  || b.dams.farm_id)  : '\u2014';
-    var sireName = b.sires ? (b.sires.farm_id) : (b.sire_unknown ? 'Unknown' : '\u2014');
+    var sireName = b.sires ? (b.sires.farm_id) : 'Unknown';
     var birthReg = birthData.find(function(bd) { return bd.dam_id === b.dam_id; });
     html += '<tr>' +
       '<td class="mono">' + fmtDate(b.date) + '</td>' +
@@ -1280,10 +1277,10 @@ async function submitBreedingEvent() {
     if (!damId || !date) throw new Error('Dam and date required.');
     var d = {
       dam_id: parseInt(damId), date: date,
-      sire_unknown: document.getElementById('br-sire-unk').value === 'true'
+      // No sire picked = sire unknown (there's no separate "unknown" choice any more)
+      sire_unknown: !document.getElementById('br-sire').value
     };
     var sire = document.getElementById('br-sire').value; if (sire) d.sire_id = parseInt(sire);
-    var loc  = document.getElementById('br-loc').value;  if (loc)  d.location_id = parseInt(loc);
     var obs  = document.getElementById('br-obs').value;  if (obs)  d.observed_by = parseInt(obs);
     var notes= document.getElementById('br-notes').value.trim(); if (notes) d.notes = notes;
     await sbInsert('breeding_events', [d]);
@@ -1411,7 +1408,7 @@ async function birthNextStep() {
       var d = {
         date: date, dam_id: parseInt(damId), litter_size: litter,
         live_births: live, stillbirths: still,
-        sire_unknown: document.getElementById('bs1-sire-unk').value === 'true'
+        sire_unknown: !document.getElementById('bs1-sire').value   // blank sire = unknown
       };
       var sire   = document.getElementById('bs1-sire').value;   if (sire)   d.sire_id     = parseInt(sire);
       var worker = document.getElementById('bs1-worker').value;  if (worker) d.recorded_by = parseInt(worker);

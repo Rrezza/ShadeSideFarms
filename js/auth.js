@@ -1,7 +1,11 @@
 // ============================================================
-// auth.js v19 — Supabase email/password authentication
+// auth.js v20 — Supabase email/password authentication
 // v19: added forgot-password flow (request reset email, recovery-redirect
 //      handling, set-new-password screen in the login modal).
+// v20: keep the session alive — refreshed sessions are saved (Supabase
+//      rotates the refresh token, so an unsaved one breaks the next reload),
+//      a timer renews the token before it expires, waking the tab re-checks,
+//      and every write first ensures a fresh token (authBeforeWrite).
 // ============================================================
 //
 // How it works:
@@ -22,6 +26,12 @@
 
 var AUTH_SESSION_KEY = 'sf_auth_session';
 
+// Current signed-in session (null = read-only) and the pending renewal timer
+var authSession       = null;
+var authRefreshTimer  = null;
+var authRefreshing    = null;   // in-flight refresh promise, so overlapping callers share it
+var AUTH_RENEW_EARLY_S = 120;   // renew this many seconds before the token expires
+
 // ============================================================
 // INIT — called on DOMContentLoaded
 // ============================================================
@@ -38,9 +48,10 @@ async function authInit() {
       _authApplySession(saved);
       return;
     }
-    // Expired — try to refresh
+    // Expired — try to refresh (and save it: the old refresh token is now spent)
     var refreshed = await _authRefresh(saved.refresh_token);
     if (refreshed) {
+      _authSaveSession(refreshed);
       _authApplySession(refreshed);
       return;
     }
@@ -298,6 +309,8 @@ async function authSignOut() {
 // INTERNAL HELPERS
 // ============================================================
 function _authApplySession(session) {
+  authSession = session;
+  _authScheduleRefresh();
   // Swap Bearer token in shared.js headers to user JWT
   // H and JH are declared as var in shared.js — reassign values
   H['Authorization']  = 'Bearer ' + session.access_token;
@@ -318,6 +331,8 @@ function _authApplySession(session) {
 }
 
 function _authSetReadOnly() {
+  authSession = null;
+  if (authRefreshTimer) { clearTimeout(authRefreshTimer); authRefreshTimer = null; }
   // Restore anon key as Bearer
   H['Authorization']  = 'Bearer ' + SB_KEY;
   JH['Authorization'] = 'Bearer ' + SB_KEY;
@@ -331,6 +346,77 @@ function _authSetReadOnly() {
   if (container) {
     container.innerHTML =
       '<button onclick="authShowLoginModal()" style="width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit">&#128274; Sign in</button>';
+  }
+}
+
+// ---- Keeping the session alive ----
+// Renew the token AUTH_RENEW_EARLY_S before it expires.
+function _authScheduleRefresh() {
+  if (authRefreshTimer) clearTimeout(authRefreshTimer);
+  if (!authSession || !authSession.expires_at) return;
+  var ms = (authSession.expires_at - AUTH_RENEW_EARLY_S) * 1000 - Date.now();
+  authRefreshTimer = setTimeout(function() { _authRenewNow(); }, Math.max(ms, 0));
+}
+
+// Refresh now, save, and apply. If the refresh token is rejected the user is
+// genuinely signed out: switch to read-only and say so, rather than letting
+// later saves fail mysteriously. Network blips keep the current session and
+// retry in a minute.
+function _authRenewNow() {
+  if (authRefreshing) return authRefreshing;
+  if (!authSession) return Promise.resolve(false);
+  authRefreshing = (async function() {
+    try {
+      var res = await fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: authSession.refresh_token })
+      });
+      if (!res.ok) {
+        _authClearSession();
+        _authSetReadOnly();
+        alert('Your sign-in has expired. Please sign in again to keep saving changes.');
+        return false;
+      }
+      var data = await res.json();
+      var s = {
+        access_token:  data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at:    Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+        user_email:    data.user ? data.user.email : authSession.user_email
+      };
+      _authSaveSession(s);
+      _authApplySession(s);
+      return true;
+    } catch (_) {
+      // Offline / network error: keep the session, try again shortly
+      authRefreshTimer = setTimeout(function() { _authRenewNow(); }, 60000);
+      return false;
+    } finally {
+      authRefreshing = null;
+    }
+  })();
+  return authRefreshing;
+}
+
+// Timers don't run while a laptop sleeps or a phone tab is in the background,
+// so re-check whenever the page becomes visible again.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && authSession &&
+      Date.now() / 1000 > authSession.expires_at - AUTH_RENEW_EARLY_S) {
+    _authRenewNow();
+  }
+});
+
+// Called by every write helper in shared.js before sending. Renews a token that
+// is about to expire, and refuses clearly when nobody is signed in (otherwise the
+// database either rejects the write with a security error or, for edits and
+// deletes, silently changes nothing).
+async function authBeforeWrite() {
+  if (!authSession) throw new Error('You are signed out \u2014 sign in (bottom of the sidebar) to save changes.');
+  if (Date.now() / 1000 > authSession.expires_at - 60) {
+    await _authRenewNow();
+    if (!authSession) throw new Error('Your sign-in expired \u2014 sign in again to save changes.');
   }
 }
 

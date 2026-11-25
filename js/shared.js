@@ -13,12 +13,18 @@ var H  = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 var JH = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
 
 // ---- DB helpers ----
+// Every write first calls authBeforeWrite() (auth.js): it renews an expiring
+// sign-in, and stops with a clear message when nobody is signed in.
+async function sbWriteGuard() {
+  if (typeof authBeforeWrite === 'function') await authBeforeWrite();
+}
 async function sbGet(t, q) {
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, { headers: H });
   if (!r.ok) throw new Error('GET ' + t + ': ' + r.status + ' ' + (await r.text()));
   return r.json();
 }
 async function sbPatch(t, id, d) {
+  await sbWriteGuard();
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?id=eq.' + id, {
     method: 'PATCH',
     headers: Object.assign({ 'Prefer': 'return=minimal' }, JH),
@@ -27,6 +33,7 @@ async function sbPatch(t, id, d) {
   if (!r.ok) throw new Error(await r.text());
 }
 async function sbPatchWhere(t, q, d) {
+  await sbWriteGuard();
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, {
     method: 'PATCH',
     headers: Object.assign({ 'Prefer': 'return=minimal' }, JH),
@@ -35,6 +42,7 @@ async function sbPatchWhere(t, q, d) {
   if (!r.ok) throw new Error(await r.text());
 }
 async function sbDelete(t, id) {
+  await sbWriteGuard();
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?id=eq.' + id, {
     method: 'DELETE',
     headers: Object.assign({ 'Prefer': 'return=minimal' }, JH)
@@ -43,6 +51,7 @@ async function sbDelete(t, id) {
 }
 
 async function sbDeleteWhere(t, q) {
+  await sbWriteGuard();
   var r = await fetch(SB_URL + '/rest/v1/' + t + '?' + q, {
     method: 'DELETE',
     headers: Object.assign({ 'Prefer': 'return=minimal' }, JH)
@@ -50,6 +59,7 @@ async function sbDeleteWhere(t, q) {
   if (!r.ok) throw new Error(await r.text());
 }
 async function sbInsert(t, d) {
+  await sbWriteGuard();
   var r = await fetch(SB_URL + '/rest/v1/' + t, {
     method: 'POST',
     headers: Object.assign({ 'Prefer': 'return=representation' }, JH),

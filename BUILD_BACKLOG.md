@@ -146,6 +146,12 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Sign-in kept alive + breeding/species tidy-up — DONE 2026-11-25 (r91)
+- **Root cause of the breeding "RLS error":** not the breeding table. Confirmed in the API logs — the save went out with the anonymous key (`POST 401`, "new row violates row-level security policy"). `auth.js` (1) never saved a refreshed session, so after Supabase rotated the refresh token the next reload silently dropped to read-only, and (2) had no renewal while the page was open, despite CODEBASE.md saying it did. Worse, edits/deletes sent while read-only returned success but changed nothing — confirmed: the Nitroxin "not safe in pregnancy" edit at 07:58 that day never saved.
+- **Fix:** refreshed sessions saved; token renewed 2 min before expiry and on wake; every write calls `authBeforeWrite()` first (renews if needed, otherwise a clear "you are signed out" error).
+- **Breeding:** "Sire unknown" dropdown removed from Breeding and Birth forms (blank sire = unknown); breeding location removed and `breeding_events.location_id` dropped (never shown or used, no rows).
+- **Species:** gestation days added to Setup › Species (add + edit). Fixed: species add/edit/delete refreshed the shared species cache without `gestation_days`, which would have reset every pregnancy due date to the 150-day default.
+
 ### Health: pregnancy safety, weight alerts — DONE 2026-11-25 (r90)
 - **Pregnancy safety:** `medicines.unsafe_in_pregnancy` + `animals.expected_birth_date`; pregnant = manual expected date or a logged mating within gestation, until a birth is logged or 14 days past due. Dose grid pre-fills 0 for pregnant animals on flagged medicines; "pregnant, due …" badges on Groups / Animals / dose grid.
 - **Weight alerts on Overview:** loss > 0.5 kg since last weigh-in, slow gain (< half the group's average daily gain), and overdue weigh-ins per group. Dismissable (`weight_alert_dismissals`).
