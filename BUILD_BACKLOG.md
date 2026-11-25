@@ -146,6 +146,12 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Health: pregnancy safety, weight alerts — DONE 2026-11-25 (r90)
+- **Pregnancy safety:** `medicines.unsafe_in_pregnancy` + `animals.expected_birth_date`; pregnant = manual expected date or a logged mating within gestation, until a birth is logged or 14 days past due. Dose grid pre-fills 0 for pregnant animals on flagged medicines; "pregnant, due …" badges on Groups / Animals / dose grid.
+- **Weight alerts on Overview:** loss > 0.5 kg since last weigh-in, slow gain (< half the group's average daily gain), and overdue weigh-ins per group. Dismissable (`weight_alert_dismissals`).
+- **Fix:** per-goat health history showed group medicine rounds for goats deliberately skipped (e.g. Barka/BlackMom on 14 Nov) — now only shown if the goat was dosed.
+- **Needs your setup:** neither group has a weigh-in reminder interval, so overdue alerts won't appear until one is set (Groups › Edit group). Barka/BlackMom's expected birth dates and Nitroxin's "not safe in pregnancy" box need setting for the pregnancy check to use them.
+
 ### Health: per-animal history, arrival protocols, targeted deworming — DONE 2026-11-25 (r89)
 - **Per-animal health history:** Health button on Animals list and Groups member rows (`openAnimalHealthHistory()` in `health.js`).
 - **Arrival protocols:** Setup › Health Protocols + Apply protocol on a group (`setup_protocols.js`; tables `health_protocols`, `health_protocol_steps`).

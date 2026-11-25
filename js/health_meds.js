@@ -20,6 +20,8 @@ var medEditId      = null;   // medicine being edited in the add/edit form (null
 var medActionId    = null;   // medicine the purchase/count form is open for
 var medActionType  = null;   // 'purchase' | 'count'
 var medExpanded    = new Set();  // medicine ids with their history row open
+var medBreedings   = [];     // breeding_events { dam_id, date } — for pregnancy checks
+var medBirths      = [];     // birth_events { dam_id, date }
 
 // How far ahead the reorder check looks at scheduled health rounds
 var MED_LOOKAHEAD_DAYS = 30;
@@ -46,10 +48,15 @@ async function medLoadData() {
     sbGet('medicines', 'select=*&order=name'),
     sbGet('medicine_movements',
       'select=id,medicine_id,date,movement_type,quantity,packs,cost_pkr,expiry_date,' +
-      'health_event_id,animal_id,reason,notes,created_at&order=date.desc,id.desc')
+      'health_event_id,animal_id,reason,notes,created_at&order=date.desc,id.desc'),
+    // Breeding/birth records drive the pregnancy checks used when dosing
+    sbGet('breeding_events', 'select=dam_id,date&order=date.desc'),
+    sbGet('birth_events', 'select=dam_id,date&order=date.desc')
   ]);
   medList = r[0];
   medMovements = r[1];
+  medBreedings = r[2];
+  medBirths = r[3];
 }
 
 function medById(id) {
@@ -162,6 +169,47 @@ function medConfirmWithdrawal(animalId, asOfISO, action) {
   if (!w) return true;
   return confirm(getAnimalDisplayName(animalId) + ' is still in the meat withdrawal period for ' + w.med.name +
     ' until ' + fmtDate(w.safeDate) + '.\n\n' + action + ' anyway?');
+}
+
+// ---- Pregnancy ----
+// How long past the expected date an animal still counts as pregnant (late kidding)
+var MED_PREG_GRACE_DAYS = 14;
+
+function medAddDays(iso, days) {
+  var d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Is this animal pregnant today? Two sources:
+//   manual   — animals.expected_birth_date, set from the animal's Edit row
+//   breeding — a mating logged within the species' gestation period
+// Either way it stops counting once a birth is logged after conception, or
+// MED_PREG_GRACE_DAYS after the expected date. Returns { due, source } or null.
+function medPregnancy(animalId) {
+  var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
+  if (!a || a.sex === 'male') return null;
+  var sp = anSharedSpecies.find(function(s) { return s.id === a.species_id; });
+  var gestation = sp && sp.gestation_days ? Number(sp.gestation_days) : 150;
+  var today = todayISO();
+  var birthSince = function(iso) {
+    return medBirths.some(function(b) { return b.dam_id === animalId && b.date >= iso; });
+  };
+  if (a.expected_birth_date && today <= medAddDays(a.expected_birth_date, MED_PREG_GRACE_DAYS) &&
+      !birthSince(medAddDays(a.expected_birth_date, -gestation))) {
+    return { due: a.expected_birth_date, source: 'manual' };
+  }
+  var mating = medBreedings.find(function(b) { return b.dam_id === animalId; });  // newest first
+  if (mating) {
+    var due = medAddDays(mating.date, gestation);
+    if (today <= medAddDays(due, MED_PREG_GRACE_DAYS) && !birthSince(mating.date)) return { due: due, source: 'breeding' };
+  }
+  return null;
+}
+
+function medPregnancyBadge(animalId) {
+  var p = medPregnancy(animalId);
+  return p ? ' <span class="badge badge-blue" title="' + (p.source === 'manual' ? 'Set on the animal' : 'From breeding record') + '">pregnant, due ' + fmtDate(p.due) + '</span>' : '';
 }
 
 // On-farm animals a schedule applies to (animal, group or location target)
@@ -469,7 +517,8 @@ function renderMedSetupTable() {
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
         '<td class="muted-cell">' + medFmtDoseRate(m) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '\u2014') + '</td>' +
-        '<td class="mono right">' + (m.withdrawal_days != null ? m.withdrawal_days + ' d' : '\u2014') + '</td>' +
+        '<td class="mono right">' + (m.withdrawal_days != null ? m.withdrawal_days + ' d' : '\u2014') +
+          (m.unsafe_in_pregnancy ? '<div><span class="badge badge-red" style="font-size:10px">not in pregnancy</span></div>' : '') + '</td>' +
         '<td class="muted-cell">' + (m.notes ? medEsc(m.notes) : '\u2014') + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
@@ -550,6 +599,9 @@ function renderMedForm() {
         '<div class="hf-field"><label>Meat withdrawal (days)</label><input type="number" id="mf-withdrawal" min="0" step="1" value="' + v('withdrawal_days') + '" placeholder="From the label — 0 if none"></div>' +
         '<div class="hf-field"><label>Notes</label><input type="text" id="mf-notes" value="' + v('notes') + '" placeholder="Optional — storage, etc."></div>' +
       '</div>' +
+      '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
+        '<input type="checkbox" id="mf-preg"' + (m && m.unsafe_in_pregnancy ? ' checked' : '') + '> ' +
+        'Not safe for pregnant animals (they\'re pre-filled 0 when dosing)</label>' +
       '<div style="display:flex;gap:10px;margin-top:8px">' +
         '<button class="btn btn-primary" onclick="submitMedicine()">' + (m ? 'Save changes' : 'Add medicine') + '</button>' +
         '<button class="btn" onclick="closeMedForm()">Cancel</button>' +
@@ -588,6 +640,7 @@ async function submitMedicine() {
       dose_weight_kg:    basis === 'per_kg' ? num('mf-weight') : null,
       min_stock:         num('mf-min'),
       withdrawal_days:   num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
+      unsafe_in_pregnancy: document.getElementById('mf-preg').checked,
       notes:             txt('mf-notes')
     };
     if (!d.name) throw new Error('Name is required.');

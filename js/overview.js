@@ -93,6 +93,7 @@ async function loadOverviewPage() {
     renderOverview();
     // Health banners load on their own so a failure never blocks the plot cards
     loadOverviewFollowups();
+    loadOverviewWeightAlerts();
     loadOverviewMedAlerts();
 
     var updEl = document.getElementById('ov-updated');
@@ -139,6 +140,87 @@ async function loadOverviewFollowups() {
     console.warn('Overview: follow-ups failed —', err.message);
     el.innerHTML = '';
   }
+}
+
+// ---- Weight alerts banner ----
+// Weight loss, slow gain vs group, and overdue weigh-ins (logic in an_helpers.js
+// computeWeightAlerts). Each can be dismissed; hidden when there are none.
+async function loadOverviewWeightAlerts() {
+  var el = document.getElementById('ov-weight-alerts');
+  if (!el || !anSharedLoaded) return;
+  try {
+    var r = await Promise.all([
+      sbGet('animal_weights', 'select=animal_id,weight_kg,date&order=date.asc,id.asc&limit=5000'),
+      sbGet('weight_alert_dismissals', 'select=*')
+    ]);
+    ovWeightAlerts = computeWeightAlerts(r[0], r[1]);
+    renderOverviewWeightAlerts();
+  } catch (err) {
+    console.warn('Overview: weight alerts failed —', err.message);
+    el.innerHTML = '';
+  }
+}
+var ovWeightAlerts = [];
+
+function renderOverviewWeightAlerts() {
+  var el = document.getElementById('ov-weight-alerts');
+  if (!ovWeightAlerts.length) { el.innerHTML = ''; return; }
+  var cards = ovWeightAlerts.map(function(al, i) {
+    var title, meta, cls, actions;
+    if (al.type === 'overdue') {
+      cls = 'soon';
+      title = getGroupName(al.groupId) + ' &middot; weigh-in overdue';
+      meta = al.overdue + ' of ' + al.total + ' not weighed in over ' + al.threshold + ' days (longest ' + al.oldestDays + ' days)';
+      actions = '<button class="btn btn-sm" onclick="goToPage(\'weighttracking\')">Weigh-in</button>' +
+                '<button class="btn btn-sm" onclick="dismissWeightAlert(' + i + ')">Snooze ' + al.threshold + ' days</button>';
+    } else {
+      var a = al.animal;
+      var name = a.farm_id + (a.name ? ' (' + a.name + ')' : '');
+      cls = al.type === 'loss' ? 'overdue' : 'soon';
+      title = name + ' &middot; ' + (al.type === 'loss' ? 'lost weight' : 'gaining slowly');
+      meta = r1(Number(al.prev.weight_kg)) + ' kg (' + fmtDate(al.prev.date) + ') → ' +
+             r1(Number(al.last.weight_kg)) + ' kg (' + fmtDate(al.last.date) + ')' +
+             (al.type === 'slow_gain' ? ' &middot; ' + Math.round(al.adg) + ' g/day vs group ' + Math.round(al.groupAdg) + ' g/day' : '') +
+             (al.groupId ? ' &middot; ' + getGroupName(al.groupId) : '');
+      actions = '<button class="btn btn-sm" onclick="logObservationFor(' + a.id + ', \'' +
+                  (al.type === 'loss' ? 'Weight loss' : 'Slow weight gain') + ' — checked\')">Log observation</button>' +
+                '<button class="btn btn-sm" onclick="dismissWeightAlert(' + i + ')">Dismiss</button>';
+    }
+    return '<div class="due-card ' + cls + '">' +
+      '<div class="due-card-top"><span class="due-card-title">' + title + '</span></div>' +
+      '<div class="due-card-meta">' + meta + '</div>' +
+      '<div style="margin-top:8px;display:flex;gap:6px">' + actions + '</div></div>';
+  }).join('');
+  el.innerHTML =
+    '<div class="section">' +
+      '<div class="section-hdr"><h2>Weight alerts</h2>' +
+      '<span class="section-meta">' + ovWeightAlerts.length + ' to check</span></div>' +
+      '<div style="padding:16px 22px">' + cards + '</div>' +
+    '</div>';
+}
+
+// Dismiss: loss / slow gain stay hidden until the animal's next weigh-in;
+// overdue snoozes the group for one more reminder period. Reason is optional.
+async function dismissWeightAlert(i) {
+  var al = ovWeightAlerts[i];
+  if (!al) return;
+  var reason = prompt(al.type === 'overdue'
+    ? 'Snooze this group\'s weigh-in reminder for ' + al.threshold + ' days. Reason (optional):'
+    : 'Dismiss until the next weigh-in. Reason (optional, e.g. "kidded"):', '');
+  if (reason === null) return;  // cancelled
+  var row = { alert_type: al.type, reason: reason.trim() || null };
+  if (al.type === 'overdue') {
+    var until = new Date(todayISO() + 'T00:00:00'); until.setDate(until.getDate() + al.threshold);
+    row.group_id = al.groupId;
+    row.dismissed_until = until.getFullYear() + '-' + String(until.getMonth() + 1).padStart(2, '0') + '-' + String(until.getDate()).padStart(2, '0');
+  } else {
+    row.animal_id = al.animal.id;
+    row.ref_date = al.last.date;
+  }
+  try {
+    await sbInsert('weight_alert_dismissals', [row]);
+    await loadOverviewWeightAlerts();
+  } catch (err) { alert('Could not dismiss: ' + err.message); }
 }
 
 // ---- Medicine reorder banner ----

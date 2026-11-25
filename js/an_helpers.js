@@ -119,3 +119,88 @@ function anSelect(items, valKey, labelFn, placeholder) {
     }).join('');
 }
 
+// ============================================================
+// WEIGHT ALERTS (shown on Overview)
+// ============================================================
+// Thresholds: a drop bigger than this between the last two weigh-ins is "loss"
+// (smaller drops are scale noise / gut fill); "slow gain" is below this fraction
+// of the group's average daily gain, measured over at least WA_MIN_INTERVAL_DAYS.
+var WA_LOSS_KG           = 0.5;
+var WA_SLOW_FRACTION     = 0.5;
+var WA_MIN_INTERVAL_DAYS = 7;
+
+// weightsAsc: animal_weights rows sorted by date ascending
+// dismissals: weight_alert_dismissals rows
+// Returns [{ type: 'loss'|'slow_gain', animal, groupId, prev, last, adg, groupAdg }]
+//       + [{ type: 'overdue', groupId, overdue, total, threshold, oldestDays }]
+function computeWeightAlerts(weightsAsc, dismissals) {
+  var today = new Date(todayISO() + 'T00:00:00');
+  var daysBetween = function(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5); };
+  var onFarm = anSharedAnimals.filter(function(a) { return a.status === 'active' || a.status === 'quarantine'; });
+
+  // Last two weigh-ins per animal
+  var byAnimal = {};
+  weightsAsc.forEach(function(w) { (byAnimal[w.animal_id] = byAnimal[w.animal_id] || []).push(w); });
+  var pairs = {};
+  onFarm.forEach(function(a) {
+    var ws = byAnimal[a.id];
+    if (!ws || ws.length < 2) return;
+    var prev = ws[ws.length - 2], last = ws[ws.length - 1];
+    var days = daysBetween(prev.date, last.date);
+    pairs[a.id] = {
+      prev: prev, last: last, days: days,
+      change: Number(last.weight_kg) - Number(prev.weight_kg),
+      adg: days >= WA_MIN_INTERVAL_DAYS ? (Number(last.weight_kg) - Number(prev.weight_kg)) / days * 1000 : null
+    };
+  });
+
+  var isDismissed = function(type, animalId, refDate) {
+    return dismissals.some(function(d) { return d.alert_type === type && d.animal_id === animalId && d.ref_date === refDate; });
+  };
+
+  // Group average ADG over members' last intervals (needs 3+ members with data)
+  var groupAdg = {};
+  anSharedGroups.forEach(function(g) {
+    var adgs = getGroupAnimalIds(g.id).map(function(id) { return pairs[id] && pairs[id].adg; })
+      .filter(function(v) { return v != null; });
+    if (adgs.length >= 3) groupAdg[g.id] = adgs.reduce(function(s, v) { return s + v; }, 0) / adgs.length;
+  });
+
+  var alerts = [];
+  onFarm.forEach(function(a) {
+    var p = pairs[a.id];
+    if (!p) return;
+    var gid = getAnimalGroupId(a.id);
+    if (p.change < -WA_LOSS_KG) {
+      if (!isDismissed('loss', a.id, p.last.date)) alerts.push({ type: 'loss', animal: a, groupId: gid, prev: p.prev, last: p.last });
+      return;  // loss already covers it; don't also flag slow gain
+    }
+    var gAdg = gid != null ? groupAdg[gid] : null;
+    if (p.adg != null && gAdg != null && gAdg > 0 && p.adg < gAdg * WA_SLOW_FRACTION &&
+        !isDismissed('slow_gain', a.id, p.last.date)) {
+      alerts.push({ type: 'slow_gain', animal: a, groupId: gid, prev: p.prev, last: p.last, adg: p.adg, groupAdg: gAdg });
+    }
+  });
+
+  // Overdue weigh-ins, per group with a reminder interval. Never-weighed animals
+  // count from their arrival date.
+  anSharedGroups.filter(function(g) { return g.status === 'active' && g.weigh_in_reminder_days; }).forEach(function(g) {
+    var snoozed = dismissals.some(function(d) {
+      return d.alert_type === 'overdue' && d.group_id === g.id && d.dismissed_until >= todayISO();
+    });
+    if (snoozed) return;
+    var members = getGroupAnimals(g.id);
+    var overdue = 0, oldest = 0;
+    members.forEach(function(a) {
+      var ws = byAnimal[a.id];
+      var since = ws && ws.length ? ws[ws.length - 1].date : a.date_of_arrival;
+      if (!since) return;
+      var d = Math.round((today - new Date(since + 'T00:00:00')) / 864e5);
+      if (d > g.weigh_in_reminder_days) { overdue++; oldest = Math.max(oldest, d); }
+    });
+    if (overdue) alerts.push({ type: 'overdue', groupId: g.id, overdue: overdue, total: members.length,
+                               threshold: g.weigh_in_reminder_days, oldestDays: oldest });
+  });
+  return alerts;
+}
+

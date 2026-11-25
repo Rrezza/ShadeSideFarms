@@ -102,7 +102,11 @@ function renderAnimalsList() {
         '<td><select id="ale-status" style="font-size:12px;padding:2px 4px">' +
           '<option value="active"' + (a.status==='active'?' selected':'') + '>Active</option>' +
           '<option value="quarantine"' + (a.status==='quarantine'?' selected':'') + '>Quarantine</option>' +
-        '</select></td>' +
+        '</select>' +
+        // Manual pregnancy: expected birth date (females only)
+        (a.sex !== 'male' ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">Expected birth<br>' +
+          '<input type="date" id="ale-ebd" style="font-size:12px" value="' + (a.expected_birth_date || '') + '"></div>' : '') +
+        '</td>' +
         '<td>' + grpName + '</td>' +
         '<td>' + locName + '</td>' +
         '<td class="right mono">' + (a.entry_weight_kg != null ? r1(parseFloat(a.entry_weight_kg)) : '\u2014') + '</td>' +
@@ -119,7 +123,7 @@ function renderAnimalsList() {
         '<td class="muted-cell">' + (a.sex || '\u2014') + '</td>' +
         '<td>' + purposeBadge(a.purpose) + '</td>' +
         '<td><span class="badge ' + statusCls + '">' + statusLabel + '</span>' +
-          (a.status === 'active' || a.status === 'quarantine' ? medWithdrawalBadge(a.id) : '') + '</td>' +
+          (a.status === 'active' || a.status === 'quarantine' ? medWithdrawalBadge(a.id) + medPregnancyBadge(a.id) : '') + '</td>' +
         '<td>' + grpName + '</td>' +
         '<td class="muted-cell">' + locName + '</td>' +
         '<td class="right mono">' + (a.entry_weight_kg != null ? r1(parseFloat(a.entry_weight_kg)) : '\u2014') + '</td>' +
@@ -173,7 +177,10 @@ async function alSaveEdit(animalId) {
     var purpose = document.getElementById('ale-purpose').value;
     var status  = document.getElementById('ale-status').value;
     var sex     = document.getElementById('ale-sex').value;
-    await sbPatch('animals', animalId, { purpose: purpose, status: status, sex: sex || null });
+    var patch = { purpose: purpose, status: status, sex: sex || null };
+    var ebd = document.getElementById('ale-ebd');
+    if (ebd) patch.expected_birth_date = ebd.value || null;
+    await sbPatch('animals', animalId, patch);
     alEditId = null;
     anSharedLoaded = false;
     await loadSharedAnimalData();

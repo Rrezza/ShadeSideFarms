@@ -190,8 +190,14 @@ function renderHfDoseGrid() {
   }
   // Deworming rounds: show FAMACHA and pre-fill 0 for animals recently scored 1–2 (targeted treatment)
   var deworming = document.getElementById('hf-event-type').value === 'deworming';
+  // Medicines flagged unsafe in pregnancy: pregnant animals are pre-filled 0
+  var pregnantSkipped = med.unsafe_in_pregnancy
+    ? animals.filter(function(a) { return medPregnancy(a.id); }).length : 0;
   var html = '<div style="margin:0 0 12px">' +
     (deworming ? hfRotationHtml(med) : '') +
+    (pregnantSkipped ? '<div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px">' +
+      medEsc(med.name) + ' is marked not safe in pregnancy \u2014 ' + pregnantSkipped + ' pregnant animal' +
+      (pregnantSkipped !== 1 ? 's' : '') + ' pre-filled 0.</div>' : '') +
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dose per animal (' + med.stock_unit + ') &middot; label ' +
       medFmtDoseRate(med) + ' &middot; pre-filled from latest weight, edit any you dosed differently, 0 = not dosed' +
       (deworming ? ' &middot; FAMACHA 1–2 within ' + HF_FAMACHA_MAX_AGE_DAYS + ' days pre-filled 0' : '') + '</div>' +
@@ -210,8 +216,10 @@ function renderHfDoseGrid() {
       famCell = '<td class="mono right"' + (f && !fresh ? ' style="color:var(--faint)" title="Older than ' + HF_FAMACHA_MAX_AGE_DAYS + ' days — not used"' : '') + '>' +
         (f ? f.score + ' <span style="font-size:11px;color:var(--muted)">' + f.ageDays + 'd ago</span>' : '—') + '</td>';
     }
+    if (med.unsafe_in_pregnancy && medPregnancy(a.id)) prefill = 0;
     html += '<tr>' +
-      '<td style="font-weight:500">' + a.farm_id + (a.name ? ' <span style="color:var(--muted);font-weight:400">' + medEsc(a.name) + '</span>' : '') + '</td>' +
+      '<td style="font-weight:500">' + a.farm_id + (a.name ? ' <span style="color:var(--muted);font-weight:400">' + medEsc(a.name) + '</span>' : '') +
+        medPregnancyBadge(a.id) + '</td>' +
       '<td class="mono right">' + (kg != null ? r1(kg) + ' kg' : '—') + '</td>' +
       famCell +
       '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug) : '—') + '</td>' +
@@ -359,6 +367,21 @@ function preFillFollowup(eventId) {
   document.getElementById('hf-target-type').value = e.animal_id ? 'animal' : 'group';
   if (e.animal_id) document.getElementById('hf-animal').value = e.animal_id;
   else document.getElementById('hf-group').value = e.group_id;
+  onHfTargetChange();
+  document.getElementById('health-log-form').classList.add('open');
+  document.getElementById('health-log-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Opens the Health page with the log form pre-filled as an observation for one
+// animal (used by Overview's weight alerts).
+async function logObservationFor(animalId, desc) {
+  await showPage('health', document.querySelector('.nav-item[data-page="health"]'));
+  populateHealthForm();
+  hfFollowupOf = null;
+  document.getElementById('hf-target-type').value = 'animal';
+  document.getElementById('hf-animal').value = animalId;
+  document.getElementById('hf-event-type').value = 'observation';
+  document.getElementById('hf-desc').value = desc || '';
   onHfTargetChange();
   document.getElementById('health-log-form').classList.add('open');
   document.getElementById('health-log-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -863,9 +886,12 @@ async function openAnimalHealthHistory(animalId) {
     if (groupIds.length)      ors.push('group_id.in.(' + groupIds.join(',') + ')');
     var evts = await sbGet('animal_health_events', 'or=(' + ors.join(',') + ')&select=*&order=date.desc,id.desc');
 
-    // Group events only count while the animal was actually in that group
+    // Group events only count while the animal was actually in that group, and a
+    // group medicine round only counts if this animal was dosed — animals deliberately
+    // skipped (e.g. pregnant does) didn't receive it, so it isn't part of their history.
     evts = evts.filter(function(e) {
       if (e.animal_id === animalId || dosedEventIds.indexOf(e.id) >= 0) return true;
+      if (e.medicine_id) return false;
       return memberships.some(function(m) {
         return m.group_id === e.group_id && e.date >= m.joined_date && (!m.left_date || e.date <= m.left_date);
       });

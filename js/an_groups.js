@@ -110,7 +110,10 @@ function renderGroupDetail(g, animals, stats) {
               opt('dual_purpose', 'Dual-purpose', a.purpose) + opt('farm_labor', 'Farm labor', a.purpose) + opt('learning', 'Learning', a.purpose) +
             '</select></td>' +
             '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
-            '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
+            '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') +
+              // Manual pregnancy: expected birth date (females only)
+              (a.sex !== 'male' ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">Expected birth<br>' +
+                '<input type="date" id="gme-ebd" style="font-size:12px" value="' + (a.expected_birth_date || '') + '"></div>' : '') + '</td>' +
             '<td style="white-space:nowrap">' +
               '<button class="btn btn-sm btn-primary" onclick="' + stop + 'grpSaveMemberEdit(' + a.id + ')">Save</button> ' +
               '<button class="btn btn-sm" onclick="' + stop + 'grpCancelMemberEdit()">Cancel</button>' +
@@ -121,7 +124,7 @@ function renderGroupDetail(g, animals, stats) {
           '<td>' + getSpeciesName(a.species_id) + '</td>' +
           '<td>' + (a.breed || '\u2014') + '</td>' +
           '<td>' + (a.sex || '\u2014') + '</td>' +
-          '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span>' + medWithdrawalBadge(a.id) + '</td>' +
+          '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span>' + medWithdrawalBadge(a.id) + medPregnancyBadge(a.id) + '</td>' +
           '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
           '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
           '<td style="white-space:nowrap">' +
@@ -234,11 +237,14 @@ function grpCancelMemberEdit()         { grpMemberEditId = null;     renderGroup
 
 async function grpSaveMemberEdit(animalId) {
   try {
-    await sbPatch('animals', animalId, {
+    var ebd = document.getElementById('gme-ebd');
+    var patch = {
       sex:     document.getElementById('gme-sex').value || null,
       status:  document.getElementById('gme-status').value,
       purpose: document.getElementById('gme-purpose').value
-    });
+    };
+    if (ebd) patch.expected_birth_date = ebd.value || null;
+    await sbPatch('animals', animalId, patch);
     grpMemberEditId = null;
     anSharedLoaded = false;
     await loadSharedAnimalData();
