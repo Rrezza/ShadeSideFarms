@@ -1114,6 +1114,8 @@
             <div class="hf-field"><label>Dose</label><input type="text" id="hf-dose" placeholder="Optional"></div>
           </div>
           <div id="hf-dose-grid"></div>
+          <!-- Course: start one (several doses over time), or when logging a course reminder, which dose this is (health.js renderHfCourse) -->
+          <div id="hf-course-wrap" style="margin:0 0 12px"></div>
           <div class="hf-grid">
             <div class="hf-field"><label>Follow-up date</label><input type="date" id="hf-followup"></div>
             <div class="hf-field"><label>Link to scheduled protocol</label><select id="hf-sched"></select></div>
@@ -2488,7 +2490,7 @@
   // APP_BUILD is appended to every script URL (here and in loadModule() in
   // shared.js), so a new build number makes browsers fetch fresh copies
   // instead of running stale cached code. The sidebar footer shows it too.
-  var APP_BUILD      = 99;
+  var APP_BUILD      = 100;
   var APP_BUILD_DATE = '2026-11-26';
   ['shared', 'an_helpers', 'fd_shared', 'setup_shared', 'setup_harvest_destinations', 'health', 'auth']
     .forEach(function(name) {

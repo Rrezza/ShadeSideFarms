@@ -12,6 +12,7 @@ var healthFollowups  = [];    // logged events with an open follow-up due within
 var hfFollowupOf     = null;  // event whose follow-up the log form is currently recording
 var hfFamacha        = {};    // animal_id -> latest FAMACHA { score, date }
 var hfCostTouched    = false; // true once the user types a cost, so auto-costing stops overwriting it
+var hfCourseSched    = null;  // running course schedule the form is logging the next dose of (null = not a course dose)
 var hfBulkTotalTouched = false; // true once the user types a bulk-round total, so the per-litre suggestion stops overwriting it
 var schedEditId      = null;  // schedule being edited (null = adding)
 var breedingData     = [];
@@ -95,6 +96,7 @@ function populateHealthForm() {
   hfFillRouteOptions(null);
   document.getElementById('hf-cost').value = '';
   hfCostTouched = false;
+  hfCourseSched = null;
   onHfMedChange();
 }
 
@@ -137,6 +139,69 @@ function onHfMedChange() {
   hfFillRouteOptions(med);
   hfBulkTotalTouched = false;
   renderHfDoseGrid();
+  renderHfCourse();
+}
+
+// Course box under the dose grid.
+//  - Logging a course reminder: shows which dose this is.
+//  - Otherwise, with a cabinet medicine chosen: "Part of a course" switch, pre-set
+//    from the medicine's course and changeable (the vet may say 5 days, not 3).
+//    Saving the first dose then creates a reminder schedule for the rest.
+function renderHfCourse() {
+  var wrap = document.getElementById('hf-course-wrap');
+  if (!wrap) return;
+  if (hfCourseSched) {
+    var s = hfCourseSched;
+    wrap.innerHTML = '<div class="fc-derived">Course: dose ' + ((s.course_given || 0) + 1) + ' of ' + s.course_total +
+      ' &middot; ' + (MED_COURSE_INTERVALS[s.course_interval_hours] || '') +
+      ' &middot; started ' + fmtDate(s.course_start_date) + ' &middot; pre-filled with the previous dose</div>';
+    return;
+  }
+  var v = document.getElementById('hf-med').value;
+  var med = v && v !== 'other' ? medById(parseInt(v)) : null;
+  if (!med) { wrap.innerHTML = ''; return; }
+  var on = !!med.course_doses;
+  var interval = med.course_interval_hours || 24;
+  wrap.innerHTML =
+    '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px">' +
+      '<input type="checkbox" id="hf-course-on"' + (on ? ' checked' : '') + ' onchange="document.getElementById(\'hf-course-fields\').style.display=this.checked?\'flex\':\'none\'"> ' +
+      'Part of a course (several doses over time)' +
+      (med.course_doses ? ' <span style="color:var(--muted)">&middot; label: ' + medFmtCourse(med.course_doses, med.course_interval_hours) + '</span>' : '') +
+    '</label>' +
+    '<div id="hf-course-fields" style="display:' + (on ? 'flex' : 'none') + ';gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">' +
+      '<input type="number" id="hf-course-doses" min="2" step="1" style="width:70px" value="' + (med.course_doses || 3) + '"> doses,' +
+      '<select id="hf-course-interval">' +
+        Object.keys(MED_COURSE_INTERVALS).map(function(h) {
+          return '<option value="' + h + '"' + (Number(h) === interval ? ' selected' : '') + '>' + MED_COURSE_INTERVALS[h] + '</option>';
+        }).join('') +
+      '</select>' +
+      '<span style="color:var(--muted)">&middot; this is dose 1; the rest appear in Due now</span>' +
+    '</div>';
+}
+
+// Pre-fills the dose entry with what a previous event gave (used for the next
+// dose of a course): route, per-animal doses, or a bulk round's total, water and animals.
+function hfPrefillFromEvent(eventId) {
+  var e = healthEvts.find(function(x) { return x.id === eventId; });
+  if (!e) return;
+  if (e.route) { document.getElementById('hf-route').value = e.route; renderHfDoseGrid(); }
+  var doses = medMovements.filter(function(mv) { return mv.health_event_id === eventId && mv.movement_type === 'dose'; });
+  var given = {};
+  doses.forEach(function(mv) { given[mv.animal_id] = -Number(mv.quantity); });
+  var bulkTotal = document.getElementById('hf-bulk-total');
+  if (bulkTotal) {
+    bulkTotal.value = Math.round(doses.reduce(function(s, mv) { return s - Number(mv.quantity); }, 0) * 10000) / 10000;
+    hfBulkTotalTouched = true;
+    var w = document.getElementById('hf-bulk-water');
+    if (w && e.water_litres != null) w.value = e.water_litres;
+    document.querySelectorAll('.hf-bulk-animal').forEach(function(cb) { cb.checked = cb.dataset.animal in given; });
+  } else {
+    document.querySelectorAll('.hf-dose-input').forEach(function(inp) {
+      inp.value = inp.dataset.animal in given ? given[inp.dataset.animal] : 0;
+      hfCheckRange(inp);
+    });
+  }
+  updateHfDoseTotal();
 }
 
 // The animals a treatment covers, based on the form's target selection
@@ -376,6 +441,8 @@ function updateHfDoseTotal() {
 
 function toggleHealthForm() {
   hfFollowupOf = null;  // a fresh form isn't a follow-up of anything
+  hfCourseSched = null; // ...or the next dose of a course
+  renderHfCourse();
   document.getElementById('health-log-form').classList.toggle('open');
 }
 
@@ -446,9 +513,11 @@ function renderHealthDue() {
       '<span class="due-card-days ' + info.cls + '">' + info.label + '</span></div>' +
       '<div class="due-card-meta">' + (s.event_type || '') + ' &middot; ' + targetLabel + ': ' + medEsc(target) +
       (schedProductLabel(s) ? ' &middot; ' + medEsc(schedProductLabel(s)) : '') + '</div>';
-    if (s.dose) html += '<div class="due-card-meta">Dose: ' + medEsc(s.dose) + '</div>';
+    if (s.course_total) html += '<div class="due-card-meta" style="color:var(--blue);font-weight:500">Course: dose ' + ((s.course_given || 0) + 1) +
+      ' of ' + s.course_total + ' &middot; ' + (MED_COURSE_INTERVALS[s.course_interval_hours] || '') + '</div>';
+    if (s.dose) html += '<div class="due-card-meta">' + (s.course_total ? 'Previous dose: ' : 'Dose: ') + medEsc(s.dose) + '</div>';
     html += healthSchedRotationNote(s);
-    html += '<div style="margin-top:8px"><button class="btn btn-sm" onclick="preFillHealthForm(' + s.id + ')">Log this event</button></div>';
+    html += '<div style="margin-top:8px"><button class="btn btn-sm" onclick="preFillHealthForm(' + s.id + ')">' + (s.course_total ? 'Log this dose' : 'Log this event') + '</button></div>';
     html += '</div>';
   });
   // Follow-ups from logged events: stay here until marked Done (or a follow-up event is logged)
@@ -511,6 +580,7 @@ function preFillHealthForm(schedId) {
   var sched = healthScheds.find(function(s) { return s.id === schedId; });
   if (!sched) return;
   hfFollowupOf = null;
+  hfCourseSched = sched.course_total ? sched : null;
   document.getElementById('hf-event-type').value = sched.event_type || 'vaccination';
   document.getElementById('hf-sched').value = schedId;
   if (sched.description) document.getElementById('hf-desc').value = sched.description;
@@ -531,6 +601,9 @@ function preFillHealthForm(schedId) {
     document.getElementById('hf-group').value = sched.group_id;
     onHfTargetChange();
   }
+  // Next dose of a course: same route and amounts as the previous dose
+  if (hfCourseSched && sched.course_last_event_id) hfPrefillFromEvent(sched.course_last_event_id);
+  renderHfCourse();
   document.getElementById('health-log-form').classList.add('open');
   document.getElementById('health-log-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -574,7 +647,8 @@ function renderHealthLog() {
       '<td class="mono">' + fmtDate(e.date) + '</td>' +
       '<td style="font-weight:500">' + medEsc(target) + '</td>' +
       '<td><span class="badge ' + (EVTYPE[e.event_type] || 'badge-gray') + '">' + (e.event_type || '') + '</span></td>' +
-      '<td>' + (e.description ? medEsc(e.description) : '—') + '</td>' +
+      '<td>' + (e.description ? medEsc(e.description) : '—') +
+        (e.course_dose_no ? ' <span class="badge badge-blue" style="font-size:10px">dose ' + e.course_dose_no + '/' + e.course_total + '</span>' : '') + '</td>' +
       '<td class="muted-cell">' + (e.product_used ? medEsc(e.product_used) : '—') +
         (e.route ? '<div style="font-size:11px">' + medRouteLabel(e.route) + '</div>' : '') + '</td>' +
       '<td class="muted-cell">' + (e.dose ? medEsc(e.dose) : '—') + '</td>' +
@@ -966,6 +1040,19 @@ async function submitHealthEvent() {
       var prod = document.getElementById('hf-product').value.trim(); if (prod) d.product_used = prod;
       var dose = document.getElementById('hf-dose').value.trim();    if (dose) d.dose = dose;
     }
+    // Course: either the next dose of a running course, or the first dose of a new one
+    var schedSel = parseInt(document.getElementById('hf-sched').value) || null;
+    var courseSched = hfCourseSched && hfCourseSched.id === schedSel ? hfCourseSched : null;
+    var courseOnEl = document.getElementById('hf-course-on');
+    var newCourse = null;
+    if (!courseSched && med && courseOnEl && courseOnEl.checked) {
+      var cDoses = parseInt(document.getElementById('hf-course-doses').value);
+      if (!(cDoses >= 2)) throw new Error('A course needs at least 2 doses — or untick "Part of a course".');
+      newCourse = { total: cDoses, interval: parseInt(document.getElementById('hf-course-interval').value) };
+      d.course_dose_no = 1; d.course_total = cDoses;
+    } else if (courseSched) {
+      d.course_dose_no = (courseSched.course_given || 0) + 1; d.course_total = courseSched.course_total;
+    }
     var cost = document.getElementById('hf-cost').value;           if (cost) d.cost_pkr = parseFloat(cost);
     var fu   = document.getElementById('hf-followup').value;       if (fu)   d.follow_up_date = fu;
 
@@ -1029,7 +1116,14 @@ async function submitHealthEvent() {
     var schedId = document.getElementById('hf-sched').value;
     if (schedId) {
       var sched = healthScheds.find(function(s) { return s.id === parseInt(schedId); });
-      if (sched && sched.interval_days) {
+      if (sched && sched.course_total) {
+        // Course: count this dose; move to the next dose's date, or close when done
+        var givenNow = (sched.course_given || 0) + 1;
+        await sbPatch('scheduled_health_events', sched.id, givenNow >= sched.course_total
+          ? { course_given: givenNow, last_done_date: date, course_last_event_id: saved[0].id, active: false }
+          : { course_given: givenNow, last_done_date: date, course_last_event_id: saved[0].id, dose: d.dose || null,
+              next_due_date: medCourseDueDate(sched.course_start_date || date, givenNow, sched.course_interval_hours) });
+      } else if (sched && sched.interval_days) {
         // Repeating: move the due date on by the interval. Built from local date
         // parts — toISOString() would shift it a day early in Pakistan (UTC+5).
         var nextDue = new Date(date + 'T00:00:00');
@@ -1044,6 +1138,25 @@ async function submitHealthEvent() {
         await sbPatch('scheduled_health_events', parseInt(schedId), { last_done_date: date, active: false });
       }
     }
+
+    // New course: the remaining doses become a schedule that reminds dose by dose.
+    // The event itself is already saved, so a failure here is reported, not rolled back.
+    if (newCourse) {
+      try {
+        var cs = {
+          event_type: evType, description: desc, medicine_id: med.id, dose: d.dose,
+          course_total: newCourse.total, course_given: 1, course_interval_hours: newCourse.interval,
+          course_start_date: date, course_last_event_id: saved[0].id, last_done_date: date,
+          next_due_date: medCourseDueDate(date, 1, newCourse.interval), active: true,
+          notes: 'Course: ' + medFmtCourse(newCourse.total, newCourse.interval)
+        };
+        if (animalId) cs.animal_id = parseInt(animalId); else cs.group_id = parseInt(groupId);
+        await sbInsert('scheduled_health_events', [cs]);
+      } catch(courseErr) {
+        throw new Error('Dose 1 was saved, but the reminders for the rest of the course could not be created: ' + courseErr.message);
+      }
+    }
+    hfCourseSched = null;
 
     statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--green)';
     document.getElementById('health-log-form').classList.remove('open');

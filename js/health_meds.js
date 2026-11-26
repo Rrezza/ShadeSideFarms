@@ -53,6 +53,25 @@ function medIsBulkRoute(route) { return MED_BULK_ROUTES.indexOf(route) >= 0; }
 function medUsesWater(route) { return route === 'water' || route === 'spray'; }
 function medRouteLabel(route) { return route ? (MED_ROUTES[route] || route) : ''; }
 
+// ---- Treatment courses ----
+// A course is N doses, one every X hours. Allowed intervals match the DB check.
+var MED_COURSE_INTERVALS = { 8: '3 times a day', 12: 'twice a day', 24: 'once a day', 48: 'every 2 days', 72: 'every 3 days' };
+
+// "3 doses, once a day" / "6 doses, twice a day (3 days)"; '' when no course
+function medFmtCourse(doses, intervalHours) {
+  if (!doses || !intervalHours) return '';
+  // Calendar days from first dose to last, inclusive
+  var days = 1 + Math.floor((doses - 1) * intervalHours / 24);
+  return doses + ' doses, ' + (MED_COURSE_INTERVALS[intervalHours] || 'every ' + intervalHours + ' h') +
+    (intervalHours !== 24 ? ' (over ' + days + ' day' + (days !== 1 ? 's' : '') + ')' : '');
+}
+
+// Date a course's dose number k (0-based) is due: start + whole days elapsed.
+// Twice a day puts doses 0 and 1 on day 0, doses 2 and 3 on day 1, and so on.
+function medCourseDueDate(startISO, k, intervalHours) {
+  return medAddDays(startISO, Math.floor(k * intervalHours / 24));
+}
+
 var MED_REASON_LABELS = {
   expired: 'Expired / discarded', spilled: 'Spilled / broken',
   unlogged_use: 'Used but not logged', correction: 'Count correction', other: 'Other'
@@ -433,9 +452,12 @@ function medComputeAlerts(schedules) {
         if (d == null) unweighed++; else need += d;
       });
     }
+    // A running course needs every remaining dose, not just the next one
+    var remaining = s.course_total ? Math.max(0, s.course_total - (s.course_given || 0)) : 1;
+    need *= remaining;
     if (!needs[med.id]) needs[med.id] = { total: 0, rounds: [] };
     needs[med.id].total += need;
-    needs[med.id].rounds.push({ sched: s, need: need, animals: animals.length, unweighed: unweighed, fromLast: fromLast });
+    needs[med.id].rounds.push({ sched: s, need: need, animals: animals.length, unweighed: unweighed, fromLast: fromLast, remaining: s.course_total ? remaining : null });
   });
 
   var alerts = [];
@@ -484,6 +506,7 @@ function medAlertsHtml(alerts) {
             ? (rd.fromLast.none ? ' &middot; <span style="color:var(--muted)">no earlier round to estimate from</span>'
                                 : ' &middot; needs ~' + medFmtUnits(med, rd.need) + ' (same as the last round)')
             : ' &middot; needs ~' + medFmtUnits(med, rd.need) + ' for ' + rd.animals + ' animal' + (rd.animals !== 1 ? 's' : '')) +
+          (rd.remaining ? ' &middot; ' + rd.remaining + ' dose' + (rd.remaining !== 1 ? 's' : '') + ' left in course' : '') +
           (rd.unweighed ? ' <span style="color:var(--amber)">(' + rd.unweighed + ' never weighed, not counted)</span>' : '') +
           '</div>';
       });
@@ -782,7 +805,8 @@ function renderMedSetupTable() {
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
         '<td class="muted-cell">' + (supply ? '—' : medFmtDoseRate(m) +
-          (medRoutes(m).length ? '<div style="font-size:11px">' + medRoutes(m).map(medRouteLabel).join(' or ') + '</div>' : '')) + '</td>' +
+          (medRoutes(m).length ? '<div style="font-size:11px">' + medRoutes(m).map(medRouteLabel).join(' or ') + '</div>' : '') +
+          (m.course_doses ? '<div style="font-size:11px;color:var(--blue)">Course: ' + medFmtCourse(m.course_doses, m.course_interval_hours) + '</div>' : '')) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
         '<td class="mono right">' + (!supply && m.withdrawal_days != null ? m.withdrawal_days + ' d' : '—') +
           (m.unsafe_in_pregnancy ? '<div><span class="badge badge-red" style="font-size:10px">not in pregnancy</span></div>' : '') + '</td>' +
@@ -913,6 +937,14 @@ function renderMedForm() {
           return '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" class="mf-route" value="' + k + '"' +
             (routes.indexOf(k) >= 0 ? ' checked' : '') + '> ' + MED_ROUTES[k] + '</label>';
         }).join('') +
+      '</div>' +
+      // Course: given as several doses over time (blank = a single dose)
+      '<div class="hf-grid">' +
+        '<div class="hf-field"><label>Course &mdash; number of doses</label><input type="number" id="mf-course-doses" min="2" step="1" value="' + v('course_doses') + '" placeholder="Blank = single dose"></div>' +
+        '<div class="hf-field"><label>Given</label><select id="mf-course-interval">' +
+          Object.keys(MED_COURSE_INTERVALS).map(function(h) { return opt(String(h), MED_COURSE_INTERVALS[h], String(m && m.course_interval_hours ? m.course_interval_hours : 24)); }).join('') +
+        '</select></div>' +
+        '<div class="hf-field" style="align-self:end;font-size:12px;color:var(--muted);padding-bottom:8px">Each dose after the first becomes a reminder in Health › Due now.</div>' +
       '</div>';
   }
   html += '<div class="hf-grid">' +
@@ -1052,6 +1084,7 @@ async function submitMedicine() {
       dose_amount_max:   basis ? num('mf-amount-max') : null,
       dose_weight_kg:    basis === 'per_kg' ? num('mf-weight') : null,
       dose_water_l:      basis === 'per_litre' ? num('mf-water') : null,
+      course_doses:      isMed && num('mf-course-doses') != null ? Math.round(num('mf-course-doses')) : null,
       routes:            isMed ? Array.prototype.map.call(document.querySelectorAll('.mf-route:checked'), function(cb) { return cb.value; }) : [],
       min_stock:         num('mf-min'),
       withdrawal_days:   isMed && num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
@@ -1059,6 +1092,9 @@ async function submitMedicine() {
       refrigerate:       isMed ? el('mf-fridge').checked : false,
       notes:             txt('mf-notes')
     };
+    // Course interval only matters when there is a course
+    d.course_interval_hours = d.course_doses ? parseInt(el('mf-course-interval').value) : null;
+    if (d.course_doses != null && d.course_doses < 2) throw new Error('A course needs at least 2 doses (leave it blank for a single dose).');
     if (!d.name) throw new Error('Name is required.');
     if (!(d.pack_size > 0)) throw new Error('Amount per pack must be greater than 0.');
     if (basis && !(d.dose_amount > 0)) throw new Error('Enter the label dose amount, or set Label dose to "Not set".');

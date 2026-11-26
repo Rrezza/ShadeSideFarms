@@ -149,6 +149,10 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Treatment courses — DONE 2026-11-26 (r100)
+- Medicines can carry a course (N doses, 3×/2×/1× a day or every 2–3 days), shown in Setup. Logging dose 1 as "Part of a course" creates reminders in Health › Due now for each remaining dose, pre-filled with the previous dose; closes itself after the last. Withdrawal runs from the last dose automatically. Reorder reminders count all remaining doses.
+- Not handled: deleting a course dose's event doesn't roll the course count back (same as other schedules) — adjust or retire the schedule under Schedules if needed.
+
 ### Species-dose switch, multiple routes — DONE 2026-11-26 (r99)
 - Medicine form: "Different dose per species" checkbox — either one general dose or per-species rows, no mixing; species without a row get no suggested dose (left blank, noted).
 - Medicines can list several allowed routes (`medicines.routes`, replaced the single `route` column). One route is pre-filled when logging; several must be chosen before the event saves.
