@@ -149,6 +149,10 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Species-dose switch, multiple routes — DONE 2026-11-26 (r99)
+- Medicine form: "Different dose per species" checkbox — either one general dose or per-species rows, no mixing; species without a row get no suggested dose (left blank, noted).
+- Medicines can list several allowed routes (`medicines.routes`, replaced the single `route` column). One route is pre-filled when logging; several must be chosen before the event saves.
+
 ### Ranged medicine doses — DONE 2026-11-26 (r98)
 - Any label dose (and species row) can be a range, e.g. 4–8 ml. Dose grid pre-fills the midpoint; doses typed outside the range are flagged amber (warning only); reorder reminders estimate from the top of the range.
 

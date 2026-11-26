@@ -31,6 +31,7 @@ var medBirths      = [];     // birth_events { dam_id, date }
 var medSpeciesDoses = [];    // medicine_species_doses — per-species label dose overrides
 var medSpeciesList  = [];    // species { id, common_name } — for the form and labels
 var medFormDoses    = [];    // working copy of the species rows while the add/edit form is open
+var medFormSpeciesMode = false; // form's "Different dose per species" switch
 
 // How far ahead the reorder check looks at scheduled health rounds
 var MED_LOOKAHEAD_DAYS = 30;
@@ -175,16 +176,23 @@ function medSpeciesName(speciesId) {
   return sp ? sp.common_name : 'Species ' + speciesId;
 }
 
-// The label rate to use for one species: its own override row if the medicine
-// has one, otherwise the medicine's default dose. Either has the same shape
-// ({ dose_basis, dose_amount, dose_weight_kg }); dose_basis null = no rate.
-function medRateFor(med, speciesId) {
-  if (speciesId != null) {
-    var o = medSpeciesDoses.find(function(d) { return d.medicine_id === med.id && d.species_id === speciesId; });
-    if (o) return o;
-  }
-  return med;
+// True when a medicine is dosed per species (it has species rows). Such a
+// medicine has no general dose: a species without a row gets no suggestion.
+function medIsSpeciesDosed(med) {
+  return medSpeciesDoses.some(function(d) { return d.medicine_id === med.id; });
 }
+
+// The label rate to use for one species: the medicine's species row when it is
+// dosed per species, otherwise its general dose. Both have the same shape
+// ({ dose_basis, dose_amount, dose_weight_kg, ... }); dose_basis null = no rate.
+var MED_NO_RATE = { dose_basis: null };
+function medRateFor(med, speciesId) {
+  if (!medIsSpeciesDosed(med)) return med;
+  return medSpeciesDoses.find(function(d) { return d.medicine_id === med.id && d.species_id === speciesId; }) || MED_NO_RATE;
+}
+
+// Allowed routes of a medicine (array of MED_ROUTES keys; empty = not set)
+function medRoutes(med) { return (med && med.routes) || []; }
 
 // The amount from a label rate. Ranged doses ("4 to 8 ml") store the low end in
 // dose_amount and the high end in dose_amount_max. which: 'mid' (default — what
@@ -412,10 +420,12 @@ function medComputeAlerts(schedules) {
     if (!med || !med.active) return;
     var animals = medScheduleAnimals(s);
     var need = 0, unweighed = 0, fromLast = null;
-    if (medIsBulkRoute(med.route)) {
+    var bulkOnly = medRoutes(med).length && medRoutes(med).every(medIsBulkRoute);
+    var lastBulk = medRoutes(med).some(medIsBulkRoute) ? medLastBulkTotal(med.id, animals.map(function(a) { return a.id; })) : null;
+    if (lastBulk || bulkOnly) {
       // In-water / in-feed / spray rounds: assume the same total as last time
       // (no earlier round = no estimate; the minimum-stock reminder still applies)
-      fromLast = medLastBulkTotal(med.id, animals.map(function(a) { return a.id; })) || { total: 0, none: true };
+      fromLast = lastBulk || { total: 0, none: true };
       need = fromLast.total;
     } else {
       animals.forEach(function(a) {
@@ -772,7 +782,7 @@ function renderMedSetupTable() {
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
         '<td class="muted-cell">' + (supply ? '—' : medFmtDoseRate(m) +
-          (m.route ? '<div style="font-size:11px">' + medRouteLabel(m.route) + '</div>' : '')) + '</td>' +
+          (medRoutes(m).length ? '<div style="font-size:11px">' + medRoutes(m).map(medRouteLabel).join(' or ') + '</div>' : '')) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
         '<td class="mono right">' + (!supply && m.withdrawal_days != null ? m.withdrawal_days + ' d' : '—') +
           (m.unsafe_in_pregnancy ? '<div><span class="badge badge-red" style="font-size:10px">not in pregnancy</span></div>' : '') + '</td>' +
@@ -800,6 +810,7 @@ function openMedForm(id, kind) {
   var m = id !== null ? medById(id) : null;
   medFormKind = m ? (m.kind || 'medicine') : (kind || 'medicine');
   // Copy this medicine's species rows into the form's working list
+  medFormSpeciesMode = !!(m && medIsSpeciesDosed(m));
   medFormDoses = m ? medSpeciesDoses.filter(function(d) { return d.medicine_id === m.id; }).map(function(d) {
     return { species_id: d.species_id, dose_basis: d.dose_basis, dose_amount: d.dose_amount, dose_amount_max: d.dose_amount_max, dose_weight_kg: d.dose_weight_kg };
   }) : [];
@@ -839,7 +850,7 @@ function renderMedForm() {
   var form  = m ? m.form : (isMed ? 'liquid' : 'other');
   var unit  = m ? m.stock_unit : MED_UNITS[kind][0];
   var basis = m ? (m.dose_basis || '') : '';
-  var route = m ? (m.route || '') : '';
+  var routes = m ? medRoutes(m) : [];
   var title = (m ? 'Edit ' + medEsc(m.name) : 'New ' + MED_KIND_LABEL[kind]);
 
   var html = '<div class="health-form-box open" style="margin:16px 22px">' +
@@ -870,8 +881,14 @@ function renderMedForm() {
         '<div class="hf-field"><label>Amount per pack (<span class="mf-unit-lbl">' + unit + '</span>) *</label><input type="number" id="mf-pack-size" min="0" step="any" value="' + v('pack_size', isMed ? '' : '1') + '" placeholder="e.g. 50"></div>' +
       '</div>';
   if (isMed) {
-    html += '<div class="hf-grid">' +
-        '<div class="hf-field"><label>Label dose' + (medSpeciesList.length ? ' (default)' : '') + '</label><select id="mf-basis" onchange="updateMedFormUnits()">' +
+    html +=
+      // Switch between one general dose and a dose per species (no mixing:
+      // a species-dosed medicine has no general fallback)
+      '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
+        '<input type="checkbox" id="mf-species-mode"' + (medFormSpeciesMode ? ' checked' : '') + ' onchange="toggleMedSpeciesMode(this.checked)"> ' +
+        'Different dose per species</label>' +
+      '<div class="hf-grid" id="mf-general-dose"' + (medFormSpeciesMode ? ' style="display:none"' : '') + '>' +
+        '<div class="hf-field"><label>Label dose</label><select id="mf-basis" onchange="updateMedFormUnits()">' +
           opt('', 'Not set', basis) + opt('per_kg', 'By body weight', basis) + opt('per_head', 'Fixed per animal', basis) +
           opt('per_litre', 'Per litre of water', basis) +
         '</select></div>' +
@@ -883,18 +900,19 @@ function renderMedForm() {
         '<div class="hf-field" id="mf-weight-wrap"><label>Per kg of body weight</label><input type="number" id="mf-weight" min="0" step="any" value="' + v('dose_weight_kg') + '" placeholder="e.g. 50"></div>' +
         '<div class="hf-field" id="mf-water-wrap" style="display:none"><label>Per litres of water</label><input type="number" id="mf-water" min="0" step="any" value="' + v('dose_water_l') + '" placeholder="e.g. 1"></div>' +
       '</div>' +
-      '<div class="hf-grid">' +
-        '<div class="hf-field"><label>Usual route</label><select id="mf-route">' +
-          opt('', 'Not set', route) +
-          Object.keys(MED_ROUTES).map(function(k) { return opt(k, MED_ROUTES[k], route); }).join('') +
-        '</select></div>' +
-        '<div class="hf-field" style="grid-column:span 2;align-self:end;font-size:12px;color:var(--muted);padding-bottom:8px">' +
-          'Pre-filled when logging a treatment. In water, in feed and spray rounds record one total amount for the group.</div>' +
-      '</div>' +
-      // Species with a different label dose; rendered by renderMedSpeciesDoses()
-      '<div style="margin:0 0 12px">' +
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Species-specific doses &middot; used instead of the default for these species</div>' +
+      // One dose row per species; rendered by renderMedSpeciesDoses()
+      '<div id="mf-species-block" style="margin:0 0 12px' + (medFormSpeciesMode ? '' : ';display:none') + '">' +
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dose per species &middot; species without a row get no suggested dose</div>' +
         '<div id="mf-species-wrap"></div>' +
+      '</div>' +
+      // Allowed routes: one ticked is pre-filled when logging; several must be chosen each time
+      '<div style="font-size:12px;color:var(--muted);margin:4px 0 6px">Routes it can be given by &middot; ' +
+        'one ticked is pre-filled when logging; with several you pick each time. In water, in feed and spray rounds record one total for the group.</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:12px">' +
+        Object.keys(MED_ROUTES).map(function(k) {
+          return '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" class="mf-route" value="' + k + '"' +
+            (routes.indexOf(k) >= 0 ? ' checked' : '') + '> ' + MED_ROUTES[k] + '</label>';
+        }).join('') +
       '</div>';
   }
   html += '<div class="hf-grid">' +
@@ -974,6 +992,16 @@ function setMedSpeciesDose(i, field, value, noRender) {
   if (!noRender) renderMedSpeciesDoses();
 }
 
+// Ticking "Different dose per species" hides the general dose and shows the
+// species rows (starting one if there are none); unticking does the reverse.
+// Whichever side is hidden is cleared when the medicine is saved.
+function toggleMedSpeciesMode(on) {
+  medFormSpeciesMode = on;
+  document.getElementById('mf-general-dose').style.display = on ? 'none' : '';
+  document.getElementById('mf-species-block').style.display = on ? '' : 'none';
+  if (on && !medFormDoses.length) addMedSpeciesDose();
+}
+
 function addMedSpeciesDose() {
   medFormDoses.push({ species_id: null, dose_basis: 'per_kg', dose_amount: null, dose_amount_max: null, dose_weight_kg: null });
   renderMedSpeciesDoses();
@@ -1007,7 +1035,9 @@ async function submitMedicine() {
     var num = function(id) { var x = el(id); return !x || x.value === '' ? null : parseFloat(x.value); };
     var txt = function(id) { var x = el(id); return x ? (x.value.trim() || null) : null; };
     var isMed = medFormKind === 'medicine';
-    var basis = isMed ? (el('mf-basis').value || null) : null;
+    // Species-dosed medicines have no general dose
+    var speciesMode = isMed && medFormSpeciesMode;
+    var basis = isMed && !speciesMode ? (el('mf-basis').value || null) : null;
     var d = {
       kind:              medFormKind,
       name:              txt('mf-name'),
@@ -1022,7 +1052,7 @@ async function submitMedicine() {
       dose_amount_max:   basis ? num('mf-amount-max') : null,
       dose_weight_kg:    basis === 'per_kg' ? num('mf-weight') : null,
       dose_water_l:      basis === 'per_litre' ? num('mf-water') : null,
-      route:             isMed ? (el('mf-route').value || null) : null,
+      routes:            isMed ? Array.prototype.map.call(document.querySelectorAll('.mf-route:checked'), function(cb) { return cb.value; }) : [],
       min_stock:         num('mf-min'),
       withdrawal_days:   isMed && num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
       unsafe_in_pregnancy: isMed ? el('mf-preg').checked : false,
@@ -1037,7 +1067,8 @@ async function submitMedicine() {
     if (basis === 'per_litre' && !(d.dose_water_l > 0)) throw new Error('Enter how many litres of water the dose is for.');
 
     // Species rows: check each is complete before saving anything
-    var speciesRows = isMed ? medFormDoses.map(function(sd) {
+    if (speciesMode && !medFormDoses.length) throw new Error('Add a dose for at least one species, or untick "Different dose per species".');
+    var speciesRows = speciesMode ? medFormDoses.map(function(sd) {
       if (!sd.species_id) throw new Error('Pick a species for each species-specific dose, or remove the empty row.');
       var name = medSpeciesName(sd.species_id);
       if (!(sd.dose_amount > 0)) throw new Error('Enter the dose for ' + name + '.');

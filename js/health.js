@@ -92,8 +92,7 @@ function populateHealthForm() {
 
   // Medicine selector: active cabinet medicines, plus a free-text fallback
   document.getElementById('hf-med').innerHTML = hfMedOptionsHtml(true);
-  document.getElementById('hf-route').innerHTML = '<option value="">Not recorded</option>' +
-    Object.keys(MED_ROUTES).map(function(k) { return '<option value="' + k + '">' + MED_ROUTES[k] + '</option>'; }).join('');
+  hfFillRouteOptions(null);
   document.getElementById('hf-cost').value = '';
   hfCostTouched = false;
   onHfMedChange();
@@ -113,13 +112,29 @@ function hfMedOptionsHtml(withOther) {
 }
 
 // Shows the free-text product/dose fields for "not in cabinet", otherwise the dose grid
+// Route options for the chosen medicine: its allowed routes first, then the rest.
+// One allowed route is pre-filled; with several the box starts empty and must be
+// picked (a wrong guess between, say, deep IM and slow IV would mislead the record).
+function hfFillRouteOptions(med) {
+  var sel = document.getElementById('hf-route');
+  var allowed = medRoutes(med);
+  var optHtml = function(k) { return '<option value="' + k + '">' + MED_ROUTES[k] + '</option>'; };
+  var others = Object.keys(MED_ROUTES).filter(function(k) { return allowed.indexOf(k) < 0; });
+  sel.innerHTML = (allowed.length > 1 ? '<option value="">Choose route…</option>' : '<option value="">Not recorded</option>') +
+    (allowed.length
+      ? '<optgroup label="For this medicine">' + allowed.map(optHtml).join('') + '</optgroup>' +
+        '<optgroup label="Other">' + others.map(optHtml).join('') + '</optgroup>'
+      : others.map(optHtml).join(''));
+  sel.value = allowed.length === 1 ? allowed[0] : '';
+}
+
 function onHfMedChange() {
   var v = document.getElementById('hf-med').value;
   document.getElementById('hf-free-wrap').style.display = v === 'other' ? 'grid' : 'none';
   // Route: shown whenever a product is chosen, pre-filled from the medicine's usual route
   document.getElementById('hf-route-wrap').style.display = v ? 'flex' : 'none';
   var med = v && v !== 'other' ? medById(parseInt(v)) : null;
-  document.getElementById('hf-route').value = med && med.route ? med.route : '';
+  hfFillRouteOptions(med);
   hfBulkTotalTouched = false;
   renderHfDoseGrid();
 }
@@ -233,7 +248,10 @@ function renderHfDoseGrid() {
         medPregnancyBadge(a.id) + '</td>' +
       '<td class="mono right">' + (kg != null ? r1(kg) + ' kg' : '—') + '</td>' +
       famCell +
-      '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug) : '—') + '</td>' +
+      '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug)
+        // Species-dosed medicine with no row for this animal's species
+        : (medIsSpeciesDosed(med) && medRateFor(med, a.species_id) === MED_NO_RATE
+            ? '<span style="font-size:11px;color:var(--amber)">no dose set for ' + medEsc(medSpeciesName(a.species_id)) + '</span>' : '—')) + '</td>' +
       '<td class="right"><input type="number" class="hf-dose-input" data-animal="' + a.id + '" min="0" step="any" ' +
         'style="width:90px;text-align:right" value="' + (prefill != null ? prefill : '') + '" oninput="hfCheckRange(this);updateHfDoseTotal()">' +
         '<div class="hf-range-note" style="font-size:11px;color:var(--amber);display:none"></div></td>' +
@@ -924,6 +942,7 @@ async function submitHealthEvent() {
     var medSel = document.getElementById('hf-med').value;
     var med = (medSel && medSel !== 'other') ? medById(parseInt(medSel)) : null;
     var route = medSel ? (document.getElementById('hf-route').value || null) : null;
+    if (med && !route && medRoutes(med).length > 1) throw new Error(med.name + ' can be given more than one way — choose the route used.');
     if (route) d.route = route;
     var doses = [];
     if (med) {
