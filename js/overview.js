@@ -90,6 +90,15 @@ async function loadOverviewPage() {
       });
     }
 
+    // Spray data (pesticides.js) drives each plot card's waiting-period warning
+    // and spray counts. Safe-fail: cards still render without it.
+    try {
+      await loadModule('pesticides');
+      await pestLoadData();
+    } catch (err) {
+      console.warn('Overview: spray data load failed —', err.message);
+    }
+
     renderOverview();
     // Health banners load on their own so a failure never blocks the plot cards
     loadOverviewFollowups();
@@ -237,13 +246,16 @@ async function loadOverviewMedAlerts() {
     ]);
     // Group/animal targets need the shared animal data; skip the look-ahead part if it failed
     var alerts = medComputeAlerts(anSharedLoaded ? r[0] : []);
-    if (!alerts.length) { el.innerHTML = ''; return; }
+    // Pesticides below minimum stock join the same banner (data loaded with the plot cards)
+    var pestLow = typeof pestLowStock === 'function' ? pestLowStock() : [];
+    if (!alerts.length && !pestLow.length) { el.innerHTML = ''; return; }
     el.innerHTML =
       '<div class="section">' +
         '<div class="section-hdr"><h2>Supplies to buy</h2>' +
         '<div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="goToPage(\'medicines\')">Medicines</button>' +
+        '<button class="btn btn-sm" onclick="goToPage(\'pestinventory\')">Pesticides</button>' +
         '<button class="btn btn-sm" onclick="goToPage(\'equipment\')">Tools &amp; consumables</button></div></div>' +
-        '<div style="padding:16px 22px">' + medAlertsHtml(alerts) + '</div>' +
+        '<div style="padding:16px 22px">' + medAlertsHtml(alerts) + (pestLow.length ? pestAlertsHtml(pestLow) : '') + '</div>' +
       '</div>';
   } catch (err) {
     console.warn('Overview: medicine alerts failed —', err.message);
@@ -498,6 +510,21 @@ function renderOvCard(p) {
     .filter(function(h) { return groupIds.indexOf(h.crop_group_id) !== -1; })
     .reduce(function(s, h) { return s + (parseFloat(h.quantity_kg) || 0); }, 0);
 
+  // ── Spraying (pesticides.js; skipped if it failed to load) ──
+  var hasPest = typeof pestPlotWindow === 'function';
+  var sprayWindow = hasPest ? pestPlotWindow(p.id) : null;
+  var sprayCounts = hasPest ? pestPlotCounts(p.id) : null;
+  var lastSprayHtml = '—';
+  if (sprayCounts && sprayCounts.last) {
+    var lastPest = pestById(sprayCounts.last.pesticide_id);
+    lastSprayHtml = fmtDate(sprayCounts.last.date) + ' · ' + (lastPest ? lastPest.name : 'Unknown');
+  }
+  var sprayWarning = sprayWindow
+    ? '<div class="ov-pest-warning">Sprayed ' + fmtDate(sprayWindow.spray.date) +
+      (sprayWindow.pesticide ? ' (' + sprayWindow.pesticide.name + ')' : '') +
+      ' — safe to cut from ' + fmtDate(sprayWindow.safeFrom) + '</div>'
+    : '';
+
   // ── Build the card ────────────────────────────────────────
   var locName = p.locations ? p.locations.name : '';
   var pestWarning = activePestObs.length > 0
@@ -521,6 +548,7 @@ function renderOvCard(p) {
     '</div>' +
 
     pestWarning +
+    sprayWarning +
 
     // Currently growing
     '<div class="ov-section">' +
@@ -533,6 +561,7 @@ function renderOvCard(p) {
       '<div class="ov-section-label">Recent Activity</div>' +
       '<div class="ov-row"><span class="ov-row-label">Fertilizer</span><span class="ov-row-val">' + lastFertHtml + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Watering</span><span class="ov-row-val">' + lastWaterHtml + '</span></div>' +
+      (hasPest ? '<div class="ov-row"><span class="ov-row-label">Spray</span><span class="ov-row-val">' + lastSprayHtml + '</span></div>' : '') +
       '<div class="ov-row"><span class="ov-row-label">Soil test</span><span class="ov-row-val">' + lastTestHtml + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Harvest</span><span class="ov-row-val">' + lastHarvestHtml + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Plot obs</span><span class="ov-row-val">' +
@@ -549,6 +578,7 @@ function renderOvCard(p) {
         (totalWaterL > 0 ? Math.round(totalWaterL).toLocaleString() + ' L' : '—') + '</span></div>' +
       '<div class="ov-row"><span class="ov-row-label">Total fertilizer</span><span class="ov-row-val">' +
         (totalFertKg > 0 ? Math.round(totalFertKg).toLocaleString() + ' kg' : '—') + '</span></div>' +
+      (hasPest ? '<div class="ov-row"><span class="ov-row-label">Sprays (12 mo)</span><span class="ov-row-val">' + pestCountsText(sprayCounts) + '</span></div>' : '') +
       '<div class="ov-row"><span class="ov-row-label">Total harvest</span><span class="ov-row-val">' +
         (totalHarvestKg > 0 ? Math.round(totalHarvestKg).toLocaleString() + ' kg' : '—') + '</span></div>' +
     '</div>' +
@@ -557,6 +587,7 @@ function renderOvCard(p) {
     '<div class="ov-actions">' +
       '<button class="btn btn-sm" onclick="ovGoToPlot(\'land-app\',' + p.id + ')">Log application</button>' +
       '<button class="btn btn-sm" onclick="ovGoToPlot(\'land-water\',' + p.id + ')">Log watering</button>' +
+      '<button class="btn btn-sm" onclick="ovGoToPlot(\'land-spray\',' + p.id + ')">Log spray</button>' +
       '<button class="btn btn-sm" onclick="ovGoToPlot(\'land-crops\',' + p.id + ')">Crop history</button>' +
     '</div>' +
 
@@ -624,10 +655,11 @@ function renderOvAnimalCard(g) {
 
 function ovGoToPlot(landPage, plotId) {
   // Navigate via the existing sidebar nav
-  var btn = document.querySelector('.nav-item[data-page="' + landPage + '"]');
-  if (btn) btn.click();
-  // The land page handles plot pre-filtering on its own filters via sessionStorage
+  // Set the target plot first so the destination tab can read it while loading
+  // (only Land › Spraying uses it so far, to pre-filter its log)
   try {
     sessionStorage.setItem('ov_target_plot', String(plotId));
   } catch (_) {}
+  var btn = document.querySelector('.nav-item[data-page="' + landPage + '"]');
+  if (btn) btn.click();
 }

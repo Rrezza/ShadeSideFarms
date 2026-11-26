@@ -57,6 +57,10 @@ function medClaim(ctx) {
 }
 
 function medInCtx(m) { return MED_CONTEXTS[medCtx].kinds.indexOf(m.kind || 'medicine') >= 0; }
+// Small "fridge" badge shown after a medicine's name when it must be kept cold
+function medFridgeBadge(m) {
+  return m.refrigerate ? ' <span class="badge badge-blue" style="font-size:10px" title="Keep refrigerated">&#10052; fridge</span>' : '';
+}
 function medIsSupply(m) { return m.kind === 'health_supply' || m.kind === 'farm_supply'; }
 
 // Re-render whichever page the ledger UI is on after a save
@@ -452,7 +456,7 @@ function renderMedTable() {
       }, 0);
       var hasMoves = medMovements.some(function(mv) { return mv.medicine_id === m.id; });
       html += '<tr' + (!m.active ? ' style="opacity:0.5"' : '') + '>' +
-        '<td style="font-weight:500">' + medEsc(m.name) + '</td>' +
+        '<td style="font-weight:500">' + medEsc(m.name) + medFridgeBadge(m) + '</td>' +
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
         '<td class="mono right"' + (low ? ' style="color:var(--red);font-weight:500"' : '') + '>' +
@@ -621,7 +625,7 @@ function renderMedSetupTable() {
       // Delete only while nothing has been bought/dosed/counted; after that, retire it
       var hasMoves = medMovements.some(function(mv) { return mv.medicine_id === m.id; });
       html += '<tr' + (!m.active ? ' style="opacity:0.5"' : '') + '>' +
-        '<td style="font-weight:500">' + medEsc(m.name) +
+        '<td style="font-weight:500">' + medEsc(m.name) + medFridgeBadge(m) +
           '<div style="font-size:11px;color:var(--muted);font-weight:400">' + (supply ? 'health supply' : medEsc(m.form)) + '</div></td>' +
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
@@ -734,7 +738,10 @@ function renderMedForm() {
       (isMed
         ? '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
             '<input type="checkbox" id="mf-preg"' + (m && m.unsafe_in_pregnancy ? ' checked' : '') + '> ' +
-            'Not safe for pregnant animals (they\'re pre-filled 0 when dosing)</label>'
+            'Not safe for pregnant animals (they\'re pre-filled 0 when dosing)</label>' +
+          '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
+            '<input type="checkbox" id="mf-fridge"' + (m && m.refrigerate ? ' checked' : '') + '> ' +
+            'Keep refrigerated</label>'
         : '') +
       '<div style="display:flex;gap:10px;margin-top:8px">' +
         '<button class="btn btn-primary" onclick="submitMedicine()">' + (m ? 'Save changes' : 'Add ' + MED_KIND_LABEL[kind]) + '</button>' +
@@ -782,6 +789,7 @@ async function submitMedicine() {
       min_stock:         num('mf-min'),
       withdrawal_days:   isMed && num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
       unsafe_in_pregnancy: isMed ? el('mf-preg').checked : false,
+      refrigerate:       isMed ? el('mf-fridge').checked : false,
       notes:             txt('mf-notes')
     };
     if (!d.name) throw new Error('Name is required.');

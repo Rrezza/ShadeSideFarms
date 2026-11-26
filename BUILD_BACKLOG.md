@@ -149,6 +149,12 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Pesticides & sprays, medicine fridge flag — DONE 2026-11-25 (r95)
+- **Separate registry by choice** (not folded into fertilizers): `pesticides` + `pesticide_movements` ledger. Setup and Inventory pages "Pesticides & Sprays"; Land › Spraying tab logs sprays per plot.
+- **Pre-harvest wait:** each product's days-to-wait; logging any harvest from a plot inside a waiting period asks to confirm. Overview plot cards show "safe to cut from …" and spray counts for the last 12 months, synthetic vs organic. Below-minimum pesticides join "Supplies to buy". Farmhand app has no warning (by choice). No worker re-entry period (by choice).
+- **Medicines:** "Keep refrigerated" checkbox, shown as a fridge badge.
+- Spray counts treat each logged spray as one, whatever the amount (assumption).
+
 ### Inventory step 3: crop store (Seeds & Harvest) — DONE 2026-11-25 (r94)
 - Inventory › Seeds & Harvest reworked into a per-crop store: bought, harvested (harvest allocation destination `seed_stock`, relabelled "Crop store (grain / seed)"), sown (`plot_crops.qty_kg_sown`, new field on the planting form + editable in History), to feed (creates the Feed-stock entry), sold, household, spoiled, counts. New `crop_stock_movements` table; empty `seed_purchases` / `seed_stock_adjustments` dropped.
 - **Your existing 22 plantings have no seed-sown amount** — fill them in from each crop's History if you want past sowing deducted.

@@ -92,6 +92,12 @@ function showLandTab(tab, btn) {
   // Render charts when their tab becomes visible (Chart.js needs visible canvas)
   if (tab === 'fert')  renderLandFertChart();
   if (tab === 'soil')  renderLandTrendChart();
+  // Spraying lives in pesticides.js, loaded the first time the tab is opened
+  if (tab === 'spray') {
+    loadModule('pesticides').then(loadSprayLog).catch(function(err) {
+      console.error('Spraying tab failed to load:', err);
+    });
+  }
 }
 
 
@@ -1933,6 +1939,17 @@ async function submitHarvestEvent(groupId) {
     var qual = (document.getElementById('hf-qual-g' + groupId).value || '').trim();
     if (!date) throw new Error('Date required.');
     if (!kg || parseFloat(kg) <= 0) throw new Error('Quantity (kg) is required.');
+    // Pre-harvest check: warn if the plot was sprayed and its waiting period
+    // hasn't run out by the harvest date (sprays are logged per plot)
+    var grp = landCropGroups.find(function(g) { return g.id === groupId; });
+    if (grp && grp.field_plot_id) {
+      await loadModule('pesticides');
+      await pestLoadData();
+      if (!pestConfirmHarvest(grp.field_plot_id, date)) {
+        statusEl.textContent = 'Not saved.'; statusEl.style.color = 'var(--muted)';
+        return;
+      }
+    }
     var prevCuts = landHarvests.filter(function(h) { return h.crop_group_id === groupId; }).length;
     var d = { crop_group_id: groupId, date: date, cut_number: prevCuts + 1, quantity_kg: parseFloat(kg) };
     if (wId)  d.recorded_by   = parseInt(wId);

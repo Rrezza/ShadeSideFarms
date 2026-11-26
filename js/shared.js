@@ -176,6 +176,8 @@ var PAGE_MAP = {
   medsetup:       { module: 'health_meds', init: 'loadMedSetupPage' },
   protocols:      { module: 'setup_protocols', init: 'loadProtocolsPage' },
   equipment:      { module: 'inv_equipment', init: 'loadEquipmentPage' },
+  pestinventory:  { module: 'pesticides', init: 'loadPestInventoryPage' },
+  pestsetup:      { module: 'pesticides', init: 'loadPestSetupPage' },
   breeding:       { module: 'health',  init: 'loadBreedingPage' },
   costsales:      { module: 'health',  init: 'loadCostSalesPage' },
   // Overview (landing page)
