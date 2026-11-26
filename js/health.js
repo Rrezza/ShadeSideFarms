@@ -12,6 +12,7 @@ var healthFollowups  = [];    // logged events with an open follow-up due within
 var hfFollowupOf     = null;  // event whose follow-up the log form is currently recording
 var hfFamacha        = {};    // animal_id -> latest FAMACHA { score, date }
 var hfCostTouched    = false; // true once the user types a cost, so auto-costing stops overwriting it
+var hfBulkTotalTouched = false; // true once the user types a bulk-round total, so the per-litre suggestion stops overwriting it
 var schedEditId      = null;  // schedule being edited (null = adding)
 var breedingData     = [];
 var birthData        = [];
@@ -91,6 +92,8 @@ function populateHealthForm() {
 
   // Medicine selector: active cabinet medicines, plus a free-text fallback
   document.getElementById('hf-med').innerHTML = hfMedOptionsHtml(true);
+  document.getElementById('hf-route').innerHTML = '<option value="">Not recorded</option>' +
+    Object.keys(MED_ROUTES).map(function(k) { return '<option value="' + k + '">' + MED_ROUTES[k] + '</option>'; }).join('');
   document.getElementById('hf-cost').value = '';
   hfCostTouched = false;
   onHfMedChange();
@@ -113,6 +116,11 @@ function hfMedOptionsHtml(withOther) {
 function onHfMedChange() {
   var v = document.getElementById('hf-med').value;
   document.getElementById('hf-free-wrap').style.display = v === 'other' ? 'grid' : 'none';
+  // Route: shown whenever a product is chosen, pre-filled from the medicine's usual route
+  document.getElementById('hf-route-wrap').style.display = v ? 'flex' : 'none';
+  var med = v && v !== 'other' ? medById(parseInt(v)) : null;
+  document.getElementById('hf-route').value = med && med.route ? med.route : '';
+  hfBulkTotalTouched = false;
   renderHfDoseGrid();
 }
 
@@ -189,6 +197,8 @@ function renderHfDoseGrid() {
     wrap.innerHTML = '<div class="fc-hint" style="margin:0 0 12px">Select an animal or group to enter doses.</div>';
     return;
   }
+  // In water / in feed / spray: one total for the group instead of a per-animal grid
+  if (medIsBulkRoute(document.getElementById('hf-route').value)) { renderHfBulk(med, animals); return; }
   // Deworming rounds: show FAMACHA and pre-fill 0 for animals recently scored 1–2 (targeted treatment)
   var deworming = document.getElementById('hf-event-type').value === 'deworming';
   // Medicines flagged unsafe in pregnancy: pregnant animals are pre-filled 0
@@ -234,8 +244,62 @@ function renderHfDoseGrid() {
   updateHfDoseTotal();
 }
 
-// Reads the dose grid: [{ animal_id, qty }] for every row with a dose above 0
+// Bulk round panel (in water / in feed / spray): water volume, one total amount,
+// and a checklist of the animals present. The total is split evenly between the
+// ticked animals when saved. Nobody is pre-unticked: a shared trough or spray
+// can't skip one animal, so pregnant animals on an unsafe medicine get a warning
+// instead (untick them only if they were penned separately).
+function renderHfBulk(med, animals) {
+  var route = document.getElementById('hf-route').value;
+  var water = medUsesWater(route);
+  var deworming = document.getElementById('hf-event-type').value === 'deworming';
+  var pregnant = med.unsafe_in_pregnancy ? animals.filter(function(a) { return medPregnancy(a.id); }) : [];
+  var html = '<div style="margin:0 0 12px">' +
+    (deworming ? hfRotationHtml(med) : '') +
+    (pregnant.length ? '<div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px">' +
+      medEsc(med.name) + ' is marked not safe in pregnancy — pregnant: ' +
+      pregnant.map(function(a) { return medEsc(a.farm_id); }).join(', ') +
+      '. Untick them only if they were kept away from it.</div>' : '') +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Whole-group round (' + medEsc(medRouteLabel(route).toLowerCase()) +
+      ') &middot; label ' + medFmtDoseRate(med) + ' &middot; the total is split evenly across the ticked animals as an estimate</div>' +
+    '<div class="hf-grid">' +
+      (water ? '<div class="hf-field"><label>Water (L)</label><input type="number" id="hf-bulk-water" min="0" step="any" placeholder="e.g. 20" oninput="onHfBulkWaterChange()"></div>' : '') +
+      '<div class="hf-field"><label>Total product used (' + med.stock_unit + ') *</label><input type="number" id="hf-bulk-total" min="0" step="any" placeholder="e.g. 30" ' +
+        'oninput="hfBulkTotalTouched = true; updateHfDoseTotal()"></div>' +
+    '</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin:2px 0 6px">Animals that got it</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:6px">' +
+    animals.map(function(a) {
+      return '<label style="display:flex;gap:6px;align-items:center;font-size:13px">' +
+        '<input type="checkbox" class="hf-bulk-animal" data-animal="' + a.id + '" checked onchange="updateHfDoseTotal()"> ' +
+        medEsc(a.farm_id) + (a.name ? ' <span style="color:var(--muted)">' + medEsc(a.name) + '</span>' : '') +
+        medPregnancyBadge(a.id) + '</label>';
+    }).join('') +
+    '</div>' +
+    '<div id="hf-dose-total" class="fc-derived" style="margin-top:8px"></div></div>';
+  document.getElementById('hf-dose-grid').innerHTML = html;
+  updateHfDoseTotal();
+}
+
+// Water volume typed: suggest the total from a per-litre label dose (until the user types their own)
+function onHfBulkWaterChange() {
+  var med = medById(parseInt(document.getElementById('hf-med').value));
+  var litres = parseFloat(document.getElementById('hf-bulk-water').value);
+  var sug = medSuggestWaterTotal(med, litres);
+  if (sug != null && !hfBulkTotalTouched) document.getElementById('hf-bulk-total').value = sug;
+  updateHfDoseTotal();
+}
+
+// Reads the dose entry: [{ animal_id, qty, share? }] for every animal dosed.
+// Bulk rounds return the total split into even shares over the ticked animals.
 function hfReadDoses() {
+  var bulkTotal = document.getElementById('hf-bulk-total');
+  if (bulkTotal) {
+    var total = parseFloat(bulkTotal.value);
+    var ids = [];
+    document.querySelectorAll('.hf-bulk-animal').forEach(function(cb) { if (cb.checked) ids.push(parseInt(cb.dataset.animal)); });
+    return total > 0 ? medSplitShares(total, ids) : [];
+  }
   var out = [];
   document.querySelectorAll('.hf-dose-input').forEach(function(inp) {
     var q = parseFloat(inp.value);
@@ -255,7 +319,17 @@ function updateHfDoseTotal() {
   var stock = medStock(med.id);
   var cpu = medCostPerUnit(med.id);
   var cost = cpu != null ? total * cpu : null;
-  el.innerHTML = 'Total ' + medFmtUnits(med, total) + ' for ' + doses.length + ' animal' + (doses.length !== 1 ? 's' : '') +
+  // Bulk round with no total typed yet: say what's needed rather than "0 ml for 0 animals"
+  if (!doses.length && document.getElementById('hf-bulk-total')) {
+    var ticked = document.querySelectorAll('.hf-bulk-animal:checked').length;
+    el.innerHTML = 'Enter the total used &mdash; it will be split across the ' + ticked + ' ticked animal' + (ticked !== 1 ? 's' : '') +
+      ' &middot; in stock ' + medFmtStock(med, stock);
+    if (!hfCostTouched) document.getElementById('hf-cost').value = '';
+    return;
+  }
+  var shares = doses.length && doses[0].share;
+  el.innerHTML = 'Total ' + medFmtUnits(med, total) + (shares ? ' shared by ' : ' for ') + doses.length + ' animal' + (doses.length !== 1 ? 's' : '') +
+    (shares ? ' (≈ ' + medFmtUnits(med, total / doses.length) + ' each)' : '') +
     ' &middot; in stock ' + medFmtStock(med, stock) +
     (total > stock ? ' <span style="color:var(--red)">&middot; more than the app shows in stock</span>' : '') +
     (cost != null ? ' &middot; cost ' + pkr(cost) : ' &middot; no purchase price yet');
@@ -463,7 +537,8 @@ function renderHealthLog() {
       '<td style="font-weight:500">' + medEsc(target) + '</td>' +
       '<td><span class="badge ' + (EVTYPE[e.event_type] || 'badge-gray') + '">' + (e.event_type || '') + '</span></td>' +
       '<td>' + (e.description ? medEsc(e.description) : '—') + '</td>' +
-      '<td class="muted-cell">' + (e.product_used ? medEsc(e.product_used) : '—') + '</td>' +
+      '<td class="muted-cell">' + (e.product_used ? medEsc(e.product_used) : '—') +
+        (e.route ? '<div style="font-size:11px">' + medRouteLabel(e.route) + '</div>' : '') + '</td>' +
       '<td class="muted-cell">' + (e.dose ? medEsc(e.dose) : '—') + '</td>' +
       '<td>' + (e.vet_involved ? '<span class="badge badge-teal">Yes</span>' : '—') + '</td>' +
       '<td class="mono right">' + (e.cost_pkr ? pkr(e.cost_pkr) : '—') + '</td>' +
@@ -518,11 +593,20 @@ async function toggleHealthLogRow(eventId) {
 function renderHealthEventDetail(e) {
   var doses = hlEventDoses(e.id);
   var med = e.medicine_id ? medById(e.medicine_id) : null;
+  var shares = doses.some(function(mv) { return mv.is_share; });
   var html = '<div style="padding:14px 22px;background:var(--bg)">';
+  // Route, and for whole-group rounds the water volume and how the total was split
+  if (e.route || shares) {
+    html += '<div style="font-size:13px;margin-bottom:10px">' +
+      (e.route ? '<strong>' + medRouteLabel(e.route) + '</strong>' : '') +
+      (e.water_litres != null ? ' &middot; ' + Number(e.water_litres).toLocaleString() + ' L water' : '') +
+      (shares ? ' &middot; <span style="color:var(--muted)">whole-group round: the total is split evenly, so each animal\'s share is an estimate</span>' : '') +
+      '</div>';
+  }
   if (doses.length && med) {
     var total = 0, totalCost = 0, anyCost = false;
     html += '<div style="overflow-x:auto"><table><thead><tr>' +
-      '<th>Animal</th><th class="right">Weight then</th><th class="right">Dose</th><th class="right">Cost</th>' +
+      '<th>Animal</th><th class="right">Weight then</th><th class="right">' + (shares ? 'Share (≈)' : 'Dose') + '</th><th class="right">Cost</th>' +
       '</tr></thead><tbody>';
     doses.forEach(function(mv) {
       var a = anSharedAnimals.find(function(x) { return x.id === mv.animal_id; });
@@ -592,6 +676,18 @@ function renderHealthEventEdit(e) {
     '</div>' +
     '<div class="hf-grid" style="grid-template-columns:1fr"><div class="hf-field"><label>Description</label>' +
       '<input type="text" id="he-desc" value="' + medEsc(e.description || '') + '"></div></div>';
+  // Route: a cabinet-medicine round can only switch between routes of the same
+  // kind (whole-group vs per-animal) — converting shares to doses or back is
+  // error-prone, so that means deleting and re-logging instead
+  var bulk = med && medIsBulkRoute(e.route);
+  var routeKeys = Object.keys(MED_ROUTES).filter(function(k) { return !med || medIsBulkRoute(k) === bulk; });
+  html += '<div class="hf-grid">' +
+    '<div class="hf-field"><label>Route</label><select id="he-route">' +
+      (bulk ? '' : opt('', 'Not recorded', e.route || '')) +
+      routeKeys.map(function(k) { return opt(k, MED_ROUTES[k], e.route || ''); }).join('') +
+    '</select></div>' +
+    (bulk ? '<div class="hf-field"><label>Water (L)</label><input type="number" id="he-water" min="0" step="any" value="' + (e.water_litres != null ? e.water_litres : '') + '"></div>' : '') +
+  '</div>';
   if (!med) {
     // Free-text product / dose for events not linked to a cabinet medicine
     html += '<div class="hf-grid two">' +
@@ -605,7 +701,27 @@ function renderHealthEventEdit(e) {
       (med ? '<div class="hf-field"><label>&nbsp;</label><button class="btn btn-sm" onclick="recalcHealthEventCost(' + e.id + ')">Recalculate cost from latest price</button></div>' : '') +
     '</div>';
 
-  if (med) {
+  if (bulk) {
+    // Whole-group round: total + which animals got it; shares are recalculated on save
+    var shareIds = doses.map(function(mv) { return mv.animal_id; });
+    var others = e.group_id ? getGroupAnimals(e.group_id).filter(function(a) { return shareIds.indexOf(a.id) < 0; }) : [];
+    var bulkTotal = doses.reduce(function(sum, mv) { return sum - Number(mv.quantity); }, 0);
+    html += '<div class="hf-grid"><div class="hf-field"><label>Total ' + medEsc(med.name) + ' used (' + med.stock_unit + ')</label>' +
+        '<input type="number" id="he-bulk-total" min="0" step="any" value="' + Math.round(bulkTotal * 10000) / 10000 + '"></div></div>' +
+      '<div style="font-size:12px;color:var(--muted);margin:4px 0 6px">Animals that got it &middot; the total is re-split evenly when you save</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px 16px">';
+    doses.forEach(function(mv) {
+      if (!mv.animal_id) return;
+      var a = anSharedAnimals.find(function(x) { return x.id === mv.animal_id; });
+      html += '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" class="he-bulk-animal" data-animal="' + mv.animal_id + '" checked> ' +
+        (a ? medEsc(a.farm_id) : 'Animal #' + mv.animal_id) + '</label>';
+    });
+    others.forEach(function(a) {
+      html += '<label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)"><input type="checkbox" class="he-bulk-animal" data-animal="' + a.id + '"> ' +
+        medEsc(a.farm_id) + '</label>';
+    });
+    html += '</div>';
+  } else if (med) {
     var dosedIds = doses.map(function(mv) { return mv.animal_id; });
     var extra = e.group_id ? getGroupAnimals(e.group_id).filter(function(a) { return dosedIds.indexOf(a.id) < 0; }) : [];
     html += '<div style="font-size:12px;color:var(--muted);margin:4px 0 6px">' + medEsc(med.name) + ' doses (' + med.stock_unit +
@@ -647,7 +763,9 @@ function recalcHealthEventCost(eventId) {
   var cpu = medCostPerUnit(e.medicine_id);
   if (cpu == null) { alert('No purchase with a price has been logged for this medicine yet — log one under Inventory › Medicines first.'); return; }
   var total = 0;
-  document.querySelectorAll('.he-dose-input').forEach(function(inp) { var q = parseFloat(inp.value); if (q > 0) total += q; });
+  var bulkEl = document.getElementById('he-bulk-total');
+  if (bulkEl) total = parseFloat(bulkEl.value) || 0;
+  else document.querySelectorAll('.he-dose-input').forEach(function(inp) { var q = parseFloat(inp.value); if (q > 0) total += q; });
   document.getElementById('he-cost').value = Math.round(total * cpu);
 }
 
@@ -671,24 +789,49 @@ async function saveHealthEventEdit(eventId) {
     };
     // A new or changed follow-up date re-opens the reminder
     if (patch.follow_up_date && patch.follow_up_date !== e.follow_up_date) patch.follow_up_done = false;
+    patch.route = document.getElementById('he-route').value || null;
+    var bulk = med && medIsBulkRoute(e.route);
+    if (bulk) {
+      var wRaw = document.getElementById('he-water').value;
+      patch.water_litres = wRaw === '' ? null : parseFloat(wRaw);
+    }
 
     if (!med) {
       patch.product_used = document.getElementById('he-product').value.trim() || null;
       patch.dose = document.getElementById('he-dose').value.trim() || null;
       await sbPatch('animal_health_events', eventId, patch);
     } else {
-      // Work out each dose row's change: update, add, or remove
+      // The amount each animal should end up with: typed per animal, or for a
+      // whole-group round the total re-split over the ticked animals
       var existing = hlEventDoses(eventId);
+      var wanted = {};   // animal_id -> qty (0 = remove)
+      if (bulk) {
+        var bulkTotal = parseFloat(document.getElementById('he-bulk-total').value);
+        if (!(bulkTotal > 0)) throw new Error('Enter the total amount used.');
+        var ids = [];
+        document.querySelectorAll('.he-bulk-animal').forEach(function(cb) {
+          wanted[parseInt(cb.dataset.animal)] = 0;
+          if (cb.checked) ids.push(parseInt(cb.dataset.animal));
+        });
+        if (!ids.length) throw new Error('Tick at least one animal. To remove the whole event, use Delete event instead.');
+        medSplitShares(bulkTotal, ids).forEach(function(x) { wanted[x.animal_id] = x.qty; });
+      } else {
+        document.querySelectorAll('.he-dose-input').forEach(function(inp) {
+          var q = parseFloat(inp.value);
+          wanted[parseInt(inp.dataset.animal)] = q > 0 ? q : 0;
+        });
+      }
+      // Work out each dose row's change: update, add, or remove
       var updates = [], inserts = [], removals = [];
       var total = 0, count = 0;
-      document.querySelectorAll('.he-dose-input').forEach(function(inp) {
-        var animalId = parseInt(inp.dataset.animal);
-        var q = parseFloat(inp.value);
+      Object.keys(wanted).forEach(function(key) {
+        var animalId = parseInt(key);
+        var q = wanted[key];
         var mv = existing.find(function(x) { return x.animal_id === animalId; });
         if (q > 0) {
           total += q; count++;
           var uc = hlUnitCost(mv, med.id);
-          var fields = { quantity: -q, date: date, cost_pkr: uc != null ? r2(q * uc) : null };
+          var fields = { quantity: -q, date: date, cost_pkr: uc != null ? r2(q * uc) : null, is_share: !!bulk };
           if (mv) updates.push({ id: mv.id, fields: fields });
           else inserts.push(Object.assign({ medicine_id: med.id, movement_type: 'dose', health_event_id: eventId, animal_id: animalId }, fields));
         } else if (mv) {
@@ -701,7 +844,9 @@ async function saveHealthEventEdit(eventId) {
         updates.push({ id: mv.id, fields: { date: date } });
       });
       if (!count) throw new Error('At least one animal needs a dose. To remove the whole event, use Delete event instead.');
-      patch.dose = medFmtUnits(med, total) + (count > 1 ? ' total, ' + count + ' animals' : '');
+      patch.dose = bulk
+        ? medFmtUnits(med, total) + (patch.water_litres ? ' in ' + patch.water_litres + ' L water' : '') + ', ' + count + ' animal' + (count !== 1 ? 's' : '')
+        : medFmtUnits(med, total) + (count > 1 ? ' total, ' + count + ' animals' : '');
 
       for (var i = 0; i < updates.length; i++) await sbPatch('medicine_movements', updates[i].id, updates[i].fields);
       if (inserts.length) await sbInsert('medicine_movements', inserts);
@@ -758,14 +903,26 @@ async function submitHealthEvent() {
     // product_used/dose for the log); "other" keeps the old free-text fields
     var medSel = document.getElementById('hf-med').value;
     var med = (medSel && medSel !== 'other') ? medById(parseInt(medSel)) : null;
+    var route = medSel ? (document.getElementById('hf-route').value || null) : null;
+    if (route) d.route = route;
     var doses = [];
     if (med) {
       doses = hfReadDoses();
-      if (!doses.length) throw new Error('Enter a dose for at least one animal, or set Medicine to None.');
+      var bulk = medIsBulkRoute(route);
+      if (!doses.length) {
+        if (!bulk) throw new Error('Enter a dose for at least one animal, or set Medicine to None.');
+        if (!(parseFloat(document.getElementById('hf-bulk-total').value) > 0)) throw new Error('Enter the total amount of ' + med.name + ' used.');
+        throw new Error('Tick at least one animal that got it.');
+      }
       var doseTotal = doses.reduce(function(s, x) { return s + x.qty; }, 0);
+      var waterEl = document.getElementById('hf-bulk-water');
+      var litres = bulk && waterEl && waterEl.value !== '' ? parseFloat(waterEl.value) : null;
+      if (litres != null) d.water_litres = litres;
       d.medicine_id  = med.id;
       d.product_used = med.name;
-      d.dose = medFmtUnits(med, doseTotal) + (doses.length > 1 ? ' total, ' + doses.length + ' animals' : '');
+      d.dose = bulk
+        ? medFmtUnits(med, doseTotal) + (litres ? ' in ' + litres + ' L water' : '') + ', ' + doses.length + ' animal' + (doses.length !== 1 ? 's' : '')
+        : medFmtUnits(med, doseTotal) + (doses.length > 1 ? ' total, ' + doses.length + ' animals' : '');
     } else if (medSel === 'other') {
       var prod = document.getElementById('hf-product').value.trim(); if (prod) d.product_used = prod;
       var dose = document.getElementById('hf-dose').value.trim();    if (dose) d.dose = dose;
@@ -784,7 +941,8 @@ async function submitHealthEvent() {
         return {
           medicine_id: med.id, date: date, movement_type: 'dose', quantity: -x.qty,
           cost_pkr: cpu != null ? r2(x.qty * cpu) : null,
-          health_event_id: saved[0].id, animal_id: x.animal_id
+          health_event_id: saved[0].id, animal_id: x.animal_id,
+          is_share: !!x.share
         };
       });
       try {
@@ -943,9 +1101,11 @@ function renderAnimalHealthHistory(animalId, evts, doses) {
       '<td class="mono">' + fmtDate(e.date) + '</td>' +
       '<td><span class="badge ' + (EVTYPE[e.event_type] || 'badge-gray') + '">' + (e.event_type || '') + '</span></td>' +
       '<td>' + (e.description ? medEsc(e.description) : '—') + (e.vet_involved ? ' <span class="badge badge-teal" style="font-size:10px">vet</span>' : '') + '</td>' +
-      '<td class="muted-cell">' + (med ? medEsc(med.name) : (e.product_used ? medEsc(e.product_used) : '—')) + '</td>' +
-      // This animal's own dose; for an individual free-text event, its dose text
-      '<td class="mono right">' + (mv && med ? medFmtUnits(med, -Number(mv.quantity))
+      '<td class="muted-cell">' + (med ? medEsc(med.name) : (e.product_used ? medEsc(e.product_used) : '—')) +
+        (e.route ? '<div style="font-size:11px">' + medRouteLabel(e.route) + '</div>' : '') + '</td>' +
+      // This animal's own dose (or its even share of a whole-group round); for an individual free-text event, its dose text
+      '<td class="mono right">' + (mv && med && mv.is_share ? '≈ ' + medFmtUnits(med, -Number(mv.quantity)) + ' <span style="font-size:11px;color:var(--muted)">share</span>'
+                                   : mv && med ? medFmtUnits(med, -Number(mv.quantity))
                                    : (e.animal_id && e.dose ? medEsc(e.dose) : (med ? '<span style="color:var(--muted)">not dosed</span>' : '—'))) + '</td>' +
       '<td class="mono right">' + (mv ? (mv.cost_pkr != null ? pkr(mv.cost_pkr) : '—')
                                    : (e.animal_id && e.cost_pkr ? pkr(e.cost_pkr) : '—')) + '</td>' +

@@ -149,6 +149,13 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Medicine routes and whole-group rounds — DONE 2026-11-26 (r97)
+- Route on each medicine (usual) and each health event (actual). In water / in feed / spray rounds record one total (and water volume), split evenly per animal as estimated shares; withdrawal applies to every ticked animal. New label dose "per litre of water". Pregnant animals on an unsafe product are warned about, not unticked. Look-ahead for these uses the last round's total.
+- Switching an existing round between whole-group and per-animal is blocked on edit (delete and re-log instead).
+
+### Per-species medicine doses — DONE 2026-11-26 (r96)
+- A medicine's label dose is now the default; species-specific rows (by weight or fixed per animal) override it. The dose grid and reorder reminders use each animal's species. Withdrawal stays one value per medicine (by choice — use the longest if labels differ).
+
 ### Pesticides & sprays, medicine fridge flag — DONE 2026-11-25 (r95)
 - **Separate registry by choice** (not folded into fertilizers): `pesticides` + `pesticide_movements` ledger. Setup and Inventory pages "Pesticides & Sprays"; Land › Spraying tab logs sprays per plot.
 - **Pre-harvest wait:** each product's days-to-wait; logging any harvest from a plot inside a waiting period asks to confirm. Overview plot cards show "safe to cut from …" and spray counts for the last 12 months, synthetic vs organic. Below-minimum pesticides join "Supplies to buy". Farmhand app has no warning (by choice). No worker re-entry period (by choice).

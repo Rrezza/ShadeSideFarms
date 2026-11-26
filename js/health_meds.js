@@ -28,9 +28,29 @@ var medFormKind    = 'medicine';  // kind of item the add/edit form is for
 var medExpanded    = new Set();  // medicine ids with their history row open
 var medBreedings   = [];     // breeding_events { dam_id, date } — for pregnancy checks
 var medBirths      = [];     // birth_events { dam_id, date }
+var medSpeciesDoses = [];    // medicine_species_doses — per-species label dose overrides
+var medSpeciesList  = [];    // species { id, common_name } — for the form and labels
+var medFormDoses    = [];    // working copy of the species rows while the add/edit form is open
 
 // How far ahead the reorder check looks at scheduled health rounds
 var MED_LOOKAHEAD_DAYS = 30;
+
+// How a medicine is given. Stored on the medicine (its usual route) and on each
+// health event (the route actually used). Keys match the DB check constraint.
+var MED_ROUTES = {
+  im: 'Intramuscular', deep_im: 'Deep intramuscular', sc: 'Under the skin',
+  iv: 'Intravenous', slow_iv: 'Slow intravenous', oral: 'Oral drench',
+  water: 'In drinking water', feed: 'In feed', pour_on: 'Pour-on',
+  spray: 'Spray / dip', topical: 'On the skin', intranasal: 'Intranasal',
+  intramammary: 'Into the udder', other: 'Other'
+};
+// Routes given to a whole group at once: the round records one total amount,
+// stored as an even share per animal (is_share), instead of a per-animal grid
+var MED_BULK_ROUTES = ['water', 'feed', 'spray'];
+function medIsBulkRoute(route) { return MED_BULK_ROUTES.indexOf(route) >= 0; }
+// Routes where a water volume makes sense (and the per-litre dose applies)
+function medUsesWater(route) { return route === 'water' || route === 'spray'; }
+function medRouteLabel(route) { return route ? (MED_ROUTES[route] || route) : ''; }
 
 var MED_REASON_LABELS = {
   expired: 'Expired / discarded', spilled: 'Spilled / broken',
@@ -86,15 +106,20 @@ async function medLoadData() {
     sbGet('medicines', 'select=*&order=name'),
     sbGet('medicine_movements',
       'select=id,medicine_id,date,movement_type,quantity,packs,cost_pkr,expiry_date,' +
-      'health_event_id,animal_id,reason,notes,created_at&order=date.desc,id.desc'),
+      'health_event_id,animal_id,is_share,reason,notes,created_at&order=date.desc,id.desc'),
     // Breeding/birth records drive the pregnancy checks used when dosing
     sbGet('breeding_events', 'select=dam_id,date&order=date.desc'),
-    sbGet('birth_events', 'select=dam_id,date&order=date.desc')
+    sbGet('birth_events', 'select=dam_id,date&order=date.desc'),
+    // Per-species dose overrides, and species names to label them
+    sbGet('medicine_species_doses', 'select=*'),
+    sbGet('species', 'select=id,common_name&order=common_name')
   ]);
   medList = r[0];
   medMovements = r[1];
   medBreedings = r[2];
   medBirths = r[3];
+  medSpeciesDoses = r[4];
+  medSpeciesList = r[5];
 }
 
 function medById(id) {
@@ -145,11 +170,78 @@ function medFmtStock(med, qty) {
   return parts.join(' + ');
 }
 
-// Human-readable label dose, e.g. "1 ml per 10 kg" or "2 ml per animal"
+function medSpeciesName(speciesId) {
+  var sp = medSpeciesList.find(function(x) { return x.id === speciesId; });
+  return sp ? sp.common_name : 'Species ' + speciesId;
+}
+
+// The label rate to use for one species: its own override row if the medicine
+// has one, otherwise the medicine's default dose. Either has the same shape
+// ({ dose_basis, dose_amount, dose_weight_kg }); dose_basis null = no rate.
+function medRateFor(med, speciesId) {
+  if (speciesId != null) {
+    var o = medSpeciesDoses.find(function(d) { return d.medicine_id === med.id && d.species_id === speciesId; });
+    if (o) return o;
+  }
+  return med;
+}
+
+// One rate as text, e.g. "1 ml per 10 kg" or "2 ml per animal"
+function medFmtRate(med, rate) {
+  if (!rate || !rate.dose_basis) return '—';
+  if (rate.dose_basis === 'per_head') return medFmtUnits(med, Number(rate.dose_amount)) + ' per animal';
+  if (rate.dose_basis === 'per_litre') return medFmtUnits(med, Number(rate.dose_amount)) + ' per ' + Number(rate.dose_water_l) + ' L water';
+  return medFmtUnits(med, Number(rate.dose_amount)) + ' per ' + Number(rate.dose_weight_kg) + ' kg';
+}
+
+// Suggested total for a bulk round from a per-litre label dose, rounded to the
+// nearest half unit. Null when the medicine has no per-litre dose or no volume given.
+function medSuggestWaterTotal(med, litres) {
+  if (!med || med.dose_basis !== 'per_litre' || !(litres > 0)) return null;
+  var raw = Number(med.dose_amount) * litres / Number(med.dose_water_l);
+  return Math.max(0.5, Math.round(raw * 2) / 2);
+}
+
+// Splits a bulk round's total evenly over the animals present. Shares are
+// rounded to 4 decimals and the last one takes the rounding remainder, so the
+// shares always add up to exactly the total taken out of stock.
+function medSplitShares(total, animalIds) {
+  var n = animalIds.length;
+  if (!n) return [];
+  var each = Math.round(total / n * 10000) / 10000;
+  return animalIds.map(function(id, i) {
+    var q = i < n - 1 ? each : Math.round((total - each * (n - 1)) * 10000) / 10000;
+    return { animal_id: id, qty: q, share: true };
+  });
+}
+
+// Total used in the most recent bulk round of this medicine that covered any of
+// these animals — the look-ahead estimate for in-water / spray schedules, whose
+// label dose depends on a water volume that isn't known in advance.
+function medLastBulkTotal(medId, animalIds) {
+  var byEvent = {}, latest = null;
+  medMovements.forEach(function(mv) {
+    if (mv.medicine_id !== medId || mv.movement_type !== 'dose' || !mv.is_share || !mv.health_event_id) return;
+    var ev = byEvent[mv.health_event_id] || (byEvent[mv.health_event_id] = { date: mv.date, total: 0, hit: false });
+    ev.total += -Number(mv.quantity);
+    if (animalIds.indexOf(mv.animal_id) >= 0) ev.hit = true;
+  });
+  Object.keys(byEvent).forEach(function(k) {
+    var ev = byEvent[k];
+    if (ev.hit && (!latest || ev.date > latest.date)) latest = ev;
+  });
+  return latest;
+}
+
+// Human-readable label dose: the default, then any species overrides,
+// e.g. "1 ml per 10 kg; Sheep: 1 ml per 25 kg; Donkey: 5 ml per animal"
 function medFmtDoseRate(med) {
-  if (!med.dose_basis) return '—';
-  if (med.dose_basis === 'per_head') return medFmtUnits(med, med.dose_amount) + ' per animal';
-  return medFmtUnits(med, med.dose_amount) + ' per ' + Number(med.dose_weight_kg) + ' kg';
+  var parts = [];
+  if (med.dose_basis) parts.push(medFmtRate(med, med));
+  medSpeciesDoses.filter(function(d) { return d.medicine_id === med.id; })
+    .sort(function(a, b) { return medSpeciesName(a.species_id).localeCompare(medSpeciesName(b.species_id)); })
+    .forEach(function(d) { parts.push(medEsc(medSpeciesName(d.species_id)) + ': ' + medFmtRate(med, d)); });
+  return parts.length ? parts.join('; ') : '—';
 }
 
 // The weight used for dosing: latest weigh-in, else entry weight, else null
@@ -164,12 +256,16 @@ function medAnimalWeight(animalId) {
 // half unit (matches how doses are actually drawn up: 18 kg and 22 kg goats
 // both get 2 ml). Returns null when there's no label rate, or when the rate is
 // weight-based and the animal has never been weighed.
+// The rate comes from the animal's species when the medicine has one for it.
 function medSuggestDose(med, animalId) {
-  if (!med || !med.dose_basis) return null;
-  if (med.dose_basis === 'per_head') return Number(med.dose_amount);
+  if (!med) return null;
+  var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
+  var rate = medRateFor(med, a ? a.species_id : null);
+  if (!rate.dose_basis || rate.dose_basis === 'per_litre') return null;  // per-litre is a bulk-round rate
+  if (rate.dose_basis === 'per_head') return Number(rate.dose_amount);
   var kg = medAnimalWeight(animalId);
   if (kg == null) return null;
-  var raw = Number(med.dose_amount) * kg / Number(med.dose_weight_kg);
+  var raw = Number(rate.dose_amount) * kg / Number(rate.dose_weight_kg);
   return Math.max(0.5, Math.round(raw * 2) / 2);
 }
 
@@ -279,14 +375,21 @@ function medComputeAlerts(schedules) {
     var med = medById(s.medicine_id);
     if (!med || !med.active) return;
     var animals = medScheduleAnimals(s);
-    var need = 0, unweighed = 0;
-    animals.forEach(function(a) {
-      var d = medSuggestDose(med, a.id);
-      if (d == null) unweighed++; else need += d;
-    });
+    var need = 0, unweighed = 0, fromLast = null;
+    if (medIsBulkRoute(med.route)) {
+      // In-water / in-feed / spray rounds: assume the same total as last time
+      // (no earlier round = no estimate; the minimum-stock reminder still applies)
+      fromLast = medLastBulkTotal(med.id, animals.map(function(a) { return a.id; })) || { total: 0, none: true };
+      need = fromLast.total;
+    } else {
+      animals.forEach(function(a) {
+        var d = medSuggestDose(med, a.id);
+        if (d == null) unweighed++; else need += d;
+      });
+    }
     if (!needs[med.id]) needs[med.id] = { total: 0, rounds: [] };
     needs[med.id].total += need;
-    needs[med.id].rounds.push({ sched: s, need: need, animals: animals.length, unweighed: unweighed });
+    needs[med.id].rounds.push({ sched: s, need: need, animals: animals.length, unweighed: unweighed, fromLast: fromLast });
   });
 
   var alerts = [];
@@ -330,8 +433,11 @@ function medAlertsHtml(alerts) {
         var target = rd.sched.animal_id ? getAnimalDisplayName(rd.sched.animal_id)
                    : (rd.sched.group_id ? getGroupName(rd.sched.group_id) : getLocationName(rd.sched.location_id));
         html += '<div class="due-card-meta">' + medEsc(rd.sched.description) + ' &middot; ' + medEsc(target) +
-          ' &middot; due ' + fmtDate(rd.sched.next_due_date) + ' &middot; needs ~' + medFmtUnits(med, rd.need) +
-          ' for ' + rd.animals + ' animal' + (rd.animals !== 1 ? 's' : '') +
+          ' &middot; due ' + fmtDate(rd.sched.next_due_date) +
+          (rd.fromLast
+            ? (rd.fromLast.none ? ' &middot; <span style="color:var(--muted)">no earlier round to estimate from</span>'
+                                : ' &middot; needs ~' + medFmtUnits(med, rd.need) + ' (same as the last round)')
+            : ' &middot; needs ~' + medFmtUnits(med, rd.need) + ' for ' + rd.animals + ' animal' + (rd.animals !== 1 ? 's' : '')) +
           (rd.unweighed ? ' <span style="color:var(--amber)">(' + rd.unweighed + ' never weighed, not counted)</span>' : '') +
           '</div>';
       });
@@ -629,7 +735,8 @@ function renderMedSetupTable() {
           '<div style="font-size:11px;color:var(--muted);font-weight:400">' + (supply ? 'health supply' : medEsc(m.form)) + '</div></td>' +
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
-        '<td class="muted-cell">' + (supply ? '—' : medFmtDoseRate(m)) + '</td>' +
+        '<td class="muted-cell">' + (supply ? '—' : medFmtDoseRate(m) +
+          (m.route ? '<div style="font-size:11px">' + medRouteLabel(m.route) + '</div>' : '')) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
         '<td class="mono right">' + (!supply && m.withdrawal_days != null ? m.withdrawal_days + ' d' : '—') +
           (m.unsafe_in_pregnancy ? '<div><span class="badge badge-red" style="font-size:10px">not in pregnancy</span></div>' : '') + '</td>' +
@@ -656,6 +763,10 @@ function openMedForm(id, kind) {
   medEditId = id;
   var m = id !== null ? medById(id) : null;
   medFormKind = m ? (m.kind || 'medicine') : (kind || 'medicine');
+  // Copy this medicine's species rows into the form's working list
+  medFormDoses = m ? medSpeciesDoses.filter(function(d) { return d.medicine_id === m.id; }).map(function(d) {
+    return { species_id: d.species_id, dose_basis: d.dose_basis, dose_amount: d.dose_amount, dose_weight_kg: d.dose_weight_kg };
+  }) : [];
   medFormOpen = true;
   renderMedForm();
   document.getElementById('med-form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -692,6 +803,7 @@ function renderMedForm() {
   var form  = m ? m.form : (isMed ? 'liquid' : 'other');
   var unit  = m ? m.stock_unit : MED_UNITS[kind][0];
   var basis = m ? (m.dose_basis || '') : '';
+  var route = m ? (m.route || '') : '';
   var title = (m ? 'Edit ' + medEsc(m.name) : 'New ' + MED_KIND_LABEL[kind]);
 
   var html = '<div class="health-form-box open" style="margin:16px 22px">' +
@@ -723,11 +835,27 @@ function renderMedForm() {
       '</div>';
   if (isMed) {
     html += '<div class="hf-grid">' +
-        '<div class="hf-field"><label>Label dose</label><select id="mf-basis" onchange="updateMedFormUnits()">' +
+        '<div class="hf-field"><label>Label dose' + (medSpeciesList.length ? ' (default)' : '') + '</label><select id="mf-basis" onchange="updateMedFormUnits()">' +
           opt('', 'Not set', basis) + opt('per_kg', 'By body weight', basis) + opt('per_head', 'Fixed per animal', basis) +
+          opt('per_litre', 'Per litre of water', basis) +
         '</select></div>' +
         '<div class="hf-field" id="mf-amount-wrap"><label>Dose (<span class="mf-unit-lbl">' + unit + '</span>)</label><input type="number" id="mf-amount" min="0" step="any" value="' + v('dose_amount') + '" placeholder="e.g. 1"></div>' +
+        // The third box is either "per N kg of body weight" or "per N litres of water"
         '<div class="hf-field" id="mf-weight-wrap"><label>Per kg of body weight</label><input type="number" id="mf-weight" min="0" step="any" value="' + v('dose_weight_kg') + '" placeholder="e.g. 50"></div>' +
+        '<div class="hf-field" id="mf-water-wrap" style="display:none"><label>Per litres of water</label><input type="number" id="mf-water" min="0" step="any" value="' + v('dose_water_l') + '" placeholder="e.g. 1"></div>' +
+      '</div>' +
+      '<div class="hf-grid">' +
+        '<div class="hf-field"><label>Usual route</label><select id="mf-route">' +
+          opt('', 'Not set', route) +
+          Object.keys(MED_ROUTES).map(function(k) { return opt(k, MED_ROUTES[k], route); }).join('') +
+        '</select></div>' +
+        '<div class="hf-field" style="grid-column:span 2;align-self:end;font-size:12px;color:var(--muted);padding-bottom:8px">' +
+          'Pre-filled when logging a treatment. In water, in feed and spray rounds record one total amount for the group.</div>' +
+      '</div>' +
+      // Species with a different label dose; rendered by renderMedSpeciesDoses()
+      '<div style="margin:0 0 12px">' +
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Species-specific doses &middot; used instead of the default for these species</div>' +
+        '<div id="mf-species-wrap"></div>' +
       '</div>';
   }
   html += '<div class="hf-grid">' +
@@ -750,7 +878,68 @@ function renderMedForm() {
       '</div>' +
     '</div>';
   document.getElementById('med-form-wrap').innerHTML = html;
+  if (isMed) renderMedSpeciesDoses();
   updateMedFormUnits();
+}
+
+// ---- Species-specific dose rows (inside the medicine form) ----
+// Each row: species, basis (by weight / per animal), amount, and kg covered.
+// Edits are copied into medFormDoses as they happen so re-renders keep them.
+function renderMedSpeciesDoses() {
+  var wrap = document.getElementById('mf-species-wrap');
+  if (!wrap) return;
+  var unit = document.getElementById('mf-unit') ? document.getElementById('mf-unit').value : '';
+  var opt = function(val, label, cur) { return '<option value="' + val + '"' + (String(cur) === String(val) ? ' selected' : '') + '>' + label + '</option>'; };
+  var used = medFormDoses.map(function(d) { return String(d.species_id); });
+  var html = '';
+  medFormDoses.forEach(function(d, i) {
+    html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">' +
+      '<select onchange="setMedSpeciesDose(' + i + ',\'species_id\',this.value)" style="min-width:120px">' +
+        '<option value="">Species…</option>' +
+        // A species can only have one row, so hide ones used by other rows
+        medSpeciesList.filter(function(sp) { return String(sp.id) === String(d.species_id) || used.indexOf(String(sp.id)) < 0; })
+          .map(function(sp) { return opt(sp.id, medEsc(sp.common_name), d.species_id); }).join('') +
+      '</select>' +
+      '<select onchange="setMedSpeciesDose(' + i + ',\'dose_basis\',this.value)">' +
+        opt('per_kg', 'By body weight', d.dose_basis) + opt('per_head', 'Fixed per animal', d.dose_basis) +
+      '</select>' +
+      '<input type="number" min="0" step="any" style="width:80px" placeholder="dose" value="' + (d.dose_amount != null ? d.dose_amount : '') + '"' +
+        ' oninput="setMedSpeciesDose(' + i + ',\'dose_amount\',this.value,true)"> ' +
+      '<span class="mf-unit-lbl" style="font-size:13px">' + unit + '</span>' +
+      (d.dose_basis === 'per_kg'
+        ? '<span style="font-size:13px;color:var(--muted)">per</span>' +
+          '<input type="number" min="0" step="any" style="width:70px" placeholder="kg" value="' + (d.dose_weight_kg != null ? d.dose_weight_kg : '') + '"' +
+            ' oninput="setMedSpeciesDose(' + i + ',\'dose_weight_kg\',this.value,true)">' +
+          '<span style="font-size:13px;color:var(--muted)">kg</span>'
+        : '<span style="font-size:13px;color:var(--muted)">per animal</span>') +
+      '<button class="btn btn-sm" onclick="removeMedSpeciesDose(' + i + ')">Remove</button>' +
+    '</div>';
+  });
+  if (medFormDoses.length < medSpeciesList.length) {
+    html += '<button class="btn btn-sm" onclick="addMedSpeciesDose()">+ Add species</button>';
+  }
+  wrap.innerHTML = html;
+}
+
+// Stores one edited field. Typing in a number box skips the re-render so the
+// cursor isn't lost; select changes re-render (they can show/hide the kg box).
+function setMedSpeciesDose(i, field, value, noRender) {
+  var d = medFormDoses[i];
+  if (!d) return;
+  if (field === 'species_id') d.species_id = value ? parseInt(value) : null;
+  else if (field === 'dose_basis') d.dose_basis = value;
+  else d[field] = value === '' ? null : parseFloat(value);
+  if (!noRender) renderMedSpeciesDoses();
+}
+
+function addMedSpeciesDose() {
+  medFormDoses.push({ species_id: null, dose_basis: 'per_kg', dose_amount: null, dose_weight_kg: null });
+  renderMedSpeciesDoses();
+}
+
+function removeMedSpeciesDose(i) {
+  medFormDoses.splice(i, 1);
+  renderMedSpeciesDoses();
 }
 
 // Keeps unit labels and dose fields in step with the unit / dose-basis selects
@@ -761,7 +950,10 @@ function updateMedFormUnits() {
   if (!basisEl) return;
   var basis = basisEl.value;
   document.getElementById('mf-amount-wrap').style.visibility = basis ? 'visible' : 'hidden';
+  // Per-litre swaps the "per kg" box for "per litres of water"
+  document.getElementById('mf-weight-wrap').style.display = basis === 'per_litre' ? 'none' : '';
   document.getElementById('mf-weight-wrap').style.visibility = basis === 'per_kg' ? 'visible' : 'hidden';
+  document.getElementById('mf-water-wrap').style.display = basis === 'per_litre' ? '' : 'none';
 }
 
 async function submitMedicine() {
@@ -786,6 +978,8 @@ async function submitMedicine() {
       dose_basis:        basis,
       dose_amount:       basis ? num('mf-amount') : null,
       dose_weight_kg:    basis === 'per_kg' ? num('mf-weight') : null,
+      dose_water_l:      basis === 'per_litre' ? num('mf-water') : null,
+      route:             isMed ? (el('mf-route').value || null) : null,
       min_stock:         num('mf-min'),
       withdrawal_days:   isMed && num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
       unsafe_in_pregnancy: isMed ? el('mf-preg').checked : false,
@@ -796,9 +990,36 @@ async function submitMedicine() {
     if (!(d.pack_size > 0)) throw new Error('Amount per pack must be greater than 0.');
     if (basis && !(d.dose_amount > 0)) throw new Error('Enter the label dose amount, or set Label dose to "Not set".');
     if (basis === 'per_kg' && !(d.dose_weight_kg > 0)) throw new Error('Enter how many kg of body weight the dose covers.');
+    if (basis === 'per_litre' && !(d.dose_water_l > 0)) throw new Error('Enter how many litres of water the dose is for.');
 
-    if (medEditId !== null) await sbPatch('medicines', medEditId, d);
-    else await sbInsert('medicines', [d]);
+    // Species rows: check each is complete before saving anything
+    var speciesRows = isMed ? medFormDoses.map(function(sd) {
+      if (!sd.species_id) throw new Error('Pick a species for each species-specific dose, or remove the empty row.');
+      var name = medSpeciesName(sd.species_id);
+      if (!(sd.dose_amount > 0)) throw new Error('Enter the dose for ' + name + '.');
+      if (sd.dose_basis === 'per_kg' && !(sd.dose_weight_kg > 0)) throw new Error('Enter how many kg of body weight the ' + name + ' dose covers.');
+      return {
+        species_id: sd.species_id, dose_basis: sd.dose_basis, dose_amount: sd.dose_amount,
+        dose_weight_kg: sd.dose_basis === 'per_kg' ? sd.dose_weight_kg : null
+      };
+    }) : [];
+
+    var medId = medEditId;
+    if (medId !== null) await sbPatch('medicines', medId, d);
+    else {
+      var saved = await sbInsert('medicines', [d]);
+      if (!saved || !saved.length) throw new Error('The medicine was not saved — the database returned nothing.');
+      medId = saved[0].id;
+    }
+    // Replace this medicine's species rows with the form's list (simplest way to
+    // handle added, changed and removed rows together)
+    if (isMed) {
+      var hadRows = medSpeciesDoses.some(function(sd) { return sd.medicine_id === medId; });
+      if (hadRows) await sbDeleteWhere('medicine_species_doses', 'medicine_id=eq.' + medId);
+      if (speciesRows.length) {
+        await sbInsert('medicine_species_doses', speciesRows.map(function(r) { r.medicine_id = medId; return r; }));
+      }
+    }
     closeMedForm();
     await medLoadData();
     medRerender();
