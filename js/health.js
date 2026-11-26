@@ -235,13 +235,33 @@ function renderHfDoseGrid() {
       famCell +
       '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug) : '—') + '</td>' +
       '<td class="right"><input type="number" class="hf-dose-input" data-animal="' + a.id + '" min="0" step="any" ' +
-        'style="width:90px;text-align:right" value="' + (prefill != null ? prefill : '') + '" oninput="updateHfDoseTotal()"></td>' +
+        'style="width:90px;text-align:right" value="' + (prefill != null ? prefill : '') + '" oninput="hfCheckRange(this);updateHfDoseTotal()">' +
+        '<div class="hf-range-note" style="font-size:11px;color:var(--amber);display:none"></div></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>' +
     '<div id="hf-dose-total" class="fc-derived" style="margin-top:8px"></div></div>';
   wrap.innerHTML = html;
+  document.querySelectorAll('.hf-dose-input').forEach(hfCheckRange);
   updateHfDoseTotal();
+}
+
+// Ranged label doses: a dose typed outside the animal's label range turns amber
+// with a note. A warning only — 0 (not dosed) and blank are never flagged, and
+// the vet may well have said otherwise.
+function hfCheckRange(inp) {
+  var note = inp.parentNode.querySelector('.hf-range-note');
+  var med = medById(parseInt(document.getElementById('hf-med').value));
+  var range = medDoseRange(med, parseInt(inp.dataset.animal));
+  var q = parseFloat(inp.value);
+  var msg = '';
+  // Small tolerance: suggestions are rounded to the nearest half unit
+  if (range && q > 0) {
+    if (q < range.min - 0.25) msg = 'below label range';
+    else if (q > range.max + 0.25) msg = 'above label range';
+  }
+  inp.style.borderColor = msg ? 'var(--amber)' : '';
+  if (note) { note.textContent = msg; note.style.display = msg ? 'block' : 'none'; }
 }
 
 // Bulk round panel (in water / in feed / spray): water volume, one total amount,

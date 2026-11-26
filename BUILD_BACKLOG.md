@@ -149,6 +149,9 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Ranged medicine doses — DONE 2026-11-26 (r98)
+- Any label dose (and species row) can be a range, e.g. 4–8 ml. Dose grid pre-fills the midpoint; doses typed outside the range are flagged amber (warning only); reorder reminders estimate from the top of the range.
+
 ### Medicine routes and whole-group rounds — DONE 2026-11-26 (r97)
 - Route on each medicine (usual) and each health event (actual). In water / in feed / spray rounds record one total (and water volume), split evenly per animal as estimated shares; withdrawal applies to every ticked animal. New label dose "per litre of water". Pregnant animals on an unsafe product are warned about, not unticked. Look-ahead for these uses the last round's total.
 - Switching an existing round between whole-group and per-animal is blocked on edit (delete and re-log instead).

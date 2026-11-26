@@ -186,19 +186,38 @@ function medRateFor(med, speciesId) {
   return med;
 }
 
-// One rate as text, e.g. "1 ml per 10 kg" or "2 ml per animal"
+// The amount from a label rate. Ranged doses ("4 to 8 ml") store the low end in
+// dose_amount and the high end in dose_amount_max. which: 'mid' (default — what
+// the dose grid pre-fills), 'min', or 'max' (used by the reorder look-ahead, so
+// the estimate never comes up short).
+function medRateAmount(rate, which) {
+  var lo = Number(rate.dose_amount);
+  var hi = rate.dose_amount_max != null ? Number(rate.dose_amount_max) : lo;
+  if (which === 'min') return lo;
+  if (which === 'max') return hi;
+  return (lo + hi) / 2;
+}
+
+// Amount text: "4 ml" or, for a range, "4–8 ml"
+function medFmtRateAmount(med, rate) {
+  if (rate.dose_amount_max == null) return medFmtUnits(med, Number(rate.dose_amount));
+  return (Math.round(Number(rate.dose_amount) * 100) / 100).toLocaleString() + '\u2013' + medFmtUnits(med, Number(rate.dose_amount_max));
+}
+
+// One rate as text, e.g. "1 ml per 10 kg", "4–8 ml per animal"
 function medFmtRate(med, rate) {
   if (!rate || !rate.dose_basis) return '—';
-  if (rate.dose_basis === 'per_head') return medFmtUnits(med, Number(rate.dose_amount)) + ' per animal';
-  if (rate.dose_basis === 'per_litre') return medFmtUnits(med, Number(rate.dose_amount)) + ' per ' + Number(rate.dose_water_l) + ' L water';
-  return medFmtUnits(med, Number(rate.dose_amount)) + ' per ' + Number(rate.dose_weight_kg) + ' kg';
+  var amt = medFmtRateAmount(med, rate);
+  if (rate.dose_basis === 'per_head') return amt + ' per animal';
+  if (rate.dose_basis === 'per_litre') return amt + ' per ' + Number(rate.dose_water_l) + ' L water';
+  return amt + ' per ' + Number(rate.dose_weight_kg) + ' kg';
 }
 
 // Suggested total for a bulk round from a per-litre label dose, rounded to the
 // nearest half unit. Null when the medicine has no per-litre dose or no volume given.
 function medSuggestWaterTotal(med, litres) {
   if (!med || med.dose_basis !== 'per_litre' || !(litres > 0)) return null;
-  var raw = Number(med.dose_amount) * litres / Number(med.dose_water_l);
+  var raw = medRateAmount(med, 'mid') * litres / Number(med.dose_water_l);
   return Math.max(0.5, Math.round(raw * 2) / 2);
 }
 
@@ -257,16 +276,33 @@ function medAnimalWeight(animalId) {
 // both get 2 ml). Returns null when there's no label rate, or when the rate is
 // weight-based and the animal has never been weighed.
 // The rate comes from the animal's species when the medicine has one for it.
-function medSuggestDose(med, animalId) {
+// A ranged label dose is pre-filled at its midpoint (which = 'mid', the
+// default); the reorder look-ahead asks for 'max'.
+function medSuggestDose(med, animalId, which) {
   if (!med) return null;
   var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
   var rate = medRateFor(med, a ? a.species_id : null);
   if (!rate.dose_basis || rate.dose_basis === 'per_litre') return null;  // per-litre is a bulk-round rate
-  if (rate.dose_basis === 'per_head') return Number(rate.dose_amount);
+  if (rate.dose_basis === 'per_head') return medRateAmount(rate, which);
   var kg = medAnimalWeight(animalId);
   if (kg == null) return null;
-  var raw = Number(rate.dose_amount) * kg / Number(rate.dose_weight_kg);
+  var raw = medRateAmount(rate, which) * kg / Number(rate.dose_weight_kg);
   return Math.max(0.5, Math.round(raw * 2) / 2);
+}
+
+// The label range for one animal, unrounded: { min, max } — or null when the
+// rate isn't a range (or is weight-based and the animal was never weighed).
+// Used to flag doses typed outside the label range.
+function medDoseRange(med, animalId) {
+  if (!med) return null;
+  var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
+  var rate = medRateFor(med, a ? a.species_id : null);
+  if (!rate.dose_basis || rate.dose_basis === 'per_litre' || rate.dose_amount_max == null) return null;
+  if (rate.dose_basis === 'per_head') return { min: medRateAmount(rate, 'min'), max: medRateAmount(rate, 'max') };
+  var kg = medAnimalWeight(animalId);
+  if (kg == null) return null;
+  var f = kg / Number(rate.dose_weight_kg);
+  return { min: medRateAmount(rate, 'min') * f, max: medRateAmount(rate, 'max') * f };
 }
 
 // ---- Meat withdrawal ----
@@ -383,7 +419,7 @@ function medComputeAlerts(schedules) {
       need = fromLast.total;
     } else {
       animals.forEach(function(a) {
-        var d = medSuggestDose(med, a.id);
+        var d = medSuggestDose(med, a.id, 'max');  // top of any label range, so the estimate isn't short
         if (d == null) unweighed++; else need += d;
       });
     }
@@ -765,7 +801,7 @@ function openMedForm(id, kind) {
   medFormKind = m ? (m.kind || 'medicine') : (kind || 'medicine');
   // Copy this medicine's species rows into the form's working list
   medFormDoses = m ? medSpeciesDoses.filter(function(d) { return d.medicine_id === m.id; }).map(function(d) {
-    return { species_id: d.species_id, dose_basis: d.dose_basis, dose_amount: d.dose_amount, dose_weight_kg: d.dose_weight_kg };
+    return { species_id: d.species_id, dose_basis: d.dose_basis, dose_amount: d.dose_amount, dose_amount_max: d.dose_amount_max, dose_weight_kg: d.dose_weight_kg };
   }) : [];
   medFormOpen = true;
   renderMedForm();
@@ -839,7 +875,10 @@ function renderMedForm() {
           opt('', 'Not set', basis) + opt('per_kg', 'By body weight', basis) + opt('per_head', 'Fixed per animal', basis) +
           opt('per_litre', 'Per litre of water', basis) +
         '</select></div>' +
-        '<div class="hf-field" id="mf-amount-wrap"><label>Dose (<span class="mf-unit-lbl">' + unit + '</span>)</label><input type="number" id="mf-amount" min="0" step="any" value="' + v('dose_amount') + '" placeholder="e.g. 1"></div>' +
+        // Dose, with an optional "to" for ranged labels ("4 to 8 ml")
+        '<div class="hf-field" id="mf-amount-wrap"><label>Dose (<span class="mf-unit-lbl">' + unit + '</span>) &middot; to (if a range)</label>' +
+          '<div style="display:flex;gap:6px;align-items:center"><input type="number" id="mf-amount" min="0" step="any" value="' + v('dose_amount') + '" placeholder="e.g. 4" style="min-width:0">' +
+          '<span style="color:var(--muted)">to</span><input type="number" id="mf-amount-max" min="0" step="any" value="' + v('dose_amount_max') + '" placeholder="optional" style="min-width:0"></div></div>' +
         // The third box is either "per N kg of body weight" or "per N litres of water"
         '<div class="hf-field" id="mf-weight-wrap"><label>Per kg of body weight</label><input type="number" id="mf-weight" min="0" step="any" value="' + v('dose_weight_kg') + '" placeholder="e.g. 50"></div>' +
         '<div class="hf-field" id="mf-water-wrap" style="display:none"><label>Per litres of water</label><input type="number" id="mf-water" min="0" step="any" value="' + v('dose_water_l') + '" placeholder="e.g. 1"></div>' +
@@ -904,7 +943,10 @@ function renderMedSpeciesDoses() {
         opt('per_kg', 'By body weight', d.dose_basis) + opt('per_head', 'Fixed per animal', d.dose_basis) +
       '</select>' +
       '<input type="number" min="0" step="any" style="width:80px" placeholder="dose" value="' + (d.dose_amount != null ? d.dose_amount : '') + '"' +
-        ' oninput="setMedSpeciesDose(' + i + ',\'dose_amount\',this.value,true)"> ' +
+        ' oninput="setMedSpeciesDose(' + i + ',\'dose_amount\',this.value,true)">' +
+      '<span style="font-size:13px;color:var(--muted)">to</span>' +
+      '<input type="number" min="0" step="any" style="width:70px" placeholder="optional" value="' + (d.dose_amount_max != null ? d.dose_amount_max : '') + '"' +
+        ' oninput="setMedSpeciesDose(' + i + ',\'dose_amount_max\',this.value,true)"> ' +
       '<span class="mf-unit-lbl" style="font-size:13px">' + unit + '</span>' +
       (d.dose_basis === 'per_kg'
         ? '<span style="font-size:13px;color:var(--muted)">per</span>' +
@@ -933,7 +975,7 @@ function setMedSpeciesDose(i, field, value, noRender) {
 }
 
 function addMedSpeciesDose() {
-  medFormDoses.push({ species_id: null, dose_basis: 'per_kg', dose_amount: null, dose_weight_kg: null });
+  medFormDoses.push({ species_id: null, dose_basis: 'per_kg', dose_amount: null, dose_amount_max: null, dose_weight_kg: null });
   renderMedSpeciesDoses();
 }
 
@@ -977,6 +1019,7 @@ async function submitMedicine() {
       pack_size:         num('mf-pack-size'),
       dose_basis:        basis,
       dose_amount:       basis ? num('mf-amount') : null,
+      dose_amount_max:   basis ? num('mf-amount-max') : null,
       dose_weight_kg:    basis === 'per_kg' ? num('mf-weight') : null,
       dose_water_l:      basis === 'per_litre' ? num('mf-water') : null,
       route:             isMed ? (el('mf-route').value || null) : null,
@@ -989,6 +1032,7 @@ async function submitMedicine() {
     if (!d.name) throw new Error('Name is required.');
     if (!(d.pack_size > 0)) throw new Error('Amount per pack must be greater than 0.');
     if (basis && !(d.dose_amount > 0)) throw new Error('Enter the label dose amount, or set Label dose to "Not set".');
+    if (d.dose_amount_max != null && !(d.dose_amount_max > d.dose_amount)) throw new Error('The top of the dose range must be more than the bottom (leave "to" blank for a single amount).');
     if (basis === 'per_kg' && !(d.dose_weight_kg > 0)) throw new Error('Enter how many kg of body weight the dose covers.');
     if (basis === 'per_litre' && !(d.dose_water_l > 0)) throw new Error('Enter how many litres of water the dose is for.');
 
@@ -998,8 +1042,9 @@ async function submitMedicine() {
       var name = medSpeciesName(sd.species_id);
       if (!(sd.dose_amount > 0)) throw new Error('Enter the dose for ' + name + '.');
       if (sd.dose_basis === 'per_kg' && !(sd.dose_weight_kg > 0)) throw new Error('Enter how many kg of body weight the ' + name + ' dose covers.');
+      if (sd.dose_amount_max != null && !(sd.dose_amount_max > sd.dose_amount)) throw new Error('The top of the ' + name + ' dose range must be more than the bottom.');
       return {
-        species_id: sd.species_id, dose_basis: sd.dose_basis, dose_amount: sd.dose_amount,
+        species_id: sd.species_id, dose_basis: sd.dose_basis, dose_amount: sd.dose_amount, dose_amount_max: sd.dose_amount_max,
         dose_weight_kg: sd.dose_basis === 'per_kg' ? sd.dose_weight_kg : null
       };
     }) : [];
