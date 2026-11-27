@@ -251,6 +251,12 @@ var anSharedWeights       = {};  // animal_id -> most-recent weight record
 var anSharedPens          = [];  // kept for feed module compatibility
 var anSharedLocations     = [];  // all active locations (pens, quarantine, storage, etc.) — for getLocationName()
 var anSharedSpecies       = [];
+// Species categories — how medicine labels group animals ("poultry", "sheep and goats"...).
+// Keys match the species.category check constraint; set per species in Setup › Species.
+var SPECIES_CATEGORIES = {
+  poultry: 'Poultry', small_ruminant: 'Small ruminants', cattle: 'Cattle', equine: 'Equines',
+  rabbit: 'Rabbits', dog: 'Dogs', other: 'Other'
+};
 var anSharedWorkers       = [];
 var anSharedGroups        = [];  // all animal_groups records
 var anSharedMembers       = [];  // group_members where left_date IS NULL
@@ -266,7 +272,7 @@ async function loadSharedAnimalData() {
       'notes,species_id,expected_birth_date,being_milked,locations(name)&order=farm_id'),
     sbGet('animal_weights', 'select=animal_id,weight_kg,bcs_score,date&order=date.desc&limit=3000'),
     sbGet('locations', 'location_type=eq.pen&active=eq.true&select=id,name&order=name'),
-    sbGet('species', 'select=id,common_name,gestation_days&order=common_name'),
+    sbGet('species', 'select=id,common_name,gestation_days,category&order=common_name'),
     sbGet('workers', 'select=id,name&active=eq.true&order=name'),
     sbGet('animal_groups',
       'select=id,name,primary_purpose,is_multi_species,target_weight_kg,status,closed_at,notes,' +

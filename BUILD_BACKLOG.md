@@ -149,6 +149,12 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Species categories, per-litre species doses, tapering courses — DONE 2026-11-27 (r105)
+- Species have a category (Poultry, Small ruminants, Cattle, Equines, Rabbits, Dogs, Other), pre-set from the existing species and editable in Setup › Species. Pigeons go under Other (labels list them separately).
+- Medicine dose rows target a category or a species (species wins), and can be per litre of water — e.g. "Poultry: 30 ml per 12 L water".
+- Courses: "Later doses: % of the first" (e.g. Sulphasym: 6 doses, once a day, 50%).
+- **Needs your action:** the poultry (chickens, turkeys, geese, duck) aren't registered as animals yet — add them via Intake into a group (e.g. "Poultry") before logging in-water rounds for them.
+
 ### Medicine list layout — DONE 2026-11-27 (r102)
 - Setup › Medicines columns: Dose & route (one line per dose / species, then "Route: …"), Course, Withdrawal ("Meat: 14 d" / "Milk: 4 d"), Cautions (pregnancy and milking badges). All in one font. r103: column widths reworked (Used for widest, short columns shrink, actions stacked, compact padding via `.tbl-compact`) so the table fits a laptop-width screen without sideways scrolling.
 

@@ -12,7 +12,7 @@ var speciesEditId = null;
 // or pregnancy due dates would silently fall back to the 150-day default.
 function refreshSharedSpecies() {
   if (typeof anSharedLoaded === 'undefined' || !anSharedLoaded) return;
-  sbGet('species', 'select=id,common_name,gestation_days&order=common_name').then(function(r) { anSharedSpecies = r; });
+  sbGet('species', 'select=id,common_name,gestation_days,category&order=common_name').then(function(r) { anSharedSpecies = r; });
 }
 
 async function loadSpeciesPage() {
@@ -37,6 +37,7 @@ async function loadSpeciesPage() {
             '<div class="fc-field"><label>Common name <span style="color:var(--red)">*</span></label><input type="text" id="nsf-name" placeholder="e.g. Goat"></div>' +
             '<div class="fc-field"><label>Notes</label><input type="text" id="nsf-notes" placeholder="Optional"></div>' +
             '<div class="fc-field"><label>Gestation (days)</label><input type="number" id="nsf-gestation" min="1" step="1" placeholder="e.g. 150"></div>' +
+            '<div class="fc-field"><label>Category</label><select id="nsf-category"></select></div>' +
           '</div>' +
           '<div style="display:flex;gap:10px;align-items:center">' +
             '<button class="btn btn-primary" onclick="submitSpecies()">Save</button>' +
@@ -54,7 +55,7 @@ async function loadSpeciesPage() {
   if (!tbl) return;
   tbl.innerHTML = '<div class="loading">Loading…</div>';
   try {
-    speciesData = await sbGet('species', 'select=id,common_name,gestation_days,notes&order=common_name');
+    speciesData = await sbGet('species', 'select=id,common_name,gestation_days,category,notes&order=common_name');
     var countEl = document.getElementById('species-count');
     if (countEl) countEl.textContent = speciesData.length + ' species';
     renderSpeciesTable();
@@ -71,13 +72,14 @@ function renderSpeciesTable() {
     return;
   }
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Common name</th><th class="right">Gestation (days)</th><th>Notes</th><th></th>' +
+    '<th>Common name</th><th>Category</th><th class="right">Gestation (days)</th><th>Notes</th><th></th>' +
     '</tr></thead><tbody>';
   speciesData.forEach(function(s) {
     if (speciesEditId === s.id) {
       html += '<tr class="ing-selected">' +
         '<td><input type="text" id="se-name-' + s.id + '" value="' + s.common_name.replace(/"/g, '&quot;') + '" style="width:100%" ' +
           'onkeydown="if(event.key===\'Enter\')saveSpecies(' + s.id + ');if(event.key===\'Escape\')cancelSpeciesEdit();"></td>' +
+        '<td><select id="se-cat-' + s.id + '">' + speciesCategoryOptions(s.category) + '</select></td>' +
         '<td class="right"><input type="number" id="se-gest-' + s.id + '" min="1" step="1" value="' + (s.gestation_days || '') + '" style="width:80px;text-align:right" placeholder="—" ' +
           'onkeydown="if(event.key===\'Enter\')saveSpecies(' + s.id + ');if(event.key===\'Escape\')cancelSpeciesEdit();"></td>' +
         '<td><input type="text" id="se-notes-' + s.id + '" value="' + (s.notes || '').replace(/"/g, '&quot;') + '" style="width:100%" placeholder="—" ' +
@@ -90,6 +92,7 @@ function renderSpeciesTable() {
     } else {
       html += '<tr>' +
         '<td style="font-weight:500">' + s.common_name + '</td>' +
+        '<td class="muted-cell">' + (SPECIES_CATEGORIES[s.category] || '\u2014') + '</td>' +
         '<td class="mono right">' + (s.gestation_days || '\u2014') + '</td>' +
         '<td class="muted-cell" style="font-size:12px">' + (s.notes || '') + '</td>' +
         '<td><div style="display:flex;gap:6px">' +
@@ -109,6 +112,13 @@ function renderSpeciesTable() {
   }
 }
 
+// <option> list of species categories, with `cur` selected (defaults to Other)
+function speciesCategoryOptions(cur) {
+  return Object.keys(SPECIES_CATEGORIES).map(function(k) {
+    return '<option value="' + k + '"' + (k === (cur || 'other') ? ' selected' : '') + '>' + SPECIES_CATEGORIES[k] + '</option>';
+  }).join('');
+}
+
 function toggleSpeciesForm() {
   var formEl = document.getElementById('species-add-form');
   if (!formEl) return;
@@ -119,6 +129,7 @@ function toggleSpeciesForm() {
   if (nameEl) nameEl.value = '';
   if (notesEl) notesEl.value = '';
   var gestEl = document.getElementById('nsf-gestation'); if (gestEl) gestEl.value = '';
+  var catEl = document.getElementById('nsf-category'); if (catEl) catEl.innerHTML = speciesCategoryOptions('other');
   if (statusEl) statusEl.textContent = '';
   formEl.style.display = 'block';
   if (nameEl) nameEl.focus();
@@ -128,11 +139,12 @@ async function submitSpecies() {
   var name    = ((document.getElementById('nsf-name')  || {}).value || '').trim();
   var notes   = ((document.getElementById('nsf-notes') || {}).value || '').trim() || null;
   var gest    = parseInt((document.getElementById('nsf-gestation') || {}).value) || null;
+  var cat     = (document.getElementById('nsf-category') || {}).value || 'other';
   var statusEl = document.getElementById('nsf-status');
   if (!name) { if (statusEl) statusEl.textContent = 'Name required.'; return; }
   if (statusEl) statusEl.textContent = 'Saving…';
   try {
-    await sbInsert('species', { common_name: name, notes: notes, gestation_days: gest });
+    await sbInsert('species', { common_name: name, notes: notes, gestation_days: gest, category: cat });
     if (statusEl) statusEl.textContent = 'Saved ✓';
     document.getElementById('species-add-form').style.display = 'none';
     loadSpeciesPage();
@@ -160,12 +172,14 @@ async function saveSpecies(id) {
   var notes = notesEl ? notesEl.value.trim() : null;
   var gestEl = document.getElementById('se-gest-' + id);
   var gest  = gestEl ? (parseInt(gestEl.value) || null) : null;
+  var catEl = document.getElementById('se-cat-' + id);
+  var cat   = catEl ? catEl.value : 'other';
   if (!name) { alert('Name cannot be blank.'); if (nameEl) nameEl.focus(); return; }
   speciesEditId = null;
   try {
-    await sbPatch('species', id, { common_name: name, notes: notes || null, gestation_days: gest });
+    await sbPatch('species', id, { common_name: name, notes: notes || null, gestation_days: gest, category: cat });
     var s = speciesData.find(function(x) { return x.id === id; });
-    if (s) { s.common_name = name; s.notes = notes || null; s.gestation_days = gest; }
+    if (s) { s.common_name = name; s.notes = notes || null; s.gestation_days = gest; s.category = cat; }
     renderSpeciesTable();
     // Refresh the shared species cache so recipe and animal dropdowns reflect the change
     refreshSharedSpecies();

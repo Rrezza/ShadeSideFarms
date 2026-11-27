@@ -154,7 +154,11 @@ function renderHfCourse() {
     var s = hfCourseSched;
     wrap.innerHTML = '<div class="fc-derived">Course: dose ' + ((s.course_given || 0) + 1) + ' of ' + s.course_total +
       ' &middot; ' + (MED_COURSE_INTERVALS[s.course_interval_hours] || '') +
-      ' &middot; started ' + fmtDate(s.course_start_date) + ' &middot; pre-filled with the previous dose</div>';
+      ' &middot; started ' + fmtDate(s.course_start_date) +
+      // Tapering course: the second dose is the first × the percentage; later ones repeat the previous
+      (s.course_later_pct && (s.course_given || 0) === 1
+        ? ' &middot; pre-filled at ' + s.course_later_pct + '% of the first dose'
+        : ' &middot; pre-filled with the previous dose') + '</div>';
     return;
   }
   var v = document.getElementById('hf-med').value;
@@ -166,7 +170,7 @@ function renderHfCourse() {
     '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px">' +
       '<input type="checkbox" id="hf-course-on"' + (on ? ' checked' : '') + ' onchange="document.getElementById(\'hf-course-fields\').style.display=this.checked?\'flex\':\'none\'"> ' +
       'Part of a course (several doses over time)' +
-      (med.course_doses ? ' <span style="color:var(--muted)">&middot; label: ' + medFmtCourse(med.course_doses, med.course_interval_hours) + '</span>' : '') +
+      (med.course_doses ? ' <span style="color:var(--muted)">&middot; label: ' + medFmtCourse(med.course_doses, med.course_interval_hours, med.course_later_pct) + '</span>' : '') +
     '</label>' +
     '<div id="hf-course-fields" style="display:' + (on ? 'flex' : 'none') + ';gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">' +
       '<input type="number" id="hf-course-doses" min="2" step="1" style="width:70px" value="' + (med.course_doses || 3) + '"> doses,' +
@@ -175,22 +179,25 @@ function renderHfCourse() {
           return '<option value="' + h + '"' + (Number(h) === interval ? ' selected' : '') + '>' + MED_COURSE_INTERVALS[h] + '</option>';
         }).join('') +
       '</select>' +
+      '&middot; later doses <input type="number" id="hf-course-pct" min="1" max="100" step="1" style="width:60px" value="' + (med.course_later_pct || 100) + '">% of the first' +
       '<span style="color:var(--muted)">&middot; this is dose 1; the rest appear in Due now</span>' +
     '</div>';
 }
 
 // Pre-fills the dose entry with what a previous event gave (used for the next
 // dose of a course): route, per-animal doses, or a bulk round's total, water and animals.
-function hfPrefillFromEvent(eventId) {
+// factor scales every amount (e.g. 0.5 for the first reduced dose of a tapering course).
+function hfPrefillFromEvent(eventId, factor) {
   var e = healthEvts.find(function(x) { return x.id === eventId; });
   if (!e) return;
+  var f = factor || 1;
   if (e.route) { document.getElementById('hf-route').value = e.route; renderHfDoseGrid(); }
   var doses = medMovements.filter(function(mv) { return mv.health_event_id === eventId && mv.movement_type === 'dose'; });
   var given = {};
-  doses.forEach(function(mv) { given[mv.animal_id] = -Number(mv.quantity); });
+  doses.forEach(function(mv) { given[mv.animal_id] = Math.round(-Number(mv.quantity) * f * 100) / 100; });
   var bulkTotal = document.getElementById('hf-bulk-total');
   if (bulkTotal) {
-    bulkTotal.value = Math.round(doses.reduce(function(s, mv) { return s - Number(mv.quantity); }, 0) * 10000) / 10000;
+    bulkTotal.value = Math.round(doses.reduce(function(s, mv) { return s - Number(mv.quantity); }, 0) * f * 100) / 100;
     hfBulkTotalTouched = true;
     var w = document.getElementById('hf-bulk-water');
     if (w && e.water_litres != null) w.value = e.water_litres;
@@ -334,7 +341,8 @@ function renderHfDoseGrid() {
 function hfCheckRange(inp) {
   var note = inp.parentNode.querySelector('.hf-range-note');
   var med = medById(parseInt(document.getElementById('hf-med').value));
-  var range = medDoseRange(med, parseInt(inp.dataset.animal));
+  // Reduced doses of a tapering course are meant to be below the label range
+  var range = hfCourseSched && hfCourseSched.course_later_pct ? null : medDoseRange(med, parseInt(inp.dataset.animal));
   var q = parseFloat(inp.value);
   var msg = '';
   // Small tolerance: suggestions are rounded to the nearest half unit
@@ -387,7 +395,8 @@ function renderHfBulk(med, animals) {
 function onHfBulkWaterChange() {
   var med = medById(parseInt(document.getElementById('hf-med').value));
   var litres = parseFloat(document.getElementById('hf-bulk-water').value);
-  var sug = medSuggestWaterTotal(med, litres);
+  var ids = Array.prototype.map.call(document.querySelectorAll('.hf-bulk-animal:checked'), function(cb) { return parseInt(cb.dataset.animal); });
+  var sug = medSuggestWaterTotal(med, litres, ids);
   if (sug != null && !hfBulkTotalTouched) document.getElementById('hf-bulk-total').value = sug;
   updateHfDoseTotal();
 }
@@ -601,7 +610,11 @@ function preFillHealthForm(schedId) {
     onHfTargetChange();
   }
   // Next dose of a course: same route and amounts as the previous dose
-  if (hfCourseSched && sched.course_last_event_id) hfPrefillFromEvent(sched.course_last_event_id);
+  // (a tapering course scales the second dose down; later doses then repeat the previous one)
+  if (hfCourseSched && sched.course_last_event_id) {
+    var taper = sched.course_later_pct && (sched.course_given || 0) === 1 ? sched.course_later_pct / 100 : 1;
+    hfPrefillFromEvent(sched.course_last_event_id, taper);
+  }
   renderHfCourse();
   document.getElementById('health-log-form').classList.add('open');
   document.getElementById('health-log-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1047,7 +1060,9 @@ async function submitHealthEvent() {
     if (!courseSched && med && courseOnEl && courseOnEl.checked) {
       var cDoses = parseInt(document.getElementById('hf-course-doses').value);
       if (!(cDoses >= 2)) throw new Error('A course needs at least 2 doses — or untick "Part of a course".');
-      newCourse = { total: cDoses, interval: parseInt(document.getElementById('hf-course-interval').value) };
+      var cPct = parseInt(document.getElementById('hf-course-pct').value);
+      if (!(cPct >= 1 && cPct <= 100)) throw new Error('Later doses must be between 1% and 100% of the first.');
+      newCourse = { total: cDoses, interval: parseInt(document.getElementById('hf-course-interval').value), pct: cPct < 100 ? cPct : null };
       d.course_dose_no = 1; d.course_total = cDoses;
     } else if (courseSched) {
       d.course_dose_no = (courseSched.course_given || 0) + 1; d.course_total = courseSched.course_total;
@@ -1144,10 +1159,10 @@ async function submitHealthEvent() {
       try {
         var cs = {
           event_type: evType, description: desc, medicine_id: med.id, dose: d.dose,
-          course_total: newCourse.total, course_given: 1, course_interval_hours: newCourse.interval,
+          course_total: newCourse.total, course_given: 1, course_interval_hours: newCourse.interval, course_later_pct: newCourse.pct,
           course_start_date: date, course_last_event_id: saved[0].id, last_done_date: date,
           next_due_date: medCourseDueDate(date, 1, newCourse.interval), active: true,
-          notes: 'Course: ' + medFmtCourse(newCourse.total, newCourse.interval)
+          notes: 'Course: ' + medFmtCourse(newCourse.total, newCourse.interval, newCourse.pct)
         };
         if (animalId) cs.animal_id = parseInt(animalId); else cs.group_id = parseInt(groupId);
         await sbInsert('scheduled_health_events', [cs]);

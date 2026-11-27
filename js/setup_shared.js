@@ -52,7 +52,7 @@ async function deleteSpecies(id, name) {
     await loadSpeciesPage();
     // Refresh the shared species cache so recipe and animal dropdowns stop offering the deleted species
     if (typeof loadSharedAnimalData === 'function' && anSharedLoaded) {
-      sbGet('species', 'select=id,common_name,gestation_days&order=common_name').then(function(r) { anSharedSpecies = r; });
+      sbGet('species', 'select=id,common_name,gestation_days,category&order=common_name').then(function(r) { anSharedSpecies = r; });
     }
   } catch (err) {
     alert(err.message.indexOf('foreign') >= 0 || err.message.indexOf('violates') >= 0
