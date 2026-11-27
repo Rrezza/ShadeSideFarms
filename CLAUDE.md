@@ -33,6 +33,14 @@ Add comments throughout the codebase so the intent of each block is clear to a n
 ## Nearby issues
 If something worth fixing is noticed in a nearby file or function while working on a task, flag it and ask before touching it — unless it is directly blocking the current work, in which case fix it and note what was done.
 
+## Tables — layout and readability
+Design every table to fit a laptop-width screen (roughly 1000px of table space) without sideways scrolling, and check it in the preview at that width (`resize_window` 1280×800) before calling it done.
+- **Widths follow content.** Give text-heavy columns (descriptions, "used for", notes) the room via `min-width` on their `<th>`; keep short values (packs, amounts, dates, stock) on one line with `white-space:nowrap` so their columns shrink to fit.
+- **One font per table.** Each cell's lines share the cell's own font and size — no mixing small, coloured or monospace sub-lines into one cell. Put each fact on its own line (`<div>` per line) rather than shrinking it.
+- **One kind of information per column.** Don't tuck unrelated facts into another column (e.g. safety warnings inside Withdrawal); give them their own column, labelled clearly. Label every value that could be ambiguous ("Meat: 14 d", "Milk: 4 d").
+- **Save width where it's cheap.** Stack row action buttons vertically (`display:flex;flex-direction:column;gap:4px`), split two-part values onto two lines (e.g. "50 ml" / "per Bottle"), let long headers wrap (or break with `&shy;`), and use the `.tbl-compact` class for tighter padding on tables with many columns.
+- Reference example: Setup › Medicines (`renderMedSetupTable()` in `health_meds.js`). The general table patterns (render skeleton, sorting, empty/loading states) are in the `tables` skill.
+
 ## Module map
 `CODEBASE.md` is the live map of all modules. Update it whenever a new file is added, a module's purpose changes, or significant new variables or functions are introduced.
 
