@@ -852,9 +852,12 @@ function renderMedSetupTable() {
     return;
   }
   var colCount = 10;
-  var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Item</th><th>Used for</th><th>Pack</th><th>Dose &amp; route</th><th>Course</th>' +
-    '<th>Withdrawal</th><th>Cautions</th><th class="right">Minimum stock</th><th>Notes</th><th>Actions</th>' +
+  // Widths: the text-heavy columns (Used for, Notes, Dose & route) get room;
+  // short values stay on one line so their columns shrink to fit
+  var html = '<div style="overflow-x:auto"><table class="tbl-compact"><thead><tr>' +
+    '<th>Item</th><th style="min-width:220px">Used for</th><th>Pack</th><th style="min-width:120px">Dose &amp; route</th>' +
+    '<th style="min-width:80px">Course</th><th>With&shy;drawal</th><th>Cautions</th><th class="right">Min stock</th>' +
+    '<th style="min-width:100px">Notes</th><th></th>' +
     '</tr></thead><tbody>';
   // One line per fact, all in the cell's own font, so the columns read evenly
   var lines = function(arr) { return arr.length ? arr.map(function(t) { return '<div>' + t + '</div>'; }).join('') : '—'; };
@@ -865,10 +868,10 @@ function renderMedSetupTable() {
       // Delete only while nothing has been bought/dosed/counted; after that, retire it
       var hasMoves = medMovements.some(function(mv) { return mv.medicine_id === m.id; });
       html += '<tr' + (!m.active ? ' style="opacity:0.5"' : '') + '>' +
-        '<td style="font-weight:500">' + medEsc(m.name) + medFridgeBadge(m) +
+        '<td style="font-weight:500;white-space:nowrap">' + medEsc(m.name) + medFridgeBadge(m) +
           '<div style="font-size:11px;color:var(--muted);font-weight:400">' + (supply ? 'health supply' : medEsc(m.form)) + '</div></td>' +
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
-        '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
+        '<td class="muted-cell" style="white-space:nowrap">' + medFmtUnits(m, Number(m.pack_size)) + '<div>per ' + medEsc(m.pack_label) + '</div></td>' +
         // Dose lines, then the route(s) on their own line
         '<td class="muted-cell">' + (supply ? '—' : lines(medDoseLines(m).concat(
           medRoutes(m).length ? ['Route: ' + medRoutes(m).map(medRouteLabel).join(' or ')] : []))) + '</td>' +
@@ -877,18 +880,19 @@ function renderMedSetupTable() {
           (m.withdrawal_days != null ? ['Meat: ' + m.withdrawal_days + ' d'] : []).concat(
           m.milk_withdrawal_days != null ? ['Milk: ' + m.milk_withdrawal_days + ' d'] : []))) + '</td>' +
         // Who it shouldn't go to (pregnancy stage, milking animals)
-        '<td>' + (supply ? '—' : lines(
+        '<td style="max-width:140px">' + (supply ? '—' : lines(
           (medFmtPregRule(m) ? ['<span class="badge badge-red">' + medFmtPregRule(m) + '</span>'] : []).concat(
           m.not_for_milking ? ['<span class="badge badge-red">not for milking animals</span>'] : []))) + '</td>' +
-        '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
+        '<td class="mono right" style="white-space:nowrap">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
         '<td class="muted-cell">' + (m.notes ? medEsc(m.notes) : '—') + '</td>' +
-        '<td style="white-space:nowrap">' +
-          '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
+        // Buttons stacked to keep the column narrow
+        '<td><div style="display:flex;flex-direction:column;gap:4px">' +
+          '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button>' +
           (m.active
             ? '<button class="btn btn-sm" onclick="setMedActive(' + m.id + ',false)">Retire</button>'
             : '<button class="btn btn-sm" onclick="setMedActive(' + m.id + ',true)">Reactivate</button>') +
-          (!hasMoves ? ' <button class="btn btn-sm btn-danger" onclick="deleteMedicine(' + m.id + ')">Delete</button>' : '') +
-        '</td></tr>';
+          (!hasMoves ? '<button class="btn btn-sm btn-danger" onclick="deleteMedicine(' + m.id + ')">Delete</button>' : '') +
+        '</div></td></tr>';
     });
   });
   html += '</tbody></table></div>';

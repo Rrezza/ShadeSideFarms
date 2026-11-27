@@ -150,7 +150,7 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 ## Resolved — no code change needed
 
 ### Medicine list layout — DONE 2026-11-27 (r102)
-- Setup › Medicines columns: Dose & route (one line per dose / species, then "Route: …"), Course, Withdrawal ("Meat: 14 d" / "Milk: 4 d"), Cautions (pregnancy and milking badges). All in one font.
+- Setup › Medicines columns: Dose & route (one line per dose / species, then "Route: …"), Course, Withdrawal ("Meat: 14 d" / "Milk: 4 d"), Cautions (pregnancy and milking badges). All in one font. r103: column widths reworked (Used for widest, short columns shrink, actions stacked, compact padding via `.tbl-compact`) so the table fits a laptop-width screen without sideways scrolling.
 
 ### Milk withdrawal, milking flag, pregnancy by stage — DONE 2026-11-27 (r101)
 - Medicines: separate milk withdrawal days; "Not for animals being milked"; pregnancy rule = safe / avoid throughout / avoid first N days / avoid last N days (existing "not in pregnancy" medicines became "avoid throughout").
