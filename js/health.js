@@ -12,6 +12,7 @@ var healthFollowups  = [];    // logged events with an open follow-up due within
 var hfFollowupOf     = null;  // event whose follow-up the log form is currently recording
 var hfFamacha        = {};    // animal_id -> latest FAMACHA { score, date }
 var hfCostTouched    = false; // true once the user types a cost, so auto-costing stops overwriting it
+var hfTypeTouched    = false; // true once the event type was chosen (by the user or a pre-fill), so picking a medicine doesn't overwrite it
 var hfCourseSched    = null;  // running course schedule the form is logging the next dose of (null = not a course dose)
 var hfBulkTotalTouched = false; // true once the user types a bulk-round total, so the per-litre suggestion stops overwriting it
 var schedEditId      = null;  // schedule being edited (null = adding)
@@ -97,6 +98,7 @@ function populateHealthForm() {
   document.getElementById('hf-cost').value = '';
   hfCostTouched = false;
   hfCourseSched = null;
+  hfTypeTouched = false;
   onHfMedChange();
 }
 
@@ -137,6 +139,14 @@ function onHfMedChange() {
   document.getElementById('hf-route-wrap').style.display = v ? 'flex' : 'none';
   var med = v && v !== 'other' ? medById(parseInt(v)) : null;
   hfFillRouteOptions(med);
+  // Suggest the event type from the medicine's type (vitamin -> Supplement, vaccine ->
+  // Vaccination...) unless the user or a pre-fill has already chosen one
+  var suggested = med && MED_CLASS_EVENT[med.med_class];
+  if (suggested && !hfTypeTouched) {
+    document.getElementById('hf-event-type').value = suggested;
+    var mortFields = document.getElementById('hf-mortality-fields');
+    if (mortFields) mortFields.style.display = 'none';
+  }
   hfBulkTotalTouched = false;
   renderHfDoseGrid();
   renderHfCourse();
@@ -450,6 +460,7 @@ function updateHfDoseTotal() {
 function toggleHealthForm() {
   hfFollowupOf = null;  // a fresh form isn't a follow-up of anything
   hfCourseSched = null; // ...or the next dose of a course
+  hfTypeTouched = false;
   renderHfCourse();
   document.getElementById('health-log-form').classList.toggle('open');
 }
@@ -464,6 +475,7 @@ function onHfTargetChange() {
 }
 
 function onHfEventTypeChange() {
+  hfTypeTouched = true;
   var et = document.getElementById('hf-event-type').value;
   var mortFields = document.getElementById('hf-mortality-fields');
   if (mortFields) mortFields.style.display = (et === 'mortality') ? 'grid' : 'none';
@@ -552,6 +564,7 @@ function preFillFollowup(eventId) {
   if (!e) return;
   populateHealthForm();
   hfFollowupOf = eventId;
+  hfTypeTouched = true;
   document.getElementById('hf-event-type').value = e.event_type === 'mortality' ? 'observation' : (e.event_type || 'observation');
   document.getElementById('hf-desc').value = 'Follow-up: ' + (e.description || '');
   document.getElementById('hf-target-type').value = e.animal_id ? 'animal' : 'group';
@@ -589,6 +602,7 @@ function preFillHealthForm(schedId) {
   if (!sched) return;
   hfFollowupOf = null;
   hfCourseSched = sched.course_total ? sched : null;
+  hfTypeTouched = true;  // the schedule's own event type stands
   document.getElementById('hf-event-type').value = sched.event_type || 'vaccination';
   document.getElementById('hf-sched').value = schedId;
   if (sched.description) document.getElementById('hf-desc').value = sched.description;
@@ -641,7 +655,7 @@ function renderHealthLog() {
     return;
   }
   var EVTYPE = {
-    vaccination: 'badge-blue', deworming: 'badge-teal', treatment: 'badge-amber',
+    vaccination: 'badge-blue', deworming: 'badge-teal', treatment: 'badge-amber', supplement: 'badge-lime',
     observation: 'badge-gray', injury: 'badge-brown', mortality: 'badge-red'
   };
   var colCount = 10;
@@ -790,7 +804,8 @@ function renderHealthEventEdit(e) {
       '<div class="hf-field"><label>Date</label><input type="date" id="he-date" value="' + e.date + '"></div>' +
       '<div class="hf-field"><label>Event type</label><select id="he-type">' +
         opt('vaccination', 'Vaccination', e.event_type) + opt('deworming', 'Deworming', e.event_type) +
-        opt('treatment', 'Treatment', e.event_type) + opt('observation', 'Observation', e.event_type) +
+        opt('treatment', 'Treatment', e.event_type) + opt('supplement', 'Supplement', e.event_type) +
+        opt('observation', 'Observation', e.event_type) +
         opt('injury', 'Injury', e.event_type) +
         (e.event_type === 'mortality' ? opt('mortality', 'Mortality', e.event_type) : '') +
       '</select></div>' +
@@ -1229,7 +1244,7 @@ async function openAnimalHealthHistory(animalId) {
 
 function renderAnimalHealthHistory(animalId, evts, doses) {
   var EVTYPE = {
-    vaccination: 'badge-blue', deworming: 'badge-teal', treatment: 'badge-amber',
+    vaccination: 'badge-blue', deworming: 'badge-teal', treatment: 'badge-amber', supplement: 'badge-lime',
     observation: 'badge-gray', injury: 'badge-brown', mortality: 'badge-red'
   };
   // Summary: withdrawal status, treatment count, medicine cost for this animal

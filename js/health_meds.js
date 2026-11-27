@@ -53,6 +53,20 @@ function medIsBulkRoute(route) { return MED_BULK_ROUTES.indexOf(route) >= 0; }
 function medUsesWater(route) { return route === 'water' || route === 'spray'; }
 function medRouteLabel(route) { return route ? (MED_ROUTES[route] || route) : ''; }
 
+// ---- Medicine types ----
+// What a medicine is: groups the lists, and separates prevention (vaccines,
+// dewormers, supplements) from treating illness. Keys match the DB check.
+var MED_CLASSES = {
+  vaccine: 'Vaccines', dewormer: 'Dewormers', antiparasitic_ext: 'External antiparasitics',
+  antibiotic: 'Antibiotics', anti_inflammatory: 'Anti-inflammatories / pain relief',
+  supplement: 'Vitamins, minerals and supplements', other: 'Other medicines'
+};
+// Event type suggested on the treatment form when a medicine of this type is picked
+var MED_CLASS_EVENT = {
+  vaccine: 'vaccination', dewormer: 'deworming', antiparasitic_ext: 'treatment',
+  antibiotic: 'treatment', anti_inflammatory: 'treatment', supplement: 'supplement'
+};
+
 // ---- Treatment courses ----
 // A course is N doses, one every X hours. Allowed intervals match the DB check.
 var MED_COURSE_INTERVALS = { 8: '3 times a day', 12: 'twice a day', 24: 'once a day', 48: 'every 2 days', 72: 'every 3 days' };
@@ -129,7 +143,7 @@ async function medLoadData() {
     sbGet('medicines', 'select=*&order=name'),
     sbGet('medicine_movements',
       'select=id,medicine_id,date,movement_type,quantity,packs,cost_pkr,expiry_date,' +
-      'health_event_id,animal_id,is_share,reason,notes,created_at&order=date.desc,id.desc'),
+      'health_event_id,animal_id,is_share,pack_size,reason,notes,created_at&order=date.desc,id.desc'),
     // Breeding/birth records drive the pregnancy checks used when dosing
     sbGet('breeding_events', 'select=dam_id,date&order=date.desc'),
     sbGet('birth_events', 'select=dam_id,date&order=date.desc'),
@@ -670,15 +684,19 @@ function renderMedicinesPage() {
 // same drug together), then supplies. Returns [{ label, meds }]; retired go last.
 function medGroupedRows(includeRetired) {
   var kindOrder = { medicine: 0, health_supply: 1, farm_supply: 2 };
+  // Medicines group by type, then by active ingredient within it (brands of the same drug together)
+  var classOrder = Object.keys(MED_CLASSES);
+  var classRank = function(m) { var i = classOrder.indexOf(m.med_class); return i < 0 ? classOrder.length : i; };
   var groupKey = function(m) {
     if (m.kind === 'health_supply') return 'Health supplies';
     if (m.kind === 'farm_supply') return 'Consumables';
-    return m.active_ingredient || 'No active ingredient recorded';
+    return (MED_CLASSES[m.med_class] || 'Type not set') + ' \u2014 ' + (m.active_ingredient || 'no active ingredient recorded');
   };
   var rows = medList.filter(function(m) { return medInCtx(m) && (includeRetired || m.active); }).sort(function(a, b) {
     if (a.active !== b.active) return a.active ? -1 : 1;
     var ka = kindOrder[a.kind || 'medicine'], kb = kindOrder[b.kind || 'medicine'];
     if (ka !== kb) return ka - kb;
+    if (classRank(a) !== classRank(b)) return classRank(a) - classRank(b);
     var ai = (a.kind === 'medicine' || !a.kind ? (a.active_ingredient || '￿') : '').toLowerCase();
     var bi = (b.kind === 'medicine' || !b.kind ? (b.active_ingredient || '￿') : '').toLowerCase();
     if (ai !== bi) return ai < bi ? -1 : 1;
@@ -782,7 +800,8 @@ function renderMedHistory(med) {
     var qty = Number(mv.quantity);
     var detail = [];
     if (mv.movement_type === 'purchase') {
-      if (mv.packs != null) detail.push(Number(mv.packs) + ' ' + med.pack_label + (Number(mv.packs) !== 1 ? 's' : ''));
+      if (mv.packs != null) detail.push(Number(mv.packs) + ' ' + med.pack_label + (Number(mv.packs) !== 1 ? 's' : '') +
+        (mv.pack_size != null ? ' of ' + medFmtUnits(med, Number(mv.pack_size)) : ''));
       if (mv.expiry_date) detail.push('expires ' + fmtDate(mv.expiry_date));
     }
     if (mv.animal_id) detail.push(medEsc(getAnimalDisplayName(mv.animal_id)));
@@ -999,6 +1018,10 @@ function renderMedForm() {
         (isMed
           ? '<div class="hf-field"><label>Active ingredient</label><input type="text" id="mf-ingredient" list="mf-ingredient-list" value="' + v('active_ingredient') + '" placeholder="e.g. Ivermectin">' +
               '<datalist id="mf-ingredient-list">' + ingredients.map(function(i) { return '<option value="' + medEsc(i) + '">'; }).join('') + '</datalist></div>' +
+            '<div class="hf-field"><label>Type</label><select id="mf-class">' +
+              opt('', 'Not set', m ? (m.med_class || '') : '') +
+              Object.keys(MED_CLASSES).map(function(k) { return opt(k, MED_CLASSES[k], m ? (m.med_class || '') : ''); }).join('') +
+            '</select></div>' +
             '<div class="hf-field"><label>Form</label><select id="mf-form">' +
               opt('liquid', 'Liquid', form) + opt('tablet', 'Tablet', form) + opt('powder', 'Powder', form) + opt('other', 'Other', form) +
             '</select></div>'
@@ -1218,6 +1241,7 @@ async function submitMedicine() {
       kind:              medFormKind,
       name:              txt('mf-name'),
       active_ingredient: isMed ? txt('mf-ingredient') : null,
+      med_class:         isMed ? (el('mf-class').value || null) : null,
       purpose:           txt('mf-purpose'),
       form:              isMed ? el('mf-form').value : 'other',
       stock_unit:        el('mf-unit').value,
@@ -1349,7 +1373,10 @@ function renderMedActionForm() {
         '<div class="hf-field"><label>Number of ' + medEsc(m.pack_label) + 's *</label><input type="number" id="ma-packs" min="0" step="any" placeholder="e.g. 2" oninput="updateMedActionHint()"></div>' +
         '<div class="hf-field"><label>Total cost (PKR)</label><input type="number" id="ma-cost" min="0" step="1" placeholder="What you paid" oninput="updateMedActionHint()"></div>' +
       '</div>' +
-      '<div class="hf-grid two">' +
+      '<div class="hf-grid">' +
+        // Pre-filled with the usual pack; change it when this purchase came in a different size
+        '<div class="hf-field"><label>Size of each ' + medEsc(m.pack_label) + ' this time (' + m.stock_unit + ')</label>' +
+          '<input type="number" id="ma-pack-size" min="0" step="any" value="' + Number(m.pack_size) + '" oninput="updateMedActionHint()"></div>' +
         '<div class="hf-field"><label>Expiry date</label><input type="date" id="ma-expiry"></div>' +
         '<div class="hf-field"><label>Notes</label><input type="text" id="ma-notes" placeholder="Optional — supplier, batch"></div>' +
       '</div>';
@@ -1401,8 +1428,9 @@ function updateMedActionHint() {
   if (medActionType === 'purchase') {
     var packs = parseFloat(document.getElementById('ma-packs').value);
     var cost  = parseFloat(document.getElementById('ma-cost').value);
-    if (packs > 0) {
-      var units = packs * m.pack_size;
+    var size  = parseFloat(document.getElementById('ma-pack-size').value);
+    if (packs > 0 && size > 0) {
+      var units = packs * size;
       text = 'Adds ' + medFmtUnits(m, units);
       if (cost >= 0) text += ' &middot; PKR ' + r2(cost / units).toLocaleString() + ' per ' + m.stock_unit;
     }
@@ -1440,10 +1468,14 @@ async function submitMedAction() {
     if (medActionType === 'purchase') {
       var packs = parseFloat(document.getElementById('ma-packs').value);
       if (!(packs > 0)) throw new Error('Enter how many ' + m.pack_label + 's were bought.');
+      var size = parseFloat(document.getElementById('ma-pack-size').value);
+      if (!(size > 0)) throw new Error('Enter the size of each ' + m.pack_label + '.');
       var costRaw = document.getElementById('ma-cost').value;
       row = {
         medicine_id: m.id, date: date, movement_type: 'purchase',
-        quantity: packs * m.pack_size, packs: packs,
+        quantity: packs * size, packs: packs,
+        // Only recorded when it differs from the usual pack, to keep history readable
+        pack_size: size !== Number(m.pack_size) ? size : null,
         cost_pkr: costRaw === '' ? null : parseFloat(costRaw),
         expiry_date: document.getElementById('ma-expiry').value || null,
         notes: notes

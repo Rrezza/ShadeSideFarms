@@ -59,7 +59,7 @@ async function pestLoadData() {
   var r = await Promise.all([
     sbGet('pesticides', 'select=*&order=name'),
     sbGet('pesticide_movements',
-      'select=id,pesticide_id,date,movement_type,quantity,packs,cost_pkr,field_plot_id,' +
+      'select=id,pesticide_id,date,movement_type,quantity,packs,pack_size,cost_pkr,field_plot_id,' +
       'water_litres,target,worker_id,reason,notes,created_at&order=date.desc,id.desc'),
     sbGet('field_plots', 'select=id,plot_code,plot_name,status&order=plot_code')
   ]);
@@ -503,7 +503,8 @@ function renderPestHistory(p) {
   moves.forEach(function(mv) {
     var qty = Number(mv.quantity);
     var detail = [];
-    if (mv.movement_type === 'purchase' && mv.packs != null) detail.push(Number(mv.packs) + ' ' + p.pack_label + (Number(mv.packs) !== 1 ? 's' : ''));
+    if (mv.movement_type === 'purchase' && mv.packs != null) detail.push(Number(mv.packs) + ' ' + p.pack_label + (Number(mv.packs) !== 1 ? 's' : '') +
+      (mv.pack_size != null ? ' of ' + pestFmtUnits(p, Number(mv.pack_size)) : ''));
     if (mv.field_plot_id) detail.push(pestEsc(pestPlotName(mv.field_plot_id)));
     if (mv.target) detail.push(pestEsc(mv.target));
     if (mv.reason) detail.push(PEST_REASON_LABELS[mv.reason] || mv.reason);
@@ -560,7 +561,10 @@ function renderPestActionForm() {
         '<div class="hf-field"><label>Number of ' + pestEsc(p.pack_label) + 's *</label><input type="number" id="pa2-packs" min="0" step="any" placeholder="e.g. 2" oninput="updatePestActionHint()"></div>' +
         '<div class="hf-field"><label>Total cost (PKR)</label><input type="number" id="pa2-cost" min="0" step="1" placeholder="What you paid" oninput="updatePestActionHint()"></div>' +
       '</div>' +
-      '<div class="hf-grid" style="grid-template-columns:1fr">' +
+      '<div class="hf-grid two">' +
+        // Pre-filled with the usual pack; change it when this purchase came in a different size
+        '<div class="hf-field"><label>Size of each ' + pestEsc(p.pack_label) + ' this time (' + p.stock_unit + ')</label>' +
+          '<input type="number" id="pa2-pack-size" min="0" step="any" value="' + Number(p.pack_size) + '" oninput="updatePestActionHint()"></div>' +
         '<div class="hf-field"><label>Notes</label><input type="text" id="pa2-notes" placeholder="Optional — supplier, batch"></div>' +
       '</div>';
   } else {
@@ -606,8 +610,9 @@ function updatePestActionHint() {
   if (pestActionType === 'purchase') {
     var packs = parseFloat(document.getElementById('pa2-packs').value);
     var cost  = parseFloat(document.getElementById('pa2-cost').value);
-    if (packs > 0) {
-      var units = packs * p.pack_size;
+    var size  = parseFloat(document.getElementById('pa2-pack-size').value);
+    if (packs > 0 && size > 0) {
+      var units = packs * size;
       text = 'Adds ' + pestFmtUnits(p, units);
       if (cost >= 0) text += ' &middot; PKR ' + r2(cost / units).toLocaleString() + ' per ' + p.stock_unit;
     }
@@ -633,10 +638,14 @@ async function submitPestAction() {
     if (pestActionType === 'purchase') {
       var packs = parseFloat(document.getElementById('pa2-packs').value);
       if (!(packs > 0)) throw new Error('Enter how many ' + p.pack_label + 's were bought.');
+      var size = parseFloat(document.getElementById('pa2-pack-size').value);
+      if (!(size > 0)) throw new Error('Enter the size of each ' + p.pack_label + '.');
       var costRaw = document.getElementById('pa2-cost').value;
       row = {
         pesticide_id: p.id, date: date, movement_type: 'purchase',
-        quantity: packs * p.pack_size, packs: packs,
+        quantity: packs * size, packs: packs,
+        // Only recorded when it differs from the usual pack, to keep history readable
+        pack_size: size !== Number(p.pack_size) ? size : null,
         cost_pkr: costRaw === '' ? null : parseFloat(costRaw), notes: notes
       };
     } else {

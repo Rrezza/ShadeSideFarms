@@ -149,6 +149,14 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Per-purchase pack size — DONE 2026-11-27 (r107)
+- Buy forms (medicines, health supplies, consumables, pesticides) have "Size of each <pack> this time", pre-filled with the usual size. Stock adds packs × that size; cost per unit follows; history shows "1 bottle of 50 ml" when it differed. Changing an item's usual pack size never affects past stock (the ledger is in units).
+
+### Medicine types and Supplement events — DONE 2026-11-27 (r106)
+- Each medicine gets a type (Vaccine, Dewormer, External antiparasitic, Antibiotic, Anti-inflammatory / pain relief, Vitamin / mineral / supplement, Other); lists group by type then active ingredient. New "Supplement" event type; the treatment form suggests the event type from the medicine's type.
+- **Needs your action:** set the type on each existing medicine (Setup › Medicines › Edit) — they show under "Type not set" until then.
+- Later (not built): prevention vs. treatment cost split and antibiotic-use counts per group.
+
 ### Species categories, per-litre species doses, tapering courses — DONE 2026-11-27 (r105)
 - Species have a category (Poultry, Small ruminants, Cattle, Equines, Rabbits, Dogs, Other), pre-set from the existing species and editable in Setup › Species. Pigeons go under Other (labels list them separately).
 - Medicine dose rows target a category or a species (species wins), and can be per litre of water — e.g. "Poultry: 30 ml per 12 L water".

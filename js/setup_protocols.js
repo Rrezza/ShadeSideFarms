@@ -12,7 +12,7 @@ var protoSteps     = [];          // health_protocol_steps (all protocols)
 var protoExpanded  = new Set();   // protocol ids with their steps shown
 var protoApplyGroupId = null;     // group the Apply modal is open for
 
-var PROTO_EVENT_TYPES = ['vaccination', 'deworming', 'treatment', 'observation'];
+var PROTO_EVENT_TYPES = ['vaccination', 'deworming', 'treatment', 'supplement', 'observation'];
 
 async function protoLoadData() {
   await loadModule('health_meds');
