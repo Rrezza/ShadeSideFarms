@@ -282,12 +282,19 @@ function medLastBulkTotal(medId, animalIds) {
 // Human-readable label dose: the default, then any species overrides,
 // e.g. "1 ml per 10 kg; Sheep: 1 ml per 25 kg; Donkey: 5 ml per animal"
 function medFmtDoseRate(med) {
+  var parts = medDoseLines(med);
+  return parts.length ? parts.join('; ') : '—';
+}
+
+// The label dose as separate lines (general dose, or one per species) —
+// one line each in the Setup list, joined with ';' elsewhere
+function medDoseLines(med) {
   var parts = [];
   if (med.dose_basis) parts.push(medFmtRate(med, med));
   medSpeciesDoses.filter(function(d) { return d.medicine_id === med.id; })
     .sort(function(a, b) { return medSpeciesName(a.species_id).localeCompare(medSpeciesName(b.species_id)); })
     .forEach(function(d) { parts.push(medEsc(medSpeciesName(d.species_id)) + ': ' + medFmtRate(med, d)); });
-  return parts.length ? parts.join('; ') : '—';
+  return parts;
 }
 
 // The weight used for dosing: latest weigh-in, else entry weight, else null
@@ -844,11 +851,13 @@ function renderMedSetupTable() {
     tbl.innerHTML = '<div class="empty">Nothing yet. Use + Add medicine or + Add health supply to start the list.</div>';
     return;
   }
-  var colCount = 8;
+  var colCount = 10;
   var html = '<div style="overflow-x:auto"><table><thead><tr>' +
-    '<th>Item</th><th>Used for</th><th>Pack</th><th>Label dose</th>' +
-    '<th class="right">Minimum stock</th><th class="right">Withdrawal</th><th>Notes</th><th>Actions</th>' +
+    '<th>Item</th><th>Used for</th><th>Pack</th><th>Dose &amp; route</th><th>Course</th>' +
+    '<th>Withdrawal</th><th>Cautions</th><th class="right">Minimum stock</th><th>Notes</th><th>Actions</th>' +
     '</tr></thead><tbody>';
+  // One line per fact, all in the cell's own font, so the columns read evenly
+  var lines = function(arr) { return arr.length ? arr.map(function(t) { return '<div>' + t + '</div>'; }).join('') : '—'; };
   groups.forEach(function(g) {
     html += medGroupRow(g.label, colCount);
     g.meds.forEach(function(m) {
@@ -860,14 +869,18 @@ function renderMedSetupTable() {
           '<div style="font-size:11px;color:var(--muted);font-weight:400">' + (supply ? 'health supply' : medEsc(m.form)) + '</div></td>' +
         '<td class="muted-cell">' + (m.purpose ? medEsc(m.purpose) : '—') + '</td>' +
         '<td class="muted-cell">' + medFmtUnits(m, Number(m.pack_size)) + ' / ' + medEsc(m.pack_label) + '</td>' +
-        '<td class="muted-cell">' + (supply ? '—' : medFmtDoseRate(m) +
-          (medRoutes(m).length ? '<div style="font-size:11px">' + medRoutes(m).map(medRouteLabel).join(' or ') + '</div>' : '') +
-          (m.course_doses ? '<div style="font-size:11px;color:var(--blue)">Course: ' + medFmtCourse(m.course_doses, m.course_interval_hours) + '</div>' : '')) + '</td>' +
+        // Dose lines, then the route(s) on their own line
+        '<td class="muted-cell">' + (supply ? '—' : lines(medDoseLines(m).concat(
+          medRoutes(m).length ? ['Route: ' + medRoutes(m).map(medRouteLabel).join(' or ')] : []))) + '</td>' +
+        '<td class="muted-cell">' + (!supply && m.course_doses ? medFmtCourse(m.course_doses, m.course_interval_hours) : '—') + '</td>' +
+        '<td class="muted-cell" style="white-space:nowrap">' + (supply ? '—' : lines(
+          (m.withdrawal_days != null ? ['Meat: ' + m.withdrawal_days + ' d'] : []).concat(
+          m.milk_withdrawal_days != null ? ['Milk: ' + m.milk_withdrawal_days + ' d'] : []))) + '</td>' +
+        // Who it shouldn't go to (pregnancy stage, milking animals)
+        '<td>' + (supply ? '—' : lines(
+          (medFmtPregRule(m) ? ['<span class="badge badge-red">' + medFmtPregRule(m) + '</span>'] : []).concat(
+          m.not_for_milking ? ['<span class="badge badge-red">not for milking animals</span>'] : []))) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
-        '<td class="mono right">' + (!supply && m.withdrawal_days != null ? m.withdrawal_days + ' d' : '—') +
-          (!supply && m.milk_withdrawal_days != null ? '<div style="font-size:11px;color:var(--muted)">milk ' + m.milk_withdrawal_days + ' d</div>' : '') +
-          (medFmtPregRule(m) ? '<div><span class="badge badge-red" style="font-size:10px">' + medFmtPregRule(m) + '</span></div>' : '') +
-          (m.not_for_milking ? '<div><span class="badge badge-red" style="font-size:10px">not for milking animals</span></div>' : '') + '</td>' +
         '<td class="muted-cell">' + (m.notes ? medEsc(m.notes) : '—') + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
