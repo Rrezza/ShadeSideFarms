@@ -282,13 +282,12 @@ function renderHfDoseGrid() {
   // Deworming rounds: show FAMACHA and pre-fill 0 for animals recently scored 1–2 (targeted treatment)
   var deworming = document.getElementById('hf-event-type').value === 'deworming';
   // Medicines flagged unsafe in pregnancy: pregnant animals are pre-filled 0
-  var pregnantSkipped = med.unsafe_in_pregnancy
-    ? animals.filter(function(a) { return medPregnancy(a.id); }).length : 0;
+  // Animals this medicine shouldn't go to right now (pregnancy stage, being milked)
+  var skipped = animals.map(function(a) { return { a: a, why: medSkipReason(med, a.id) }; }).filter(function(x) { return x.why; });
   var html = '<div style="margin:0 0 12px">' +
     (deworming ? hfRotationHtml(med) : '') +
-    (pregnantSkipped ? '<div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px">' +
-      medEsc(med.name) + ' is marked not safe in pregnancy \u2014 ' + pregnantSkipped + ' pregnant animal' +
-      (pregnantSkipped !== 1 ? 's' : '') + ' pre-filled 0.</div>' : '') +
+    (skipped.length ? '<div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px">Pre-filled 0 for ' + medEsc(med.name) + ': ' +
+      skipped.map(function(x) { return medEsc(x.a.farm_id) + ' (' + medEsc(x.why) + ')'; }).join('; ') + '.</div>' : '') +
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dose per animal (' + med.stock_unit + ') &middot; label ' +
       medFmtDoseRate(med) + ' &middot; pre-filled from latest weight, edit any you dosed differently, 0 = not dosed' +
       (deworming ? ' &middot; FAMACHA 1–2 within ' + HF_FAMACHA_MAX_AGE_DAYS + ' days pre-filled 0' : '') + '</div>' +
@@ -307,10 +306,10 @@ function renderHfDoseGrid() {
       famCell = '<td class="mono right"' + (f && !fresh ? ' style="color:var(--faint)" title="Older than ' + HF_FAMACHA_MAX_AGE_DAYS + ' days — not used"' : '') + '>' +
         (f ? f.score + ' <span style="font-size:11px;color:var(--muted)">' + f.ageDays + 'd ago</span>' : '—') + '</td>';
     }
-    if (med.unsafe_in_pregnancy && medPregnancy(a.id)) prefill = 0;
+    if (medSkipReason(med, a.id)) prefill = 0;
     html += '<tr>' +
       '<td style="font-weight:500">' + a.farm_id + (a.name ? ' <span style="color:var(--muted);font-weight:400">' + medEsc(a.name) + '</span>' : '') +
-        medPregnancyBadge(a.id) + '</td>' +
+        medPregnancyBadge(a.id) + medMilkingBadge(a.id) + '</td>' +
       '<td class="mono right">' + (kg != null ? r1(kg) + ' kg' : '—') + '</td>' +
       famCell +
       '<td class="mono right">' + (sug != null ? medFmtUnits(med, sug)
@@ -356,12 +355,12 @@ function renderHfBulk(med, animals) {
   var route = document.getElementById('hf-route').value;
   var water = medUsesWater(route);
   var deworming = document.getElementById('hf-event-type').value === 'deworming';
-  var pregnant = med.unsafe_in_pregnancy ? animals.filter(function(a) { return medPregnancy(a.id); }) : [];
+  var flagged = animals.map(function(a) { return { a: a, why: medSkipReason(med, a.id) }; }).filter(function(x) { return x.why; });
   var html = '<div style="margin:0 0 12px">' +
     (deworming ? hfRotationHtml(med) : '') +
-    (pregnant.length ? '<div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px">' +
-      medEsc(med.name) + ' is marked not safe in pregnancy — pregnant: ' +
-      pregnant.map(function(a) { return medEsc(a.farm_id); }).join(', ') +
+    (flagged.length ? '<div style="font-size:12px;color:var(--red);font-weight:500;margin-bottom:6px">' +
+      medEsc(med.name) + ' shouldn\'t go to: ' +
+      flagged.map(function(x) { return medEsc(x.a.farm_id) + ' (' + medEsc(x.why) + ')'; }).join('; ') +
       '. Untick them only if they were kept away from it.</div>' : '') +
     '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Whole-group round (' + medEsc(medRouteLabel(route).toLowerCase()) +
       ') &middot; label ' + medFmtDoseRate(med) + ' &middot; the total is split evenly across the ticked animals as an estimate</div>' +
@@ -376,7 +375,7 @@ function renderHfBulk(med, animals) {
       return '<label style="display:flex;gap:6px;align-items:center;font-size:13px">' +
         '<input type="checkbox" class="hf-bulk-animal" data-animal="' + a.id + '" checked onchange="updateHfDoseTotal()"> ' +
         medEsc(a.farm_id) + (a.name ? ' <span style="color:var(--muted)">' + medEsc(a.name) + '</span>' : '') +
-        medPregnancyBadge(a.id) + '</label>';
+        medPregnancyBadge(a.id) + medMilkingBadge(a.id) + '</label>';
     }).join('') +
     '</div>' +
     '<div id="hf-dose-total" class="fc-derived" style="margin-top:8px"></div></div>';
@@ -1224,7 +1223,12 @@ function renderAnimalHealthHistory(animalId, evts, doses) {
   var unpriced = doses.some(function(mv) { return mv.cost_pkr == null; });
   var html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 16px">' +
     '<span class="badge ' + (w ? 'badge-red' : 'badge-green') + '">' +
-      (w ? 'In withdrawal until ' + fmtDate(w.safeDate) + ' — ' + medEsc(w.med.name) : 'Not in withdrawal') + '</span>' +
+      (w ? 'Meat withdrawal until ' + fmtDate(w.safeDate) + ' — ' + medEsc(w.med.name) : 'Not in meat withdrawal') + '</span>' +
+    (medIsMilked(animalId) ? (function() {
+      var mw = medWithdrawalFor(animalId, null, 'milk_withdrawal_days');
+      return '<span class="badge ' + (mw ? 'badge-red' : 'badge-green') + '">' +
+        (mw ? 'Milk withdrawal until ' + fmtDate(mw.safeDate) + ' — ' + medEsc(mw.med.name) : 'Not in milk withdrawal') + '</span>';
+    })() : '') +
     '<span class="badge badge-gray">' + evts.length + ' event' + (evts.length !== 1 ? 's' : '') + '</span>' +
     '<span class="badge badge-gray">' + doses.length + ' dose' + (doses.length !== 1 ? 's' : '') + '</span>' +
     '<span class="badge badge-gray">Medicine cost ' +

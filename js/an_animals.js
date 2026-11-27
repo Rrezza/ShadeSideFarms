@@ -105,7 +105,10 @@ function renderAnimalsList() {
         '</select>' +
         // Manual pregnancy: expected birth date (females only)
         (a.sex !== 'male' ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">Expected birth<br>' +
-          '<input type="date" id="ale-ebd" style="font-size:12px" value="' + (a.expected_birth_date || '') + '"></div>' : '') +
+          '<input type="date" id="ale-ebd" style="font-size:12px" value="' + (a.expected_birth_date || '') + '"></div>' +
+          // Being milked: drives milk withdrawal badges and "not for milking" medicines
+          '<label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);margin-top:4px">' +
+            '<input type="checkbox" id="ale-milked"' + (a.being_milked ? ' checked' : '') + '> Being milked</label>' : '') +
         '</td>' +
         '<td>' + grpName + '</td>' +
         '<td>' + locName + '</td>' +
@@ -123,7 +126,7 @@ function renderAnimalsList() {
         '<td class="muted-cell">' + (a.sex || '\u2014') + '</td>' +
         '<td>' + purposeBadge(a.purpose) + '</td>' +
         '<td><span class="badge ' + statusCls + '">' + statusLabel + '</span>' +
-          (a.status === 'active' || a.status === 'quarantine' ? medWithdrawalBadge(a.id) + medPregnancyBadge(a.id) : '') + '</td>' +
+          (a.status === 'active' || a.status === 'quarantine' ? medWithdrawalBadge(a.id) + medPregnancyBadge(a.id) + medMilkingBadge(a.id) : '') + '</td>' +
         '<td>' + grpName + '</td>' +
         '<td class="muted-cell">' + locName + '</td>' +
         '<td class="right mono">' + (a.entry_weight_kg != null ? r1(parseFloat(a.entry_weight_kg)) : '\u2014') + '</td>' +
@@ -180,6 +183,8 @@ async function alSaveEdit(animalId) {
     var patch = { purpose: purpose, status: status, sex: sex || null };
     var ebd = document.getElementById('ale-ebd');
     if (ebd) patch.expected_birth_date = ebd.value || null;
+    var milked = document.getElementById('ale-milked');
+    if (milked) patch.being_milked = milked.checked;
     await sbPatch('animals', animalId, patch);
     alEditId = null;
     anSharedLoaded = false;

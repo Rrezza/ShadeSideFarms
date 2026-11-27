@@ -336,15 +336,17 @@ function medDoseRange(med, animalId) {
 // An animal is in withdrawal while today is before (dose date + the medicine's
 // withdrawal_days) for any dose it received. Returns the latest such window:
 // { safeDate: 'YYYY-MM-DD', med } — or null when the animal is safe.
-function medWithdrawalFor(animalId, asOfISO) {
+// field: 'withdrawal_days' (meat, default) or 'milk_withdrawal_days'.
+function medWithdrawalFor(animalId, asOfISO, field) {
   var asOf = asOfISO || todayISO();
+  var key = field || 'withdrawal_days';
   var worst = null;
   medMovements.forEach(function(mv) {
     if (mv.animal_id !== animalId || mv.movement_type !== 'dose') return;
     var med = medById(mv.medicine_id);
-    if (!med || !med.withdrawal_days) return;
+    if (!med || !med[key]) return;
     var d = new Date(mv.date + 'T00:00:00');
-    d.setDate(d.getDate() + Number(med.withdrawal_days));
+    d.setDate(d.getDate() + Number(med[key]));
     var safe = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     if (safe > asOf && (!worst || safe > worst.safeDate)) worst = { safeDate: safe, med: med };
   });
@@ -352,11 +354,28 @@ function medWithdrawalFor(animalId, asOfISO) {
 }
 
 // Small red badge for tables; '' when the animal is not in withdrawal
+// Small red badges for tables: meat withdrawal, plus milk withdrawal for an
+// animal marked as being milked. '' when neither applies.
 function medWithdrawalBadge(animalId) {
   var w = medWithdrawalFor(animalId);
-  return w
-    ? ' <span class="badge badge-red" title="' + medEsc(w.med.name) + ' withdrawal">withdrawal to ' + fmtDate(w.safeDate) + '</span>'
+  var html = w
+    ? ' <span class="badge badge-red" title="' + medEsc(w.med.name) + ' meat withdrawal">meat withdrawal to ' + fmtDate(w.safeDate) + '</span>'
     : '';
+  if (medIsMilked(animalId)) {
+    var mw = medWithdrawalFor(animalId, null, 'milk_withdrawal_days');
+    if (mw) html += ' <span class="badge badge-red" title="' + medEsc(mw.med.name) + ' milk withdrawal">milk withdrawal to ' + fmtDate(mw.safeDate) + '</span>';
+  }
+  return html;
+}
+
+// ---- Milking ----
+// animals.being_milked is set by hand on the animal's Edit row (not every doe that kids is milked)
+function medIsMilked(animalId) {
+  var a = anSharedAnimals.find(function(x) { return x.id === animalId; });
+  return !!(a && a.being_milked);
+}
+function medMilkingBadge(animalId) {
+  return medIsMilked(animalId) ? ' <span class="badge badge-teal">milking</span>' : '';
 }
 
 // Confirm dialog before a sale / slaughter / exit. Returns true to go ahead.
@@ -392,16 +411,53 @@ function medPregnancy(animalId) {
   var birthSince = function(iso) {
     return medBirths.some(function(b) { return b.dam_id === animalId && b.date >= iso; });
   };
+  // day: how far into the pregnancy today is (day 0 = mating / estimated conception)
+  var dayOf = function(startISO) {
+    return Math.round((new Date(today + 'T00:00:00') - new Date(startISO + 'T00:00:00')) / 864e5);
+  };
   if (a.expected_birth_date && today <= medAddDays(a.expected_birth_date, MED_PREG_GRACE_DAYS) &&
       !birthSince(medAddDays(a.expected_birth_date, -gestation))) {
-    return { due: a.expected_birth_date, source: 'manual' };
+    // No mating record: conception estimated back from the expected date
+    var est = medAddDays(a.expected_birth_date, -gestation);
+    return { due: a.expected_birth_date, source: 'manual', start: est, day: dayOf(est) };
   }
   var mating = medBreedings.find(function(b) { return b.dam_id === animalId; });  // newest first
   if (mating) {
     var due = medAddDays(mating.date, gestation);
-    if (today <= medAddDays(due, MED_PREG_GRACE_DAYS) && !birthSince(mating.date)) return { due: due, source: 'breeding' };
+    if (today <= medAddDays(due, MED_PREG_GRACE_DAYS) && !birthSince(mating.date)) {
+      return { due: due, source: 'breeding', start: mating.date, day: dayOf(mating.date) };
+    }
   }
   return null;
+}
+
+// Pregnancy rule labels for the medicine form and list
+var MED_PREG_RULES = { safe: 'Safe in pregnancy', avoid_all: 'Avoid throughout pregnancy',
+                       avoid_first: 'Avoid early pregnancy (first … days)', avoid_last: 'Avoid late pregnancy (last … days)' };
+function medFmtPregRule(med) {
+  if (med.pregnancy_rule === 'avoid_all') return 'not in pregnancy';
+  if (med.pregnancy_rule === 'avoid_first') return 'not in first ' + med.pregnancy_rule_days + ' days of pregnancy';
+  if (med.pregnancy_rule === 'avoid_last') return 'not in last ' + med.pregnancy_rule_days + ' days of pregnancy';
+  return '';
+}
+
+// Why this medicine shouldn't be given to this animal right now, or '' if it's fine.
+// Covers the pregnancy rule (by stage) and "not for milking animals". The dose
+// grid pre-fills 0 for any animal with a reason and lists the reasons.
+function medSkipReason(med, animalId) {
+  if (!med) return '';
+  var reasons = [];
+  var rule = med.pregnancy_rule || (med.unsafe_in_pregnancy ? 'avoid_all' : 'safe');
+  var p = rule !== 'safe' ? medPregnancy(animalId) : null;
+  if (p) {
+    var toDue = Math.round((new Date(p.due + 'T00:00:00') - new Date(todayISO() + 'T00:00:00')) / 864e5);
+    var est = p.source === 'manual' ? ' (estimated)' : '';
+    if (rule === 'avoid_all') reasons.push('pregnant');
+    else if (rule === 'avoid_first' && p.day < med.pregnancy_rule_days) reasons.push('day ' + p.day + ' of pregnancy' + est + ' — avoid first ' + med.pregnancy_rule_days + ' days');
+    else if (rule === 'avoid_last' && toDue < med.pregnancy_rule_days) reasons.push((toDue >= 0 ? 'due in ' + toDue + ' days' : 'overdue') + est + ' — avoid last ' + med.pregnancy_rule_days + ' days');
+  }
+  if (med.not_for_milking && medIsMilked(animalId)) reasons.push('being milked');
+  return reasons.join(', ');
 }
 
 function medPregnancyBadge(animalId) {
@@ -809,7 +865,9 @@ function renderMedSetupTable() {
           (m.course_doses ? '<div style="font-size:11px;color:var(--blue)">Course: ' + medFmtCourse(m.course_doses, m.course_interval_hours) + '</div>' : '')) + '</td>' +
         '<td class="mono right">' + (m.min_stock != null ? medFmtUnits(m, Number(m.min_stock)) : '—') + '</td>' +
         '<td class="mono right">' + (!supply && m.withdrawal_days != null ? m.withdrawal_days + ' d' : '—') +
-          (m.unsafe_in_pregnancy ? '<div><span class="badge badge-red" style="font-size:10px">not in pregnancy</span></div>' : '') + '</td>' +
+          (!supply && m.milk_withdrawal_days != null ? '<div style="font-size:11px;color:var(--muted)">milk ' + m.milk_withdrawal_days + ' d</div>' : '') +
+          (medFmtPregRule(m) ? '<div><span class="badge badge-red" style="font-size:10px">' + medFmtPregRule(m) + '</span></div>' : '') +
+          (m.not_for_milking ? '<div><span class="badge badge-red" style="font-size:10px">not for milking animals</span></div>' : '') + '</td>' +
         '<td class="muted-cell">' + (m.notes ? medEsc(m.notes) : '—') + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn btn-sm" onclick="openMedForm(' + m.id + ')">Edit</button> ' +
@@ -950,12 +1008,22 @@ function renderMedForm() {
   html += '<div class="hf-grid">' +
         '<div class="hf-field"><label>Minimum stock to keep (<span class="mf-unit-lbl">' + unit + '</span>)</label><input type="number" id="mf-min" min="0" step="any" value="' + v('min_stock') + '" placeholder="Optional — reminder below this"></div>' +
         (isMed ? '<div class="hf-field"><label>Meat withdrawal (days)</label><input type="number" id="mf-withdrawal" min="0" step="1" value="' + v('withdrawal_days') + '" placeholder="From the label — 0 if none"></div>' : '') +
+        (isMed ? '<div class="hf-field"><label>Milk withdrawal (days)</label><input type="number" id="mf-milk-withdrawal" min="0" step="1" value="' + v('milk_withdrawal_days') + '" placeholder="From the label — 0 if none"></div>' : '') +
         '<div class="hf-field"' + (isMed ? '' : ' style="grid-column:span 2"') + '><label>Notes</label><input type="text" id="mf-notes" value="' + v('notes') + '" placeholder="Optional"></div>' +
       '</div>' +
       (isMed
-        ? '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
-            '<input type="checkbox" id="mf-preg"' + (m && m.unsafe_in_pregnancy ? ' checked' : '') + '> ' +
-            'Not safe for pregnant animals (they\'re pre-filled 0 when dosing)</label>' +
+        // Pregnancy by stage: animals inside the window are pre-filled 0 when dosing
+        ? '<div class="hf-grid">' +
+            '<div class="hf-field"><label>Pregnancy</label><select id="mf-preg-rule" onchange="document.getElementById(\'mf-preg-days-wrap\').style.visibility=(this.value===\'avoid_first\'||this.value===\'avoid_last\')?\'visible\':\'hidden\'">' +
+              Object.keys(MED_PREG_RULES).map(function(k) { return opt(k, MED_PREG_RULES[k], m ? (m.pregnancy_rule || 'safe') : 'safe'); }).join('') +
+            '</select></div>' +
+            '<div class="hf-field" id="mf-preg-days-wrap" style="visibility:' + (m && (m.pregnancy_rule === 'avoid_first' || m.pregnancy_rule === 'avoid_last') ? 'visible' : 'hidden') + '">' +
+              '<label>Days</label><input type="number" id="mf-preg-days" min="1" step="1" value="' + v('pregnancy_rule_days') + '" placeholder="e.g. 45"></div>' +
+            '<div class="hf-field" style="align-self:end;font-size:12px;color:var(--muted);padding-bottom:8px">Animals in that window are pre-filled 0 when dosing.</div>' +
+          '</div>' +
+          '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
+            '<input type="checkbox" id="mf-no-milking"' + (m && m.not_for_milking ? ' checked' : '') + '> ' +
+            'Not for animals being milked (pre-filled 0 when dosing)</label>' +
           '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:2px 0 10px">' +
             '<input type="checkbox" id="mf-fridge"' + (m && m.refrigerate ? ' checked' : '') + '> ' +
             'Keep refrigerated</label>'
@@ -1088,13 +1156,20 @@ async function submitMedicine() {
       routes:            isMed ? Array.prototype.map.call(document.querySelectorAll('.mf-route:checked'), function(cb) { return cb.value; }) : [],
       min_stock:         num('mf-min'),
       withdrawal_days:   isMed && num('mf-withdrawal') != null ? Math.round(num('mf-withdrawal')) : null,
-      unsafe_in_pregnancy: isMed ? el('mf-preg').checked : false,
+      pregnancy_rule:    isMed ? el('mf-preg-rule').value : 'safe',
+      milk_withdrawal_days: isMed && num('mf-milk-withdrawal') != null ? Math.round(num('mf-milk-withdrawal')) : null,
+      not_for_milking:   isMed ? el('mf-no-milking').checked : false,
       refrigerate:       isMed ? el('mf-fridge').checked : false,
       notes:             txt('mf-notes')
     };
     // Course interval only matters when there is a course
     d.course_interval_hours = d.course_doses ? parseInt(el('mf-course-interval').value) : null;
     if (d.course_doses != null && d.course_doses < 2) throw new Error('A course needs at least 2 doses (leave it blank for a single dose).');
+    // Days only for the early/late rules; unsafe_in_pregnancy kept in step for older app versions
+    d.pregnancy_rule_days = d.pregnancy_rule === 'avoid_first' || d.pregnancy_rule === 'avoid_last' ? num('mf-preg-days') : null;
+    if ((d.pregnancy_rule === 'avoid_first' || d.pregnancy_rule === 'avoid_last') && !(d.pregnancy_rule_days > 0)) throw new Error('Enter how many days of pregnancy to avoid.');
+    if (d.pregnancy_rule_days) d.pregnancy_rule_days = Math.round(d.pregnancy_rule_days);
+    d.unsafe_in_pregnancy = d.pregnancy_rule !== 'safe';
     if (!d.name) throw new Error('Name is required.');
     if (!(d.pack_size > 0)) throw new Error('Amount per pack must be greater than 0.');
     if (basis && !(d.dose_amount > 0)) throw new Error('Enter the label dose amount, or set Label dose to "Not set".');

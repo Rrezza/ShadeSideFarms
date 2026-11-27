@@ -263,7 +263,7 @@ async function loadSharedAnimalData() {
       'select=id,farm_id,name,breed,sex,purpose,is_breeding,born_on_farm,' +
       'batch_ref,status,entry_weight_kg,purchase_cost_pkr,intake_batch_id,' +
       'date_of_arrival,source,current_location_id,dam_id,sire_id,sire_unknown,' +
-      'notes,species_id,expected_birth_date,locations(name)&order=farm_id'),
+      'notes,species_id,expected_birth_date,being_milked,locations(name)&order=farm_id'),
     sbGet('animal_weights', 'select=animal_id,weight_kg,bcs_score,date&order=date.desc&limit=3000'),
     sbGet('locations', 'location_type=eq.pen&active=eq.true&select=id,name&order=name'),
     sbGet('species', 'select=id,common_name,gestation_days&order=common_name'),

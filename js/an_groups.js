@@ -113,7 +113,10 @@ function renderGroupDetail(g, animals, stats) {
             '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') +
               // Manual pregnancy: expected birth date (females only)
               (a.sex !== 'male' ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">Expected birth<br>' +
-                '<input type="date" id="gme-ebd" style="font-size:12px" value="' + (a.expected_birth_date || '') + '"></div>' : '') + '</td>' +
+                '<input type="date" id="gme-ebd" style="font-size:12px" value="' + (a.expected_birth_date || '') + '"></div>' +
+          // Being milked: drives milk withdrawal badges and "not for milking" medicines
+          '<label style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--muted);margin-top:4px">' +
+            '<input type="checkbox" id="gme-milked"' + (a.being_milked ? ' checked' : '') + '> Being milked</label>' : '') + '</td>' +
             '<td style="white-space:nowrap">' +
               '<button class="btn btn-sm btn-primary" onclick="' + stop + 'grpSaveMemberEdit(' + a.id + ')">Save</button> ' +
               '<button class="btn btn-sm" onclick="' + stop + 'grpCancelMemberEdit()">Cancel</button>' +
@@ -124,7 +127,7 @@ function renderGroupDetail(g, animals, stats) {
           '<td>' + getSpeciesName(a.species_id) + '</td>' +
           '<td>' + (a.breed || '\u2014') + '</td>' +
           '<td>' + (a.sex || '\u2014') + '</td>' +
-          '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span>' + medWithdrawalBadge(a.id) + medPregnancyBadge(a.id) + '</td>' +
+          '<td><span class="badge ' + statusCls + '">' + (a.status || '\u2014') + '</span>' + medWithdrawalBadge(a.id) + medPregnancyBadge(a.id) + medMilkingBadge(a.id) + '</td>' +
           '<td class="mono">' + (curW != null ? r1(curW) + ' kg' : '\u2014') + '</td>' +
           '<td class="mono">' + (typeof daysInGrp === 'number' ? daysInGrp + 'd' : '\u2014') + '</td>' +
           '<td style="white-space:nowrap">' +
@@ -244,6 +247,8 @@ async function grpSaveMemberEdit(animalId) {
       purpose: document.getElementById('gme-purpose').value
     };
     if (ebd) patch.expected_birth_date = ebd.value || null;
+    var milked = document.getElementById('gme-milked');
+    if (milked) patch.being_milked = milked.checked;
     await sbPatch('animals', animalId, patch);
     grpMemberEditId = null;
     anSharedLoaded = false;

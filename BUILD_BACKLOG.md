@@ -149,6 +149,11 @@ Running list of confirmed pending items from the gap-by-gap review of `shadeside
 
 ## Resolved — no code change needed
 
+### Milk withdrawal, milking flag, pregnancy by stage — DONE 2026-11-27 (r101)
+- Medicines: separate milk withdrawal days; "Not for animals being milked"; pregnancy rule = safe / avoid throughout / avoid first N days / avoid last N days (existing "not in pregnancy" medicines became "avoid throughout").
+- Animals: "Being milked" checkbox on the Edit row (Animals and Groups); "milking" badge; milk withdrawal badge for milked animals.
+- Dose grid pre-fills 0 with the reason (e.g. "due in 61 days — avoid last 70 days", "being milked"); bulk rounds warn. Stage is estimated from the expected birth date when there's no mating record.
+
 ### Treatment courses — DONE 2026-11-26 (r100)
 - Medicines can carry a course (N doses, 3×/2×/1× a day or every 2–3 days), shown in Setup. Logging dose 1 as "Part of a course" creates reminders in Health › Due now for each remaining dose, pre-filled with the previous dose; closes itself after the last. Withdrawal runs from the last dose automatically. Reorder reminders count all remaining doses.
 - Not handled: deleting a course dose's event doesn't roll the course count back (same as other schedules) — adjust or retire the schedule under Schedules if needed.
