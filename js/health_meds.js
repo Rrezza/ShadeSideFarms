@@ -58,13 +58,13 @@ function medRouteLabel(route) { return route ? (MED_ROUTES[route] || route) : ''
 // dewormers, supplements) from treating illness. Keys match the DB check.
 var MED_CLASSES = {
   vaccine: 'Vaccines', dewormer: 'Dewormers', antiparasitic_ext: 'External antiparasitics',
-  antibiotic: 'Antibiotics', anti_inflammatory: 'Anti-inflammatories / pain relief',
+  antibiotic: 'Antibiotics', anti_inflammatory: 'Anti-inflammatories / pain relief', antihistamine: 'Antihistamines',
   supplement: 'Vitamins, minerals and supplements', other: 'Other medicines'
 };
 // Event type suggested on the treatment form when a medicine of this type is picked
 var MED_CLASS_EVENT = {
   vaccine: 'vaccination', dewormer: 'deworming', antiparasitic_ext: 'treatment',
-  antibiotic: 'treatment', anti_inflammatory: 'treatment', supplement: 'supplement'
+  antibiotic: 'treatment', anti_inflammatory: 'treatment', antihistamine: 'treatment', supplement: 'supplement'
 };
 
 // ---- Treatment courses ----
